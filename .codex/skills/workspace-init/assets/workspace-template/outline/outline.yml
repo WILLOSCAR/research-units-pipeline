@@ -1,0 +1,18 @@
+# outline (placeholder, bullets only)
+
+- id: "1"
+  title: "Introduction"
+  bullets:
+    - (placeholder) motivation
+    - (placeholder) problem statement
+    - (placeholder) contributions / scope
+
+- id: "2"
+  title: "Topic A"
+  subsections:
+    - id: "2.1"
+      title: "Subtopic A1"
+      bullets:
+        - (placeholder)
+        - (placeholder)
+        - (placeholder)

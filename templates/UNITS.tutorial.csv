@@ -1,0 +1,9 @@
+unit_id,title,type,skill,inputs,outputs,acceptance,checkpoint,status,depends_on,owner
+U001,Initialize workspace and copy templates,META,workspace-init,,STATUS.md;CHECKPOINTS.md;UNITS.csv;DECISIONS.md;GOAL.md,"workspace模板文件齐全",C0,TODO,,CODEX
+U002,Draft kickoff questions + seed queries,META,pipeline-router,GOAL.md,DECISIONS.md,"DECISIONS含C0问题块",C0,TODO,U001,CODEX
+U010,Define tutorial audience and learning objectives,STRUCTURE,tutorial-spec,STATUS.md,output/TUTORIAL_SPEC.md,"包含受众/先修/学习目标/边界",C1,TODO,U002,CODEX
+U020,Build concept graph and module breakdown,STRUCTURE,concept-graph,output/TUTORIAL_SPEC.md,outline/concept_graph.yml,"至少10个概念节点且标注依赖关系",C2,TODO,U010,CODEX
+U030,Plan modules from concept graph,STRUCTURE,module-planner,outline/concept_graph.yml,outline/module_plan.yml,"每模块有 objectives + outputs，并标注 running example 步骤（如适用）",C2,TODO,U020,CODEX
+U035,Add verifiable exercises to each module,STRUCTURE,exercise-builder,outline/module_plan.yml,outline/module_plan.yml,"每模块≥1个练习：prompt/expected output/verification checklist",C2,TODO,U030,CODEX
+U040,Human approve running example and scope,META,pipeline-router,outline/module_plan.yml,DECISIONS.md,"勾选 DECISIONS.md 的 Approve C2（并记录 running example）",C2,TODO,U035,HUMAN
+U050,Write tutorial modules (PROSE allowed after approval),WRITE,tutorial-module-writer,outline/module_plan.yml,output/TUTORIAL.md,"仅写被批准模块；每模块含练习与答案要点",C3,TODO,U040,CODEX

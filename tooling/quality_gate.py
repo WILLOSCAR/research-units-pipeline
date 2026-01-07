@@ -1,0 +1,923 @@
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Iterable
+
+
+@dataclass(frozen=True)
+class QualityIssue:
+    code: str
+    message: str
+
+
+def check_unit_outputs(*, skill: str, workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    if skill == "arxiv-search":
+        return _check_arxiv_search(workspace, outputs)
+    if skill == "pdf-text-extractor":
+        return _check_pdf_text_extractor(workspace, outputs)
+    if skill == "taxonomy-builder":
+        return _check_taxonomy(workspace, outputs)
+    if skill == "outline-builder":
+        return _check_outline(workspace, outputs)
+    if skill == "section-mapper":
+        return _check_mapping(workspace, outputs)
+    if skill == "paper-notes":
+        return _check_paper_notes(workspace, outputs)
+    if skill == "claim-evidence-matrix":
+        return _check_claim_evidence_matrix(workspace, outputs)
+    if skill == "survey-visuals":
+        return _check_survey_visuals(workspace, outputs)
+    if skill == "prose-writer":
+        return _check_draft(workspace, outputs)
+    if skill == "latex-scaffold":
+        return _check_latex_scaffold(workspace, outputs)
+    return []
+
+
+def _check_pdf_text_extractor(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    from tooling.common import read_jsonl
+
+    out_rel = outputs[0] if outputs else "papers/fulltext_index.jsonl"
+    path = workspace / out_rel
+    records = read_jsonl(path) if path.exists() else []
+    if not records:
+        return [QualityIssue(code="empty_fulltext_index", message=f"`{out_rel}` is missing or empty.")]
+
+    mode = "abstract"
+    queries_path = workspace / "queries.md"
+    if queries_path.exists():
+        for raw in queries_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = raw.strip()
+            if not line.startswith("- evidence_mode:"):
+                continue
+            value = line.split(":", 1)[1].split("#", 1)[0].strip().strip('"').strip("'").strip().lower()
+            if value:
+                mode = value
+            break
+    if mode != "fulltext":
+        # Abstract/snippet mode: do not require extracted text coverage.
+        return []
+
+    ok = 0
+    missing_url = 0
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        status = str(rec.get("status") or "").strip()
+        pdf_url = str(rec.get("pdf_url") or "").strip()
+        chars = int(rec.get("chars_extracted") or 0)
+        if not pdf_url:
+            missing_url += 1
+        if status.startswith("ok") and chars >= 1500:
+            ok += 1
+
+    total = max(1, len([r for r in records if isinstance(r, dict)]))
+    # In strict mode, we want at least some real full-text extraction before synthesis.
+    min_ok = 5 if total >= 10 else 1
+    if ok < min_ok:
+        hint = "Run with network access, or reduce scope, or provide PDFs manually under `papers/pdfs/`."
+        return [
+            QualityIssue(
+                code="fulltext_too_few",
+                message=f"Only {ok}/{total} papers have extracted text (>=1500 chars). {hint}",
+            )
+        ]
+    if missing_url / total >= 0.7:
+        return [
+            QualityIssue(
+                code="fulltext_missing_pdf_urls",
+                message="Most records have empty `pdf_url`; ensure `core_set.csv` includes `pdf_url`/`arxiv_id` or use arXiv online mode.",
+            )
+        ]
+    return []
+
+
+def write_quality_report(*, workspace: Path, unit_id: str, skill: str, issues: list[QualityIssue]) -> Path:
+    from tooling.common import atomic_write_text, ensure_dir
+
+    ensure_dir(workspace / "output")
+    report_path = workspace / "output" / "QUALITY_GATE.md"
+
+    now = datetime.now().replace(microsecond=0).isoformat()
+    lines: list[str] = [
+        "# Quality gate report",
+        "",
+        f"- Timestamp: `{now}`",
+        f"- Unit: `{unit_id}`",
+        f"- Skill: `{skill}`",
+        "",
+        "## Issues",
+        "",
+    ]
+    for issue in issues:
+        lines.append(f"- `{issue.code}`: {issue.message}")
+    lines.append("")
+    lines.append("## Next action")
+    lines.append("")
+    for ln in _next_action_lines(skill=skill, unit_id=unit_id):
+        lines.append(ln)
+    lines.append("")
+
+    atomic_write_text(report_path, "\n".join(lines).rstrip() + "\n")
+    return report_path
+
+
+def _next_action_lines(*, skill: str, unit_id: str) -> list[str]:
+    skill_md = f".codex/skills/{skill}/SKILL.md"
+    common = [
+        "- Treat the current outputs as a starting point (often a scaffold).",
+        f"- Follow `{skill_md}` to refine the required artifacts until the issues above no longer apply.",
+        f"- Then mark `{unit_id}` as `DONE` in `UNITS.csv` (or run `python scripts/pipeline.py mark --workspace <ws> --unit-id {unit_id} --status DONE --note \"LLM refined\"`).",
+    ]
+
+    by_skill: dict[str, list[str]] = {
+        "taxonomy-builder": [
+            "- Edit `outline/taxonomy.yml`: replace all `TODO` / placeholder text with domain-meaningful node names and 1–2 sentence descriptions.",
+            "- Ensure taxonomy has ≥2 levels (uses `children`) and avoids generic buckets like “Overview/Benchmarks/Open Problems”.",
+        ],
+        "outline-builder": [
+            "- Edit `outline/outline.yml`: rewrite every `TODO` bullet into topic-specific, checkable bullets (axes, comparisons, evaluation setups, failure modes).",
+            "- Keep it bullets-only (no prose paragraphs).",
+        ],
+        "section-mapper": [
+            "- Edit `outline/mapping.tsv`: diversify mapped papers per subsection and reduce over-reuse of a few papers across unrelated sections.",
+            "- Replace generic `why` (e.g., `matched_terms=...`) with a short semantic rationale (mechanism/task/benchmark/safety angle).",
+            "- Use `outline/mapping_report.md` to find hotspots and weak-signal subsections.",
+        ],
+        "paper-notes": [
+            "- Edit `papers/paper_notes.jsonl`: fully enrich `priority=high` papers (method, key_results, concrete limitations) and remove all `TODO`s.",
+            "- Long-tail papers can remain abstract-level, but avoid copy-pasted limitation boilerplate across many records.",
+        ],
+        "claim-evidence-matrix": [
+            "- Edit `outline/claim_evidence_matrix.md`: rewrite template-y claims into specific, falsifiable claims per subsection.",
+            "- For each claim, keep ≥2 evidence sources (paper IDs) and add caveats when evidence is abstract-only.",
+        ],
+        "survey-visuals": [
+            "- Fill `outline/tables.md` with ≥2 real Markdown tables (method + evaluation/benchmarks) and include citations in rows.",
+            "- Fill `outline/timeline.md` with ≥8 milestone bullets (year + cited works).",
+            "- Fill `outline/figures.md` with ≥2 figure specs (purpose, elements, supporting citations).",
+        ],
+        "prose-writer": [
+            "- Edit `output/DRAFT.md`: add real cross-paper synthesis (comparisons and trade-offs), not per-paper lists.",
+            "- Ensure required paper-like sections exist: Introduction, Timeline/Evolution, Open Problems & Future Directions, Conclusion.",
+            "- Add ≥2 comparison tables and remove repeated boilerplate (identical open-problems/takeaways across sections).",
+            "- Use only citation keys present in `citations/ref.bib`.",
+        ],
+        "latex-scaffold": [
+            "- Edit `latex/main.tex`: remove any leaked markdown (`##`, `**`, `[@...]`) and ensure bibliography points to `../citations/ref.bib`.",
+        ],
+        "arxiv-search": [
+            "- Ensure `papers/papers_raw.jsonl` contains real records (not placeholders) and rerun the unit if needed.",
+        ],
+    }
+
+    out: list[str] = []
+    out.extend(by_skill.get(skill, []))
+    out.extend(common)
+    return out
+
+
+def _check_arxiv_search(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    from tooling.common import read_jsonl
+
+    out_rel = outputs[0] if outputs else "papers/papers_raw.jsonl"
+    path = workspace / out_rel
+    records = read_jsonl(path)
+    if not records:
+        return [QualityIssue(code="empty_raw", message=f"No records found in `{out_rel}`.")]
+
+    placeholders = 0
+    for rec in records:
+        title = str(rec.get("title") or "").strip()
+        url = str(rec.get("url") or rec.get("id") or "").strip()
+        if title.lower().startswith("(placeholder)") or "0000.00000" in url:
+            placeholders += 1
+    if placeholders:
+        return [
+            QualityIssue(
+                code="placeholder_records",
+                message=f"`{out_rel}` contains placeholder/demo records ({placeholders}); workspace template should start empty.",
+            )
+        ]
+    return []
+
+
+def _check_taxonomy(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    from tooling.common import load_yaml
+
+    out_rel = outputs[0] if outputs else "outline/taxonomy.yml"
+    path = workspace / out_rel
+    if path.exists():
+        raw = path.read_text(encoding="utf-8", errors="ignore")
+        if "(placeholder)" in raw or re.search(r"\bTODO\b", raw):
+            return [
+                QualityIssue(
+                    code="taxonomy_scaffold",
+                    message="Taxonomy still contains placeholder/TODO text; rewrite node names/descriptions and remove TODOs.",
+                )
+            ]
+    data = load_yaml(path) if path.exists() else None
+    if not isinstance(data, list) or not data:
+        return [QualityIssue(code="invalid_taxonomy", message=f"`{out_rel}` is missing or not a YAML list.")]
+
+    nodes = list(_iter_taxonomy_nodes(data))
+    if not any(node.get("children") for node in nodes if isinstance(node, dict)):
+        return [QualityIssue(code="taxonomy_depth", message="Taxonomy has no `children` (needs ≥2 levels).")]
+
+    template_desc = 0
+    template_child_names = 0
+    total_desc = 0
+    total_child_names = 0
+
+    child_name_templates = {"Overview", "Representative Approaches", "Benchmarks", "Open Problems"}
+
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        desc = str(node.get("description") or "").strip()
+        if desc:
+            total_desc += 1
+            if desc.startswith("Papers and ideas centered on '") or desc.startswith("Key aspects of '"):
+                template_desc += 1
+        name = str(node.get("name") or "").strip()
+        if name:
+            total_child_names += 1
+            if name in child_name_templates:
+                template_child_names += 1
+
+    issues: list[QualityIssue] = []
+    if total_desc and template_desc / total_desc >= 0.6:
+        issues.append(
+            QualityIssue(
+                code="taxonomy_template_descriptions",
+                message="Most taxonomy descriptions look auto-templated (keyword-based); rewrite with domain-meaningful categories.",
+            )
+        )
+    if total_child_names and template_child_names / total_child_names >= 0.6:
+        issues.append(
+            QualityIssue(
+                code="taxonomy_template_children",
+                message="Many taxonomy node names look like generic placeholders (Overview/Benchmarks/Open Problems); rename to content-based subtopics.",
+            )
+        )
+    return issues
+
+
+def _iter_taxonomy_nodes(items: Iterable) -> Iterable[dict]:
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        yield item
+        children = item.get("children") or []
+        if isinstance(children, list):
+            yield from _iter_taxonomy_nodes(children)
+
+
+def _check_outline(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    from tooling.common import load_yaml
+
+    out_rel = outputs[0] if outputs else "outline/outline.yml"
+    path = workspace / out_rel
+    if path.exists():
+        raw = path.read_text(encoding="utf-8", errors="ignore")
+        if "(placeholder)" in raw or re.search(r"\bTODO\b", raw):
+            return [
+                QualityIssue(
+                    code="outline_scaffold",
+                    message="Outline still contains placeholder/TODO bullets; rewrite each subsection with topic-specific, checkable bullets.",
+                )
+            ]
+    outline = load_yaml(path) if path.exists() else None
+    if not isinstance(outline, list) or not outline:
+        return [QualityIssue(code="invalid_outline", message=f"`{out_rel}` is missing or not a YAML list.")]
+
+    template_bullets = {
+        "Define problem setting and terminology",
+        "Representative approaches and design choices",
+        "Benchmarks / datasets / evaluation metrics",
+        "Limitations and open problems",
+    }
+
+    bullets_total = 0
+    bullets_template = 0
+    for section in outline:
+        if not isinstance(section, dict):
+            continue
+        for sub in section.get("subsections") or []:
+            if not isinstance(sub, dict):
+                continue
+            for b in sub.get("bullets") or []:
+                b = str(b).strip()
+                if not b:
+                    continue
+                bullets_total += 1
+                if b in template_bullets:
+                    bullets_template += 1
+
+    if bullets_total and bullets_template / bullets_total >= 0.7:
+        return [
+            QualityIssue(
+                code="outline_template_bullets",
+                message="Outline bullets are mostly generic templates; replace with specific axes, comparisons, and concrete terms for each subsection.",
+            )
+        ]
+    return []
+
+
+def _check_mapping(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    from tooling.common import read_tsv
+
+    out_rel = outputs[0] if outputs else "outline/mapping.tsv"
+    path = workspace / out_rel
+    rows = read_tsv(path)
+    if not rows:
+        return [QualityIssue(code="empty_mapping", message=f"`{out_rel}` has no rows.")]
+
+    issues: list[QualityIssue] = []
+
+    generic_why = 0
+    why_total = 0
+    for row in rows:
+        why = str(row.get("why") or "").strip()
+        if not why:
+            continue
+        why_total += 1
+        if why.startswith(("token_overlap=", "matched_terms=")) or "matched_terms=" in why:
+            generic_why += 1
+
+    if why_total and generic_why / why_total >= 0.8:
+        issues.append(
+            QualityIssue(
+                code="mapping_generic_rationale",
+                message="Mapping rationale looks mostly token/term overlap; add brief semantic reasons (method/task/benchmark) or refine mapping manually.",
+            )
+        )
+
+    # Detect a small set of papers being repeated across many unrelated subsections.
+    sections: set[str] = set()
+    paper_to_sections: dict[str, set[str]] = {}
+    for row in rows:
+        sid = str(row.get("section_id") or "").strip()
+        pid = str(row.get("paper_id") or "").strip()
+        if sid:
+            sections.add(sid)
+        if sid and pid:
+            paper_to_sections.setdefault(pid, set()).add(sid)
+
+    if sections and paper_to_sections:
+        top_pid, top_secs = max(paper_to_sections.items(), key=lambda kv: len(kv[1]))
+        top_count = len(top_secs)
+        threshold = max(6, int(len(sections) * 0.35))
+        if top_count > threshold:
+            issues.append(
+                QualityIssue(
+                    code="mapping_repeated_papers",
+                    message=(
+                        f"Paper `{top_pid}` appears in {top_count}/{len(sections)} subsections; "
+                        "mapping likely over-reuses a few works across unrelated sections. Diversify `outline/mapping.tsv`."
+                    ),
+                )
+            )
+
+    return issues
+
+
+def _check_paper_notes(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    from tooling.common import read_jsonl
+
+    out_rel = outputs[0] if outputs else "papers/paper_notes.jsonl"
+    path = workspace / out_rel
+    notes = read_jsonl(path)
+    if not notes:
+        return [QualityIssue(code="empty_paper_notes", message=f"`{out_rel}` is empty.")]
+
+    total = len([n for n in notes if isinstance(n, dict)])
+    high = [n for n in notes if isinstance(n, dict) and str(n.get("priority") or "").strip().lower() == "high"]
+    high_total = len(high)
+
+    # If priority isn't present (older workspaces), fall back to the old heuristics.
+    if total and high_total == 0:
+        method_empty = 0
+        results_empty = 0
+        bullets_short = 0
+        lim_first_counts: dict[str, int] = {}
+        fulltext = 0
+        for n in notes:
+            if not isinstance(n, dict):
+                continue
+            method = str(n.get("method") or "").strip()
+            if not method:
+                method_empty += 1
+            key_results = n.get("key_results") or []
+            if not isinstance(key_results, list) or len(key_results) == 0:
+                results_empty += 1
+            bullets = n.get("summary_bullets") or []
+            if not isinstance(bullets, list) or len([b for b in bullets if str(b).strip()]) < 3:
+                bullets_short += 1
+            lims = n.get("limitations") or []
+            if isinstance(lims, list) and lims:
+                first = str(lims[0]).strip()
+                first = re.sub(r"^\[[A-Za-z]+\]\s*", "", first)
+                if first:
+                    lim_first_counts[first] = lim_first_counts.get(first, 0) + 1
+            if str(n.get("evidence_level") or "").strip().lower() == "fulltext":
+                fulltext += 1
+
+        issues: list[QualityIssue] = []
+        if total and method_empty / total >= 0.7 and results_empty / total >= 0.7:
+            issues.append(
+                QualityIssue(
+                    code="paper_notes_missing_method_results",
+                    message="Most paper notes have empty `method` and `key_results`; enrich notes beyond title/abstract-only scaffolding.",
+                )
+            )
+        if total and bullets_short / total >= 0.7:
+            issues.append(
+                QualityIssue(
+                    code="paper_notes_short_summaries",
+                    message="Most paper notes have <3 summary bullets; add concrete contributions, setup, and findings.",
+                )
+            )
+        if total >= 10 and lim_first_counts:
+            top_lim, top_count = sorted(lim_first_counts.items(), key=lambda kv: (-kv[1], kv[0]))[0]
+            if top_count / total >= 0.4 and top_count >= 8:
+                issues.append(
+                    QualityIssue(
+                        code="paper_notes_repeated_limitations",
+                        message=f"Many papers share the same limitation text (e.g., `{top_lim}`); diversify with paper-specific assumptions/failures.",
+                    )
+                )
+        if total >= 20 and fulltext / total < 0.1:
+            issues.append(
+                QualityIssue(
+                    code="paper_notes_too_abstract",
+                    message="Most notes are abstract-level; run `pdf-text-extractor` and enrich key papers with full-text evidence before synthesis.",
+                )
+            )
+        return issues
+
+    # New heuristic: require *high-priority* papers to be enriched (LLM-first), allow long-tail to stay abstract-level.
+    min_high = 8 if total >= 30 else (5 if total >= 15 else 2)
+    issues: list[QualityIssue] = []
+    if total and high_total < min_high:
+        issues.append(
+            QualityIssue(
+                code="paper_notes_missing_priority",
+                message=f"Expected at least {min_high} high-priority notes (found {high_total}); ensure `priority=high` exists for key papers.",
+            )
+        )
+        return issues
+
+    def _has_todo(value: Any) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return "TODO" in value
+        if isinstance(value, list):
+            return any(isinstance(x, str) and "TODO" in x for x in value)
+        return False
+
+    complete = 0
+    todo_hits = 0
+    for n in high:
+        method = str(n.get("method") or "").strip()
+        key_results = n.get("key_results") or []
+        bullets = n.get("summary_bullets") or []
+        lims = n.get("limitations") or []
+
+        if _has_todo(method) or _has_todo(key_results) or _has_todo(bullets) or _has_todo(lims):
+            todo_hits += 1
+            continue
+        if not method:
+            continue
+        if not isinstance(key_results, list) or len([x for x in key_results if str(x).strip()]) < 1:
+            continue
+        if not isinstance(bullets, list) or len([b for b in bullets if str(b).strip()]) < 3:
+            continue
+        if not isinstance(lims, list) or len([x for x in lims if str(x).strip()]) < 1:
+            continue
+        first_lim = str(lims[0]).strip().lower()
+        if first_lim.startswith("evidence level:"):
+            continue
+        complete += 1
+
+    if todo_hits:
+        issues.append(
+            QualityIssue(
+                code="paper_notes_contains_todo",
+                message="High-priority paper notes still contain `TODO` placeholders; enrich them (method/results/limitations) before synthesis.",
+            )
+        )
+    target_complete = max(5, int(high_total * 0.8))
+    if complete < target_complete:
+        issues.append(
+            QualityIssue(
+                code="paper_notes_priority_incomplete",
+                message=f"Only {complete}/{high_total} high-priority notes look complete; target >= {target_complete}.",
+            )
+        )
+    return issues
+
+
+def _check_claim_evidence_matrix(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    out_rel = outputs[0] if outputs else "outline/claim_evidence_matrix.md"
+    path = workspace / out_rel
+    if not path.exists():
+        return [QualityIssue(code="missing_claim_matrix", message=f"`{out_rel}` does not exist.")]
+
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    if "<!-- SCAFFOLD" in text:
+        return [
+            QualityIssue(
+                code="claim_matrix_scaffold",
+                message="Claim–evidence matrix still contains scaffold markers; rewrite claims and remove the `<!-- SCAFFOLD ... -->` line.",
+            )
+        ]
+    if "TODO" in text:
+        return [
+            QualityIssue(
+                code="claim_matrix_todo",
+                message="Claim–evidence matrix still contains `TODO` placeholders; rewrite claims into specific statements and remove TODOs.",
+            )
+        ]
+    claim_lines = [ln.strip() for ln in text.splitlines() if ln.strip().startswith("- Claim:")]
+    if not claim_lines:
+        return [QualityIssue(code="empty_claims", message="No `- Claim:` lines found in claim–evidence matrix.")]
+
+    templ = 0
+    around_template = 0
+    for ln in claim_lines:
+        if "Key approaches in **" in ln and "can be compared along" in ln:
+            templ += 1
+        if ln.split("- Claim:", 1)[-1].strip().startswith("围绕 "):
+            around_template += 1
+    if templ / max(1, len(claim_lines)) >= 0.7:
+        return [
+            QualityIssue(
+                code="generic_claims",
+                message="Claims are mostly generic template sentences; replace with specific, falsifiable claims grounded in the mapped papers.",
+            )
+        ]
+    if around_template / max(1, len(claim_lines)) >= 0.8:
+        return [
+            QualityIssue(
+                code="claim_matrix_same_template",
+                message="Most claims start with the same '围绕 …' template; rewrite claims to be specific (mechanism/assumption/result) per subsection.",
+            )
+        ]
+    return []
+
+
+def _check_survey_visuals(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    tables_rel = outputs[0] if outputs else "outline/tables.md"
+    timeline_rel = outputs[1] if len(outputs) >= 2 else "outline/timeline.md"
+    figures_rel = outputs[2] if len(outputs) >= 3 else "outline/figures.md"
+
+    issues: list[QualityIssue] = []
+
+    def _read(rel: str) -> str | None:
+        path = workspace / rel
+        if not path.exists():
+            issues.append(QualityIssue(code="missing_visuals_file", message=f"`{rel}` does not exist."))
+            return None
+        text = path.read_text(encoding="utf-8", errors="ignore").strip()
+        if not text:
+            issues.append(QualityIssue(code="empty_visuals_file", message=f"`{rel}` is empty."))
+            return None
+        if "<!-- SCAFFOLD" in text:
+            issues.append(QualityIssue(code="visuals_scaffold", message=f"`{rel}` still contains scaffold markers."))
+        if "TODO" in text:
+            issues.append(QualityIssue(code="visuals_todo", message=f"`{rel}` still contains `TODO` placeholders."))
+        if re.search(r"\[@(?:Key|KEY)\d+", text):
+            issues.append(QualityIssue(code="visuals_placeholder_cites", message=f"`{rel}` contains placeholder cite keys like `[@Key1]`."))
+        return text
+
+    tables = _read(tables_rel)
+    timeline = _read(timeline_rel)
+    figures = _read(figures_rel)
+
+    if tables is not None:
+        table_seps = re.findall(r"(?m)^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$", tables)
+        if len(table_seps) < 2:
+            issues.append(
+                QualityIssue(
+                    code="visuals_missing_tables",
+                    message=f"`{tables_rel}` should contain at least 2 Markdown tables (found {len(table_seps)}).",
+                )
+            )
+        if "[@" not in tables:
+            issues.append(
+                QualityIssue(
+                    code="visuals_tables_no_cites",
+                    message=f"`{tables_rel}` should include citations in table rows (e.g., `[@BibKey]`).",
+                )
+            )
+
+    if timeline is not None:
+        bullets = [ln.strip() for ln in timeline.splitlines() if ln.strip().startswith("- ")]
+        year_bullets = [ln for ln in bullets if re.search(r"\b20\d{2}\b", ln)]
+        cited = [ln for ln in year_bullets if "[@" in ln]
+        if len(year_bullets) < 8:
+            issues.append(
+                QualityIssue(
+                    code="visuals_timeline_too_short",
+                    message=f"`{timeline_rel}` should include >=8 year bullets (found {len(year_bullets)}).",
+                )
+            )
+        if year_bullets and len(cited) / len(year_bullets) < 0.8:
+            issues.append(
+                QualityIssue(
+                    code="visuals_timeline_sparse_cites",
+                    message=f"Most timeline bullets should include citations (>=80%); currently {len(cited)}/{len(year_bullets)}.",
+                )
+            )
+
+    if figures is not None:
+        fig_lines = [ln.strip() for ln in figures.splitlines() if ln.strip().lower().startswith(("- figure", "- fig"))]
+        if len(fig_lines) < 2:
+            issues.append(
+                QualityIssue(
+                    code="visuals_missing_figures",
+                    message=f"`{figures_rel}` should include >=2 figure specs (lines starting with `- Figure ...`).",
+                )
+            )
+        if "[@" not in figures:
+            issues.append(
+                QualityIssue(
+                    code="visuals_figures_no_cites",
+                    message=f"`{figures_rel}` should mention supporting works with citations (e.g., `[@BibKey]`).",
+                )
+            )
+
+    return issues
+
+
+def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    out_rel = outputs[0] if outputs else "output/DRAFT.md"
+    path = workspace / out_rel
+    if not path.exists():
+        return [QualityIssue(code="missing_draft", message=f"`{out_rel}` does not exist.")]
+    text = path.read_text(encoding="utf-8", errors="ignore")
+
+    issues: list[QualityIssue] = []
+    if "TODO" in text:
+        issues.append(QualityIssue(code="draft_contains_todo", message="Draft still contains `TODO` placeholders."))
+    if "<!-- SCAFFOLD" in text:
+        issues.append(
+            QualityIssue(code="draft_contains_scaffold", message="Draft still contains `<!-- SCAFFOLD ... -->` markers.")
+        )
+    if "[@" not in text:
+        issues.append(QualityIssue(code="draft_no_citations", message="Draft contains no citation markers like `[@BibKey]`."))
+
+    if re.search(r"\[@(?:Key|KEY)\d+", text):
+        issues.append(
+            QualityIssue(
+                code="draft_placeholder_cites",
+                message="Draft still contains placeholder citation keys like `[@Key1]`; replace with real keys from `citations/ref.bib`.",
+            )
+        )
+
+    # Detect repeated "open problems" boilerplate across subsections.
+    open_lines = [ln.strip() for ln in text.splitlines() if ln.strip().lower().startswith(("open problems:", "开放问题："))]
+    if open_lines:
+        counts: dict[str, int] = {}
+        for ln in open_lines:
+            counts[ln] = counts.get(ln, 0) + 1
+        top_line, top_count = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0]
+        if top_count >= 5 and top_count / len(open_lines) >= 0.6:
+            issues.append(
+                QualityIssue(
+                    code="draft_repeated_open_problems",
+                    message=f"Open-problems text repeats across sections (e.g., `{top_line}`); make it subsection-specific and concrete.",
+                )
+            )
+
+    # Detect repeated takeaways boilerplate.
+    take_lines = [ln.strip() for ln in text.splitlines() if ln.strip().lower().startswith(("takeaways:", "takeaway:", "小结："))]
+    if take_lines:
+        counts: dict[str, int] = {}
+        for ln in take_lines:
+            counts[ln] = counts.get(ln, 0) + 1
+        top_line, top_count = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0]
+        if top_count >= 5 and top_count / len(take_lines) >= 0.6:
+            issues.append(
+                QualityIssue(
+                    code="draft_repeated_takeaways",
+                    message=f"Takeaways text repeats across sections (e.g., `{top_line}`); rewrite to reflect subsection-specific synthesis.",
+                )
+            )
+
+    template_phrases = [
+        "Representative works:",
+        "Discussion: 当前证据主要来自标题/摘要级信息",
+        "本节围绕",
+        "本小节围绕",
+        "本小节聚焦",
+        "从可复核的对比维度出发",
+        "总结主要趋势与挑战",
+        "对比维度（按已批准的 outline）包括：",
+        "小结：综合这些工作，主要权衡通常落在以下维度：",
+        "Takeaways: 综合这些工作，主要权衡通常落在以下维度：",
+        "是 LLM 智能体系统中的一个关键维度",
+    ]
+    template_hits = sum(text.count(p) for p in template_phrases)
+    if template_hits >= 3:
+        issues.append(
+            QualityIssue(
+                code="draft_template_text",
+                message="Draft still contains repeated template boilerplate; rewrite into paragraph-style synthesis grounded in notes/evidence.",
+            )
+        )
+
+    # Heuristic: each subsection should have some body and at least one citation.
+    blocks = re.split(r"\n###\s+", text)
+    subsection_blocks = blocks[1:] if len(blocks) > 1 else []
+    if subsection_blocks:
+        no_cite = 0
+        too_short = 0
+        for block in subsection_blocks:
+            lines = [ln for ln in block.splitlines() if ln.strip()]
+            if len(lines) < 8:
+                too_short += 1
+            if "[@" not in block:
+                no_cite += 1
+
+        total = max(1, len(subsection_blocks))
+        if no_cite / total >= 0.5:
+            issues.append(
+                QualityIssue(
+                    code="draft_sparse_citations",
+                    message="Many subsections have no citations; ensure each subsection cites representative works from `citations/ref.bib`.",
+                )
+            )
+        if too_short / total >= 0.5:
+            issues.append(
+                QualityIssue(
+                    code="draft_sections_too_short",
+                    message="Many subsections are very short; expand with method/results/limitations comparisons from paper notes.",
+                )
+            )
+
+        # Heuristic: encourage cross-paper synthesis (not per-paper summaries).
+        def _cite_keys(block_text: str) -> set[str]:
+            keys: set[str] = set()
+            for m in re.finditer(r"\[@([^\]]+)\]", block_text):
+                inside = (m.group(1) or "").strip()
+                for k in re.findall(r"[A-Za-z0-9:_-]+", inside):
+                    if k:
+                        keys.add(k)
+            return keys
+
+        def _has_multi_cite_paragraph(block_text: str) -> bool:
+            for para in re.split(r"\n\s*\n", block_text):
+                para = para.strip()
+                if not para:
+                    continue
+                pkeys = _cite_keys(para)
+                if len(pkeys) >= 2:
+                    return True
+            return False
+
+        synth_total = 0
+        synth_missing = 0
+        for block in subsection_blocks:
+            # Only enforce synthesis when a subsection cites multiple works.
+            if len(_cite_keys(block)) < 3:
+                continue
+            synth_total += 1
+            if not _has_multi_cite_paragraph(block):
+                synth_missing += 1
+
+        if synth_total and synth_missing / synth_total >= 0.4:
+            issues.append(
+                QualityIssue(
+                    code="draft_low_cross_paper_synthesis",
+                    message=(
+                        "Many cite-rich subsections still read like per-paper summaries; "
+                        "ensure each subsection has at least one paragraph that compares multiple works (>=2 citations in the same paragraph)."
+                        f" Missing synthesis in {synth_missing}/{synth_total} subsections."
+                    ),
+                )
+            )
+
+    # Require at least 2 Markdown tables (for comparisons + benchmarks).
+    table_seps = re.findall(r"(?m)^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$", text)
+    if len(table_seps) < 2:
+        issues.append(
+            QualityIssue(
+                code="draft_missing_tables",
+                message=f"Draft should include >=2 Markdown tables (found {len(table_seps)}); add comparison + benchmarks tables.",
+            )
+        )
+
+    # Require Introduction + Conclusion headings.
+    if not re.search(r"(?im)^##\s+(introduction|引言)\b", text):
+        issues.append(QualityIssue(code="draft_missing_introduction", message="Draft is missing an `Introduction/引言` section."))
+    if not re.search(r"(?im)^##\s+(conclusion|结论)\b", text):
+        issues.append(QualityIssue(code="draft_missing_conclusion", message="Draft is missing a `Conclusion/结论` section."))
+    if not re.search(r"(?im)^##\s+(timeline|evolution|chronology|时间线|演化|发展)\b", text):
+        issues.append(
+            QualityIssue(code="draft_missing_timeline", message="Draft is missing a `Timeline/Evolution/时间线` section.")
+        )
+    if not re.search(r"(?im)^##\s+(open problems|future directions|future work|开放问题|未来方向|未来工作)\b", text):
+        issues.append(
+            QualityIssue(
+                code="draft_missing_open_problems",
+                message="Draft is missing an `Open Problems & Future Directions/开放问题` section.",
+            )
+        )
+
+    # Introduction should not be a few sentences only.
+    intro = _extract_section_body(text, heading_re=r"(?im)^##\s+(introduction|引言)\b")
+    if intro is not None:
+        words = len(re.findall(r"\b\w+\b", intro))
+        if words and words < 180:
+            issues.append(
+                QualityIssue(
+                    code="draft_intro_too_short",
+                    message="Introduction looks too short (<~180 words); expand motivation, scope, contributions, and positioning vs. prior surveys.",
+                )
+            )
+
+    timeline = _extract_section_body(text, heading_re=r"(?im)^##\s+(timeline|evolution|chronology|时间线|演化|发展)\b")
+    if timeline is not None:
+        year_lines = [ln.strip() for ln in timeline.splitlines() if re.search(r"\b20\d{2}\b", ln)]
+        cited = [ln for ln in year_lines if "[@" in ln]
+        if len(year_lines) < 6:
+            issues.append(
+                QualityIssue(
+                    code="draft_timeline_too_short",
+                    message=f"Timeline section seems too short (found {len(year_lines)} year lines); add more milestones with citations.",
+                )
+            )
+        if year_lines and len(cited) / len(year_lines) < 0.6:
+            issues.append(
+                QualityIssue(
+                    code="draft_timeline_sparse_cites",
+                    message="Timeline should cite key works for most milestones (>=60%).",
+                )
+            )
+
+    # Detect repeated long paragraphs (beyond single-line open-problems/takeaways boilerplate).
+    paras = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    para_norm_counts: dict[str, int] = {}
+    para_example: dict[str, str] = {}
+    for para in paras:
+        # Skip tables/code-ish blocks.
+        if para.startswith("|") or "\n|" in para or para.startswith("```"):
+            continue
+        if len(para) < 220:
+            continue
+        norm = re.sub(r"\[@[^\]]+\]", "", para)
+        norm = re.sub(r"\s+", " ", norm).strip().lower()
+        if len(norm) < 180:
+            continue
+        para_norm_counts[norm] = para_norm_counts.get(norm, 0) + 1
+        para_example.setdefault(norm, para)
+
+    if para_norm_counts:
+        top_norm, top_count = sorted(para_norm_counts.items(), key=lambda kv: (-kv[1], kv[0]))[0]
+        if top_count >= 3:
+            example = para_example.get(top_norm, "")[:140].replace("\n", " ").strip()
+            issues.append(
+                QualityIssue(
+                    code="draft_repeated_paragraphs",
+                    message=f"Draft contains repeated long paragraphs (e.g., `{example}...`); rewrite to be subsection-specific and avoid copy-paste boilerplate.",
+                )
+            )
+    return issues
+
+
+def _extract_section_body(text: str, *, heading_re: str) -> str | None:
+    m = re.search(heading_re, text)
+    if not m:
+        return None
+    start = m.end()
+    nxt = re.search(r"(?m)^##\s+", text[start:])
+    end = start + nxt.start() if nxt else len(text)
+    return text[start:end].strip()
+
+
+def _check_latex_scaffold(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    out_rel = outputs[0] if outputs else "latex/main.tex"
+    path = workspace / out_rel
+    if not path.exists():
+        return [QualityIssue(code="missing_main_tex", message=f"`{out_rel}` does not exist.")]
+    text = path.read_text(encoding="utf-8", errors="ignore")
+
+    issues: list[QualityIssue] = []
+    if "\\begin{abstract}" not in text:
+        issues.append(QualityIssue(code="latex_missing_abstract", message="LaTeX output has no `\\begin{abstract}` block."))
+    if "\\bibliography{../citations/ref}" not in text:
+        issues.append(QualityIssue(code="latex_missing_bib", message="LaTeX output does not reference `../citations/ref.bib`."))
+    # Heuristics: markdown artifacts should not leak into TeX.
+    if "[@" in text:
+        issues.append(QualityIssue(code="latex_markdown_cites", message="LaTeX still contains markdown cite markers like `[@...]`."))
+    if "**" in text:
+        issues.append(QualityIssue(code="latex_markdown_bold", message="LaTeX still contains markdown bold markers `**...**`."))
+    if "## " in text or "### " in text:
+        issues.append(QualityIssue(code="latex_markdown_headings", message="LaTeX still contains markdown headings like `##`/`###`."))
+    return issues
