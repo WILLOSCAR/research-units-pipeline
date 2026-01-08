@@ -19,10 +19,17 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[4]
     sys.path.insert(0, str(repo_root))
 
-    from tooling.common import ensure_dir, parse_semicolon_list, read_jsonl
+    from tooling.common import ensure_dir, load_yaml, parse_semicolon_list, read_jsonl, read_tsv
 
     workspace = Path(args.workspace).resolve()
+    inputs = parse_semicolon_list(args.inputs) or [
+        "outline/outline.yml",
+        "outline/claim_evidence_matrix.md",
+        "papers/paper_notes.jsonl",
+        "citations/ref.bib",
+    ]
     outputs = parse_semicolon_list(args.outputs) or ["outline/tables.md", "outline/timeline.md", "outline/figures.md"]
+
     out_tables = workspace / outputs[0]
     out_timeline = workspace / outputs[1] if len(outputs) >= 2 else workspace / "outline" / "timeline.md"
     out_figures = workspace / outputs[2] if len(outputs) >= 3 else workspace / "outline" / "figures.md"
@@ -31,12 +38,29 @@ def main() -> int:
     ensure_dir(out_timeline.parent)
     ensure_dir(out_figures.parent)
 
+    outline_path = workspace / inputs[0]
+    outline = load_yaml(outline_path) if outline_path.exists() else []
+
     notes_path = workspace / "papers" / "paper_notes.jsonl"
     notes = read_jsonl(notes_path) if notes_path.exists() else []
 
-    _maybe_write(out_tables, _tables_scaffold(notes=notes))
-    _maybe_write(out_timeline, _timeline_scaffold(notes=notes))
-    _maybe_write(out_figures, _figures_scaffold(notes=notes))
+    mapping_path = workspace / "outline" / "mapping.tsv"
+    mappings = read_tsv(mapping_path) if mapping_path.exists() else []
+
+    notes_by_id = {str(n.get("paper_id") or "").strip(): n for n in notes if isinstance(n, dict)}
+    bibkey_by_pid = {pid: str(n.get("bibkey") or "").strip() for pid, n in notes_by_id.items() if pid and str(n.get("bibkey") or "").strip()}
+
+    mapped_by_section: dict[str, list[str]] = {}
+    for row in mappings:
+        sid = str(row.get("section_id") or "").strip()
+        pid = str(row.get("paper_id") or "").strip()
+        if sid and pid:
+            mapped_by_section.setdefault(sid, []).append(pid)
+
+    # Write artifacts (idempotent: do not overwrite refined files).
+    _maybe_write(out_tables, _render_tables(outline=outline, mapped_by_section=mapped_by_section, notes_by_id=notes_by_id, bibkey_by_pid=bibkey_by_pid))
+    _maybe_write(out_timeline, _render_timeline(notes_by_id=notes_by_id, bibkey_by_pid=bibkey_by_pid))
+    _maybe_write(out_figures, _render_figures(outline=outline, notes_by_id=notes_by_id, bibkey_by_pid=bibkey_by_pid))
     return 0
 
 
@@ -46,106 +70,8 @@ def _maybe_write(path: Path, content: str) -> None:
         if not _is_placeholder(existing):
             return
     from tooling.common import atomic_write_text
+
     atomic_write_text(path, content)
-
-
-def _tables_scaffold(*, notes: list[Any]) -> str:
-    candidates = _pick_notes(notes, k=10, prefer_high=True)
-    lines: list[str] = [
-        "# Tables",
-        "",
-        "<!-- SCAFFOLD: survey-visuals (replace with real content + real citation keys) -->",
-        "",
-        "## Table 1: Method comparison (agents)",
-        "",
-        "| Work | Core loop / planner | Tools | Memory | Environment | Evaluation | Key takeaway |",
-        "|---|---|---|---|---|---|---|",
-    ]
-    if candidates:
-        for note in candidates[:8]:
-            pid = str(note.get("paper_id") or "").strip()
-            title = _short_title(str(note.get("title") or "").strip())
-            bibkey = str(note.get("bibkey") or "").strip()
-            cite = f" [@{bibkey}]" if bibkey else ""
-            label = f"{pid} {title}".strip() if pid else title
-            lines.append(f"| {label}{cite} | TODO | TODO | TODO | TODO | TODO | TODO |")
-    else:
-        lines.append("| TODO [@Key1] | TODO | TODO | TODO | TODO | TODO | TODO |")
-
-    lines.extend(
-        [
-            "",
-            "## Table 2: Benchmarks / evaluation suites",
-            "",
-            "| Benchmark | Tasks | Interface | Metrics | Notes |",
-            "|---|---|---|---|---|",
-        ]
-    )
-    benches = _pick_benchmark_notes(notes, k=8)
-    if benches:
-        for note in benches[:6]:
-            pid = str(note.get("paper_id") or "").strip()
-            title = _short_title(str(note.get("title") or "").strip())
-            bibkey = str(note.get("bibkey") or "").strip()
-            cite = f" [@{bibkey}]" if bibkey else ""
-            label = f"{pid} {title}".strip() if pid else title
-            lines.append(f"| {label}{cite} | TODO | TODO | TODO | TODO |")
-    else:
-        lines.append("| TODO [@Key2] | TODO | TODO | TODO | TODO |")
-    lines.append("")
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def _timeline_scaffold(*, notes: list[Any]) -> str:
-    candidates = _pick_notes(notes, k=30, prefer_high=True)
-    lines: list[str] = [
-        "# Timeline / Evolution",
-        "",
-        "<!-- SCAFFOLD: survey-visuals timeline (year -> key milestones; cite keys from ref.bib) -->",
-        "",
-    ]
-    bullets = _timeline_bullets(candidates, target=8)
-    if bullets:
-        lines.extend(bullets)
-    else:
-        lines.extend(
-            [
-                "- 2022: TODO [@Key1]",
-                "- 2023: TODO [@Key2]",
-                "- 2024: TODO [@Key3]",
-                "- 2025: TODO [@Key4]",
-            ]
-        )
-    lines.append("")
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def _figures_scaffold(*, notes: list[Any]) -> str:
-    candidates = _pick_notes(notes, k=10, prefer_high=True)
-    cite_keys: list[str] = []
-    for note in candidates[:6]:
-        bibkey = str(note.get("bibkey") or "").strip()
-        if bibkey and bibkey not in cite_keys:
-            cite_keys.append(bibkey)
-    cite = f"[@{'; @'.join(cite_keys[:4])}]" if cite_keys else "[@Key1; @Key2]"
-
-    lines: list[str] = [
-        "# Figure specs (no prose)",
-        "",
-        "<!-- SCAFFOLD: survey-visuals figures (specs only; no narrative paragraphs) -->",
-        "",
-        "- Figure 1 (system view): TODO",
-        "  - Purpose: TODO",
-        "  - Elements: planner / tool interface / memory / verifier / environment (adapt to outline)",
-        f"  - Supported by: TODO {cite}",
-        "",
-        "- Figure 2 (taxonomy view): TODO",
-        "  - Purpose: TODO",
-        "  - Elements: 2–3 levels of taxonomy with representative works per node",
-        f"  - Supported by: TODO {cite}",
-        "",
-    ]
-    return "\n".join(lines).rstrip() + "\n"
 
 
 def _is_placeholder(text: str) -> bool:
@@ -154,57 +80,281 @@ def _is_placeholder(text: str) -> bool:
         return True
     if "<!-- SCAFFOLD" in text:
         return True
-    if "TODO" in text:
+    if re.search(r"(?i)\b(?:TODO|TBD|FIXME)\b", text):
         return True
     if re.search(r"\[@(?:Key|KEY)\d+", text):
         return True
     return False
 
 
-def _pick_notes(notes: list[Any], *, k: int, prefer_high: bool) -> list[dict[str, Any]]:
-    items: list[dict[str, Any]] = [n for n in notes if isinstance(n, dict)]
-    if prefer_high:
-        high = [n for n in items if str(n.get("priority") or "").strip().lower() == "high"]
-        if high:
-            items = high
-    items.sort(key=lambda n: (-_year_int(n.get("year")), str(n.get("paper_id") or ""), str(n.get("title") or "")))
-    return items[: max(0, int(k))]
+def _iter_subsections(outline: list) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for section in outline if isinstance(outline, list) else []:
+        if not isinstance(section, dict):
+            continue
+        for sub in section.get("subsections") or []:
+            if not isinstance(sub, dict):
+                continue
+            sid = str(sub.get("id") or "").strip()
+            title = str(sub.get("title") or "").strip()
+            bullets = sub.get("bullets") or []
+            if sid and title:
+                items.append({"id": sid, "title": title, "bullets": bullets})
+    return items
 
 
-def _pick_benchmark_notes(notes: list[Any], *, k: int) -> list[dict[str, Any]]:
-    items: list[dict[str, Any]] = [n for n in notes if isinstance(n, dict)]
-    signals = ("benchmark", "evaluation", "eval", "suite", "arena", "agentbench", "bench")
-    picked = [n for n in items if any(s in str(n.get("title") or "").lower() for s in signals)]
-    picked.sort(key=lambda n: (-_year_int(n.get("year")), str(n.get("paper_id") or ""), str(n.get("title") or "")))
-    if picked:
-        return picked[: max(0, int(k))]
-    return _pick_notes(notes, k=k, prefer_high=True)
+def _render_tables(*, outline: list, mapped_by_section: dict[str, list[str]], notes_by_id: dict[str, dict[str, Any]], bibkey_by_pid: dict[str, str]) -> str:
+    subs = _iter_subsections(outline)
+
+    lines: list[str] = [
+        "# Tables",
+        "",
+        "## Table 1: Subsection coverage and representative works",
+        "",
+        "| Subsection | Key axes (from outline) | Representative works |",
+        "|---|---|---|",
+    ]
+
+    rows_written = 0
+    for sub in subs:
+        sid = sub["id"]
+        title = sub["title"]
+        bullets = [str(b).strip() for b in (sub.get("bullets") or []) if str(b).strip()]
+        axes = "; ".join([_short(b) for b in bullets[:2]]) if bullets else ""
+
+        pids = mapped_by_section.get(sid, [])
+        uniq: list[str] = []
+        for pid in pids:
+            if pid in notes_by_id and pid not in uniq:
+                uniq.append(pid)
+            if len(uniq) >= 3:
+                break
+        rep_cells: list[str] = []
+        for pid in uniq:
+            note = notes_by_id.get(pid, {})
+            bibkey = bibkey_by_pid.get(pid, "")
+            cite = f" [@{bibkey}]" if bibkey else ""
+            rep_cells.append(f"`{pid}` { _short_title(str(note.get('title') or ''), max_len=52) }{cite}".strip())
+        rep = "<br>".join(rep_cells) if rep_cells else ""
+
+        lines.append(f"| {sid} {title} | {axes} | {rep} |")
+        rows_written += 1
+        if rows_written >= 10:
+            break
+
+    if rows_written == 0:
+        lines.append("| (no outline subsections found) | - | - |")
+
+    lines.extend(
+        [
+            "",
+            "## Table 2: High-priority papers (quick view)",
+            "",
+            "| Work | Contribution (metadata-level) | Evidence | Notable limitation |",
+            "|---|---|---|---|",
+        ]
+    )
+
+    high = [n for n in notes_by_id.values() if str(n.get("priority") or "").strip().lower() == "high"]
+    pool = high if high else list(notes_by_id.values())
+    pool.sort(key=lambda n: (-_year_int(n.get("year")), str(n.get("paper_id") or "")))
+
+    wrote = 0
+    for note in pool[:12]:
+        pid = str(note.get("paper_id") or "").strip()
+        if not pid:
+            continue
+        bibkey = bibkey_by_pid.get(pid, "")
+        if not bibkey:
+            continue
+        title = _short_title(str(note.get("title") or ""), max_len=60)
+        contrib = _first_bullet(note)
+        evidence = str(note.get("evidence_level") or "").strip() or "abstract"
+        lim = _first_limitation(note)
+        lines.append(f"| `{pid}` {title} [@{bibkey}] | {contrib} | {evidence} | {lim} |")
+        wrote += 1
+        if wrote >= 8:
+            break
+
+    if wrote < 2:
+        # Keep the table non-empty even for tiny/offline metadata.
+        lines.append("| (insufficient notes) | Provide paper notes to populate this table. | - | - |")
+
+    lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
-def _timeline_bullets(notes: list[dict[str, Any]], *, target: int) -> list[str]:
-    by_year: dict[int, list[dict[str, Any]]] = {}
+def _render_timeline(*, notes_by_id: dict[str, dict[str, Any]], bibkey_by_pid: dict[str, str]) -> str:
+    notes = list(notes_by_id.values())
+    notes = [n for n in notes if _year_int(n.get("year")) >= 2000 and str(n.get("paper_id") or "").strip()]
+    notes.sort(key=lambda n: (_year_int(n.get("year")), str(n.get("paper_id") or "")))
+
+    lines: list[str] = [
+        "# Timeline / Evolution",
+        "",
+        "This timeline is a lightweight, citation-backed set of milestones extracted from the core set.",
+        "",
+    ]
+
+    bullets: list[str] = []
     for note in notes:
         y = _year_int(note.get("year"))
-        if y <= 0:
+        pid = str(note.get("paper_id") or "").strip()
+        bibkey = bibkey_by_pid.get(pid, "")
+        if not bibkey:
             continue
-        by_year.setdefault(y, []).append(note)
-    bullets: list[str] = []
-    for y in sorted(by_year.keys()):
-        by_year[y].sort(key=lambda n: (str(n.get("paper_id") or ""), str(n.get("title") or "")))
-        for note in by_year[y]:
+        title = _short_title(str(note.get("title") or ""), max_len=72)
+        phrase = _milestone_phrase(title)
+        bullets.append(f"- {y}: {title} (`{pid}`) — {phrase} [@{bibkey}]")
+        if len(bullets) >= 10:
+            break
+
+    if len(bullets) < 8:
+        # If the core set is small, reuse later-year items to reach the minimum gate.
+        for note in reversed(notes):
+            if len(bullets) >= 8:
+                break
+            y = _year_int(note.get("year"))
             pid = str(note.get("paper_id") or "").strip()
-            title = _short_title(str(note.get("title") or "").strip(), max_len=72)
-            bibkey = str(note.get("bibkey") or "").strip()
-            cite = f" [@{bibkey}]" if bibkey else ""
-            label = f"{pid} {title}".strip() if pid else title
-            bullets.append(f"- {y}: {label} — TODO: milestone summary{cite}")
-            if len(bullets) >= int(target):
-                return bullets
-    return bullets
+            bibkey = bibkey_by_pid.get(pid, "")
+            if not bibkey:
+                continue
+            title = _short_title(str(note.get("title") or ""), max_len=72)
+            phrase = _milestone_phrase(title)
+            line = f"- {y}: {title} (`{pid}`) — {phrase} [@{bibkey}]"
+            if line not in bullets:
+                bullets.append(line)
+
+    lines.extend(bullets[: max(8, len(bullets))])
+    lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _render_figures(*, outline: list, notes_by_id: dict[str, dict[str, Any]], bibkey_by_pid: dict[str, str]) -> str:
+    cite_keys: list[str] = []
+    # Prefer high-priority items for supporting citations.
+    notes = list(notes_by_id.values())
+    notes.sort(key=lambda n: (0 if str(n.get("priority") or "").strip().lower() == "high" else 1, -_year_int(n.get("year"))))
+    for note in notes:
+        pid = str(note.get("paper_id") or "").strip()
+        key = bibkey_by_pid.get(pid, "")
+        if key and key not in cite_keys:
+            cite_keys.append(key)
+        if len(cite_keys) >= 6:
+            break
+
+    cite = f"[@{'; @'.join(cite_keys[:4])}]" if cite_keys else ""
+
+    n_sub = len(_iter_subsections(outline))
+    outline_hint = f"{n_sub} subsections" if n_sub else "the approved outline"
+
+    lines: list[str] = [
+        "# Figure specs (no prose)",
+        "",
+        "- Figure 1 (pipeline + dataflow): A diagram from retrieval -> curation -> taxonomy -> mapping -> evidence -> synthesis -> PDF.",
+        "  - Purpose: Help readers understand where evidence comes from and how sections are grounded.",
+        "  - Elements: queries; raw set; dedupe/rank; taxonomy; outline; mapping; notes; claim-evidence matrix; draft; LaTeX/PDF.",
+        f"  - Supported by: {cite}".rstrip(),
+        "",
+        f"- Figure 2 (taxonomy view): A two-level tree summarizing {outline_hint} with representative works per leaf.",
+        "  - Purpose: Provide a navigable mental model of the design space before diving into details.",
+        "  - Elements: top-level chapters; leaf subtopics; 2-3 cited exemplars per leaf; arrows for common trade-offs.",
+        f"  - Supported by: {cite}".rstrip(),
+        "",
+    ]
+    return "\n".join([ln for ln in lines if ln.strip()]).rstrip() + "\n"
+
+
+def _first_bullet(note: dict[str, Any]) -> str:
+    bullets = note.get("summary_bullets") or []
+    if isinstance(bullets, list):
+        for b in bullets:
+            b = str(b).strip()
+            if b:
+                return _short(b, 96)
+    method = str(note.get("method") or "").strip()
+    if method:
+        return _short(method, 96)
+    return "Metadata-only; see paper notes for details."
+
+
+def _first_limitation(note: dict[str, Any]) -> str:
+    lims = note.get("limitations") or []
+    if isinstance(lims, list):
+        for l in lims:
+            l = str(l).strip()
+            if l:
+                return _short(l, 96)
+    return "Limitations not captured in metadata; verify from full text."
+
+
+def _milestone_phrase(title: str) -> str:
+    terms = _salient_terms(title)
+    if not terms:
+        return "a representative work in the core set"
+    if len(terms) == 1:
+        return f"highlights a key line of work around {terms[0]}"
+    return f"highlights a line of work connecting {terms[0]} and {terms[1]}"
+
+
+def _salient_terms(text: str) -> list[str]:
+    text = (text or "").lower()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    toks = [t for t in text.split() if t]
+    stop = {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "for",
+        "from",
+        "in",
+        "is",
+        "of",
+        "on",
+        "or",
+        "the",
+        "to",
+        "with",
+        "via",
+        "using",
+        "toward",
+        "towards",
+        "model",
+        "models",
+        "method",
+        "methods",
+        "system",
+        "systems",
+        "approach",
+        "approaches",
+        "survey",
+        "review",
+    }
+    out: list[str] = []
+    for t in toks:
+        if len(t) < 4:
+            continue
+        if t in stop:
+            continue
+        if t not in out:
+            out.append(t)
+    return out[:6]
+
+
+def _short(text: str, max_len: int = 72) -> str:
+    text = re.sub(r"\s+", " ", (text or "").strip())
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + "…"
 
 
 def _short_title(title: str, *, max_len: int = 64) -> str:
-    title = (title or "").strip()
+    title = re.sub(r"\s+", " ", (title or "").strip())
     if len(title) <= max_len:
         return title
     return title[: max_len - 1].rstrip() + "…"

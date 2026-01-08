@@ -1,6 +1,12 @@
 ---
 name: paper-notes
-description: Write structured notes for each paper in the core set (summary bullets, method, results, limitations) into `papers/paper_notes.jsonl`. Use after mapping to prepare evidence without writing prose.
+description: |
+  Write structured notes for each paper in the core set into `papers/paper_notes.jsonl` (summary/method/results/limitations).
+  **Trigger**: paper notes, structured notes, reading notes, 论文笔记, paper_notes.jsonl.
+  **Use when**: survey 的 evidence 阶段（C3），已有 `papers/core_set.csv`（以及可选 fulltext），需要为后续 claims/citations/writing 准备可引用证据。
+  **Skip if**: 还没有 core set（先跑 `dedupe-rank`），或你只做极轻量 snapshot 不需要细粒度证据。
+  **Network**: none.
+  **Guardrail**: 具体可核对（method/metrics/limitations），避免大量重复模板；保持结构化字段而非长 prose。
 ---
 
 # Paper Notes
@@ -30,6 +36,8 @@ This is still **NO PROSE**: keep notes as bullets / short fields, not narrative 
 - If you only have abstracts (default) → keep long-tail notes abstract-level, but still fully enrich **high-priority** papers (see below).
 
 ## Workflow (heuristic)
+Uses: `outline/mapping.tsv`, `papers/fulltext_index.jsonl`.
+
 
 1. Ensure **coverage**: every `paper_id` in `papers/core_set.csv` must have one JSONL record.
 2. Use mapping to choose **high-priority papers**:
@@ -54,8 +62,54 @@ This is still **NO PROSE**: keep notes as bullets / short fields, not narrative 
 
 ## Helper script (optional)
 
-Bootstrap scaffold only:
-- Run `python .codex/skills/paper-notes/scripts/run.py --help` first.
-- Then: `python .codex/skills/paper-notes/scripts/run.py --workspace <workspace_dir>`
+### Quick Start
 
-The helper writes deterministic metadata + abstract scaffolds, and marks high-priority papers with `TODO` fields. In `pipeline.py --strict` it will be blocked until you enrich those high-priority notes and remove TODOs.
+- `python .codex/skills/paper-notes/scripts/run.py --help`
+- `python .codex/skills/paper-notes/scripts/run.py --workspace <workspace_dir>`
+
+### All Options
+
+- See `--help` (this helper is intentionally minimal)
+
+### Examples
+
+- Generate notes, then optionally enrich `priority=high` papers:
+  - Run the helper once, then refine `papers/paper_notes.jsonl` (e.g., add full-text details for key papers and diversify limitations).
+
+### Notes
+
+- The helper writes deterministic metadata/abstract-level notes and marks key papers with `priority=high`.
+- In `pipeline.py --strict` it will be blocked if high-priority notes are incomplete (missing method/key_results/limitations) or contain placeholders.
+
+## Troubleshooting
+
+### Common Issues
+
+#### Issue: High-priority notes still look like scaffolds
+
+**Symptom**:
+- Quality gate reports missing `method/key_results` or `TODO` placeholders.
+
+**Causes**:
+- Notes were generated from abstracts only; key papers weren’t enriched.
+
+**Solutions**:
+- Fully enrich `priority=high` papers: `method`, ≥1 `key_results`, ≥3 `summary_bullets`, ≥1 concrete `limitations`.
+- If you need full text evidence, run `pdf-text-extractor` in `fulltext` mode for key papers.
+
+#### Issue: Repeated limitations across many papers
+
+**Symptom**:
+- Quality gate reports repeated limitation boilerplate.
+
+**Causes**:
+- Copy-pasted limitations instead of paper-specific failure modes/assumptions.
+
+**Solutions**:
+- Replace boilerplate with paper-specific limitations (setup, data, evaluation gaps, failure cases).
+
+### Recovery Checklist
+
+- [ ] `papers/paper_notes.jsonl` covers all `papers/core_set.csv` paper_ids.
+- [ ] ≥80% of `priority=high` notes satisfy method/results/limitations completeness.
+- [ ] No `TODO` remains in high-priority notes.

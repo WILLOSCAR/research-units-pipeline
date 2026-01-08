@@ -23,6 +23,13 @@
 
 本 repo 的 skill 约定（结构、脚本使用、LLM-first）见 `SKILLS_STANDARD.md`。
 
+## Offline-first (no network) conventions
+
+当网络受限/不可用时，优先使用“先落盘可审计工件，再择机验证”的流程：
+
+- 引用验证：`citations/verified.jsonl` 允许 `verification_status=offline_generated`（表示已记录但尚未联网核验）；联网后用 `citation-verifier --verify-only` 进行补验证。
+- 全文证据：优先 `queries.md` 设 `evidence_mode: "abstract"`（不下载）；如必须全文，用 `papers/pdfs/<paper_id>.pdf` + `pdf-text-extractor --local-pdfs-only`，并查看 `output/MISSING_PDFS.md` 补齐缺失 PDF。
+
 ## File formats (suggested)
 
 ### `papers/*.jsonl`
@@ -44,3 +51,4 @@
 
 ### `citations/verified.jsonl`
 - 每条 bib entry 一条验证记录（至少：`url`, `date`, `title`；可加 `bibkey`, `notes`）
+- 建议字段：`verification_status` ∈ `offline_generated` | `verified_online` | `verify_failed` | `needs_manual_verification`

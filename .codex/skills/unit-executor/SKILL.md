@@ -1,6 +1,12 @@
 ---
 name: unit-executor
-description: Execute exactly one runnable unit from `UNITS.csv` (first TODO whose dependencies are DONE), using its referenced skill, then update unit status and artifacts. Use when driving the pipeline step-by-step with strict artifact outputs and checkpoint checks.
+description: |
+  Execute exactly one runnable unit from `UNITS.csv` (first TODO whose dependencies are DONE), then update unit status and artifacts.
+  **Trigger**: unit executor, run one unit, next unit, step-by-step pipeline, 逐条执行, UNITS.csv.
+  **Use when**: 需要严格“一次只做一个 unit”（可审计、可中断），并遵守 checkpoints/HUMAN 阻塞逻辑。
+  **Skip if**: 要端到端自动跑（用 `research-pipeline-runner`）或 workspace 不存在。
+  **Network**: none.
+  **Guardrail**: 只执行一个 unit；满足验收且输出存在才可标 `DONE`；遇到 HUMAN checkpoint 必须停下。
 ---
 
 # Skill: unit-executor
@@ -43,5 +49,22 @@ description: Execute exactly one runnable unit from `UNITS.csv` (first TODO whos
 
 ## Script
 
-- Run one unit (script runner): `python .codex/skills/unit-executor/scripts/run.py --workspace <workspace_dir> --strict`
-- Or use repo wrapper: `python scripts/pipeline.py run-one --workspace <workspace_dir> --strict`
+### Quick Start
+
+- `python .codex/skills/unit-executor/scripts/run.py --help`
+- `python .codex/skills/unit-executor/scripts/run.py --workspace <workspace_dir>`
+
+### All Options
+
+- `--strict`: enable quality gate (blocks on scaffolds; writes `output/QUALITY_GATE.md`)
+
+### Examples
+
+- Run exactly one unit (strict):
+  - `python .codex/skills/unit-executor/scripts/run.py --workspace <ws> --strict`
+- Equivalent repo wrapper:
+  - `python scripts/pipeline.py run-one --workspace <ws> --strict`
+
+### Notes
+
+- Returns 0 on `DONE/IDLE`, 2 on `BLOCKED/ERROR` (useful for automation).

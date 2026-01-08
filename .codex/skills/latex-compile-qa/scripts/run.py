@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -19,7 +20,7 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[4]
     sys.path.insert(0, str(repo_root))
 
-    from tooling.common import atomic_write_text, ensure_dir, parse_semicolon_list
+    from tooling.common import ensure_dir, parse_semicolon_list
 
     workspace = Path(args.workspace).resolve()
     outputs = parse_semicolon_list(args.outputs) or ["latex/main.pdf", "output/LATEX_BUILD_REPORT.md"]
@@ -53,12 +54,25 @@ def main() -> int:
     ]
     proc = subprocess.run(cmd, cwd=str(tex_path.parent), capture_output=True, text=True)
 
-    ok = proc.returncode == 0 and (tex_path.parent / "main.pdf").exists()
+    built_pdf = tex_path.parent / "main.pdf"
+    ok = proc.returncode == 0 and built_pdf.exists()
+
+    if ok and pdf_path != built_pdf:
+        shutil.copy2(built_pdf, pdf_path)
+
+    page_count = _pdf_page_count(pdf_path if pdf_path.exists() else built_pdf)
+    warnings = _collect_warnings(tex_dir=tex_path.parent, stdout=proc.stdout, stderr=proc.stderr)
+
     if ok:
-        # Ensure the expected output path exists (latexmk writes into latex/ by default).
-        if pdf_path != tex_path.parent / "main.pdf":
-            shutil.copy2(tex_path.parent / "main.pdf", pdf_path)
-        _write_report(report_path, ok=True, message="SUCCESS", stdout=proc.stdout, stderr=proc.stderr)
+        _write_report(
+            report_path,
+            ok=True,
+            message="SUCCESS",
+            stdout=proc.stdout,
+            stderr=proc.stderr,
+            page_count=page_count,
+            warnings=warnings,
+        )
         return 0
 
     _write_report(
@@ -67,12 +81,73 @@ def main() -> int:
         message=f"latexmk failed (exit {proc.returncode})",
         stdout=proc.stdout,
         stderr=proc.stderr,
+        page_count=page_count,
+        warnings=warnings,
     )
     return 0
 
 
-def _write_report(path: Path, *, ok: bool, message: str, stdout: str = "", stderr: str = "") -> None:
+def _pdf_page_count(path: Path) -> int | None:
+    if not path or not path.exists():
+        return None
+    try:
+        import fitz  # PyMuPDF
+
+        doc = fitz.open(path)
+        n = int(len(doc))
+        doc.close()
+        return n
+    except Exception:
+        return None
+
+
+def _collect_warnings(*, tex_dir: Path, stdout: str, stderr: str) -> dict[str, int]:
+    # Prefer the final LaTeX log; latexmk stdout/stderr can include warnings from
+    # intermediate runs (e.g., before bibtex is applied), which would create
+    # false positives for resolved citations.
+
+    log_path = tex_dir / "main.log"
+    log_text = log_path.read_text(encoding="utf-8", errors="ignore") if log_path.exists() else ""
+    aux_text = "\n".join([stdout or "", stderr or ""]).strip()
+
+    text = log_text if log_text.strip() else aux_text
+
+    patterns: list[tuple[str, str]] = [
+        ("citation_undefined", r"(?im)^Package\s+natbib\s+Warning: Citation.+undefined"),
+        ("citation_undefined", r"(?im)There were undefined citations"),
+        ("reference_undefined", r"(?im)there were undefined references"),
+        ("overfull_hbox", r"(?im)^Overfull \\hbox"),
+        ("underfull_hbox", r"(?im)^Underfull \\hbox"),
+        ("rerun_references", r"(?im)Rerun to get cross-references right"),
+    ]
+
+    counts: dict[str, int] = {}
+    for name, pat in patterns:
+        counts[name] = counts.get(name, 0) + len(re.findall(pat, text))
+
+    latex_warns = 0
+    for ln in text.splitlines():
+        if "LaTeX Warning:" in ln and "hbox" not in ln.lower():
+            latex_warns += 1
+    if latex_warns:
+        counts["latex_warnings"] = latex_warns
+
+    return {k: v for k, v in counts.items() if v}
+
+
+
+def _write_report(
+    path: Path,
+    *,
+    ok: bool,
+    message: str,
+    stdout: str = "",
+    stderr: str = "",
+    page_count: int | None = None,
+    warnings: dict[str, int] | None = None,
+) -> None:
     from datetime import datetime
+
     from tooling.common import atomic_write_text
 
     def _tail(s: str, n: int = 120) -> str:
@@ -82,20 +157,40 @@ def _write_report(path: Path, *, ok: bool, message: str, stdout: str = "", stder
         return "\n".join(lines[-n:])
 
     ts = datetime.now().replace(microsecond=0).isoformat()
-    content = "\n".join(
+    warn = warnings or {}
+
+    header_lines = [
+        "# LaTeX build report",
+        "",
+        f"- Timestamp: `{ts}`",
+        "- Entry: `latex/main.tex`",
+        "- Output: `latex/main.pdf`",
+        "- Engine: `latexmk -xelatex -bibtex`",
+    ]
+    if page_count is not None:
+        header_lines.append(f"- Page count: `{page_count}`")
+
+    content_lines: list[str] = []
+    content_lines.extend(header_lines)
+    content_lines.extend(
         [
-            "# LaTeX build report",
-            "",
-            f"- Timestamp: `{ts}`",
-            "- Entry: `latex/main.tex`",
-            "- Output: `latex/main.pdf`",
-            "- Engine: `latexmk -xelatex -bibtex`",
             "",
             "## Result",
             "",
             f"- Status: {'SUCCESS' if ok else 'FAILED'}",
             f"- Message: {message}",
             "",
+        ]
+    )
+
+    if warn:
+        content_lines.extend(["## Warning summary", ""])
+        for k in sorted(warn):
+            content_lines.append(f"- {k}: {warn[k]}")
+        content_lines.append("")
+
+    content_lines.extend(
+        [
             "## Stdout (tail)",
             "",
             "```",
@@ -109,9 +204,9 @@ def _write_report(path: Path, *, ok: bool, message: str, stdout: str = "", stder
             "```",
             "",
         ]
-    ).rstrip() + "\n"
+    )
 
-    atomic_write_text(path, content)
+    atomic_write_text(path, "\n".join(content_lines).rstrip() + "\n")
 
 
 if __name__ == "__main__":

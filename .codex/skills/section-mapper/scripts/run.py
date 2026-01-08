@@ -151,7 +151,7 @@ def main() -> int:
                     "section_id": section_id,
                     "section_title": title,
                     "paper_id": paper["paper_id"],
-                    "why": _rationale(matched_terms=matched_terms, score=score, uses_before=uses_before),
+                    "why": _rationale(section_title=title, paper_title=str(paper.get("title") or ""), matched_terms=matched_terms, score=score, uses_before=uses_before),
                 }
             )
 
@@ -284,9 +284,21 @@ def _filter_tokens(tokens: list[str]) -> list[str]:
     return out
 
 
-def _rationale(*, matched_terms: list[str], score: int, uses_before: int) -> str:
-    matched = ",".join([t for t in matched_terms if t]) or "-"
-    return f"matched_terms={matched};score={score};prior_uses={uses_before}"
+def _rationale(*, section_title: str, paper_title: str, matched_terms: list[str], score: int, uses_before: int) -> str:
+    section_title = (section_title or "").strip()
+    paper_title = (paper_title or "").strip()
+    terms = [t for t in (matched_terms or []) if str(t).strip()]
+    term_str = ", ".join([str(t).strip() for t in terms[:3]])
+    reuse = f" (also mapped {uses_before}× already)" if uses_before else ""
+
+    if score <= 0:
+        return f"Included for coverage/diversity despite weak lexical overlap; broadly relevant to '{section_title}'.{reuse}"
+    if term_str:
+        return f"Matches subsection '{section_title}' via shared terms ({term_str}) in the paper title/abstract.{reuse}"
+    if paper_title:
+        return f"Title suggests relevance to subsection '{section_title}' (sparse explicit term overlap).{reuse}"
+    return f"Selected as a representative for subsection '{section_title}' based on overall similarity.{reuse}"
+
 
 
 def _compute_limits(*, soft_limit: int, hard_limit: int, subsections: int, papers: int, per_subsection: int) -> tuple[int, int]:

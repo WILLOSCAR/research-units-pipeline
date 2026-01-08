@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 
 @dataclass(frozen=True)
@@ -13,9 +13,106 @@ class QualityIssue:
     message: str
 
 
+def _check_placeholder_markers(text: str) -> bool:
+    if not text:
+        return False
+    if re.search(r"(?i)\b(?:TODO|TBD|FIXME)\b", text):
+        return True
+    low = text.lower()
+    if "(placeholder)" in low:
+        return True
+    if "<!-- scaffold" in low:
+        return True
+    return False
+
+
+def _check_short_descriptions(values: Sequence[str], *, min_chars: int) -> tuple[int, int]:
+    total = 0
+    short = 0
+    for v in values:
+        v = str(v or "").strip()
+        if not v:
+            continue
+        total += 1
+        if len(v) < int(min_chars):
+            short += 1
+    return short, total
+
+
+def _check_repeated_template_text(*, text: str, min_len: int = 32, min_repeats: int = 6) -> tuple[str, int] | None:
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    counts: dict[str, int] = {}
+    for ln in lines:
+        if len(ln) < int(min_len):
+            continue
+        # Normalize citations to reduce false negatives.
+        norm = re.sub(r"\[@[^\]]+\]", "", ln)
+        norm = re.sub(r"\s+", " ", norm).strip().lower()
+        if len(norm) < int(min_len):
+            continue
+        counts[norm] = counts.get(norm, 0) + 1
+    if not counts:
+        return None
+    top_norm, top_count = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0]
+    if top_count >= int(min_repeats):
+        example = top_norm[:120]
+        return example, top_count
+    return None
+
+
+def _check_keyword_expansion(workspace: Path) -> list[QualityIssue]:
+    queries_path = workspace / "queries.md"
+    if not queries_path.exists():
+        return [QualityIssue(code="missing_queries", message="Missing `queries.md`; expected keyword list for retrieval.")]
+
+    text = queries_path.read_text(encoding="utf-8", errors="ignore")
+    if _check_placeholder_markers(text):
+        # Only treat placeholder markers as blocking if they appear in the query lists themselves.
+        pass
+
+    mode: str | None = None
+    keywords: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("- keywords:"):
+            mode = "keywords"
+            continue
+        if line.startswith("- exclude:"):
+            mode = "exclude"
+            continue
+        if not line.startswith("- "):
+            continue
+        if mode != "keywords":
+            continue
+        value = line[2:].split("#", 1)[0].strip().strip('"').strip("'")
+        if value:
+            keywords.append(value)
+
+    if not keywords:
+        return [
+            QualityIssue(
+                code="queries_missing_keywords",
+                message="`queries.md` has no non-empty `keywords` entries; fill keywords (or use offline import).",
+            )
+        ]
+    # Soft heuristic: 1 keyword often means low coverage; require >1 only for online runs (checked by caller).
+    if len(keywords) == 1 and len(keywords[0]) < 6:
+        return [
+            QualityIssue(
+                code="queries_keywords_too_generic",
+                message="`queries.md` keyword list looks too weak; add synonyms/acronyms or use `keyword-expansion` before retrieval.",
+            )
+        ]
+    return []
+
+
 def check_unit_outputs(*, skill: str, workspace: Path, outputs: list[str]) -> list[QualityIssue]:
     if skill == "arxiv-search":
         return _check_arxiv_search(workspace, outputs)
+    if skill == "dedupe-rank":
+        return _check_dedupe_rank(workspace, outputs)
+    if skill == "citation-verifier":
+        return _check_citations(workspace, outputs)
     if skill == "pdf-text-extractor":
         return _check_pdf_text_extractor(workspace, outputs)
     if skill == "taxonomy-builder":
@@ -34,6 +131,12 @@ def check_unit_outputs(*, skill: str, workspace: Path, outputs: list[str]) -> li
         return _check_draft(workspace, outputs)
     if skill == "latex-scaffold":
         return _check_latex_scaffold(workspace, outputs)
+    if skill == "latex-compile-qa":
+        return _check_latex_compile_qa(workspace, outputs)
+    if skill == "protocol-writer":
+        return _check_protocol(workspace, outputs)
+    if skill == "tutorial-spec":
+        return _check_tutorial_spec(workspace, outputs)
     return []
 
 
@@ -134,6 +237,10 @@ def _next_action_lines(*, skill: str, unit_id: str) -> list[str]:
     ]
 
     by_skill: dict[str, list[str]] = {
+        "dedupe-rank": [
+            "- Inspect `papers/papers_raw.jsonl`: ensure `title/year/url/authors` are present and not empty; fix/replace the offline export if needed.",
+            "- Rerun dedupe with an appropriate `--core-size` to get a usable `papers/core_set.csv` (with stable `paper_id`).",
+        ],
         "taxonomy-builder": [
             "- Edit `outline/taxonomy.yml`: replace all `TODO` / placeholder text with domain-meaningful node names and 1–2 sentence descriptions.",
             "- Ensure taxonomy has ≥2 levels (uses `children`) and avoids generic buckets like “Overview/Benchmarks/Open Problems”.",
@@ -155,6 +262,16 @@ def _next_action_lines(*, skill: str, unit_id: str) -> list[str]:
             "- Edit `outline/claim_evidence_matrix.md`: rewrite template-y claims into specific, falsifiable claims per subsection.",
             "- For each claim, keep ≥2 evidence sources (paper IDs) and add caveats when evidence is abstract-only.",
         ],
+        "pdf-text-extractor": [
+            "- If you want to avoid downloads, keep `evidence_mode: \"abstract\"` in `queries.md` (it will emit skip records).",
+            "- For full-text evidence: set `evidence_mode: \"fulltext\"`, ensure `papers/core_set.csv` has `pdf_url`/`arxiv_id`, or provide PDFs under `papers/pdfs/`.",
+            "- Consider `--local-pdfs-only` and add a small set of PDFs manually to unblock strict mode.",
+        ],
+        "citation-verifier": [
+            "- Ensure every `papers/paper_notes.jsonl` record has a stable `bibkey`, `title`, and canonical `url`.",
+            "- Regenerate `citations/ref.bib` + `citations/verified.jsonl` and ensure every bibkey has a verification record with `url/date/title`.",
+            "- If offline, use `verification_status=offline_generated` and plan a later `--verify-only` pass when network is available.",
+        ],
         "survey-visuals": [
             "- Fill `outline/tables.md` with ≥2 real Markdown tables (method + evaluation/benchmarks) and include citations in rows.",
             "- Fill `outline/timeline.md` with ≥8 milestone bullets (year + cited works).",
@@ -168,6 +285,10 @@ def _next_action_lines(*, skill: str, unit_id: str) -> list[str]:
         ],
         "latex-scaffold": [
             "- Edit `latex/main.tex`: remove any leaked markdown (`##`, `**`, `[@...]`) and ensure bibliography points to `../citations/ref.bib`.",
+        ],
+        "latex-compile-qa": [
+            "- Open `output/LATEX_BUILD_REPORT.md` and fix the first compile error (missing package, missing bib, bad cite key).",
+            "- Ensure `latexmk` is installed and `latex/main.tex` references `../citations/ref.bib`.",
         ],
         "arxiv-search": [
             "- Ensure `papers/papers_raw.jsonl` contains real records (not placeholders) and rerun the unit if needed.",
@@ -190,16 +311,137 @@ def _check_arxiv_search(workspace: Path, outputs: list[str]) -> list[QualityIssu
         return [QualityIssue(code="empty_raw", message=f"No records found in `{out_rel}`.")]
 
     placeholders = 0
+    arxiv_sources = 0
     for rec in records:
         title = str(rec.get("title") or "").strip()
         url = str(rec.get("url") or rec.get("id") or "").strip()
         if title.lower().startswith("(placeholder)") or "0000.00000" in url:
             placeholders += 1
+        if str(rec.get("source") or "").strip().lower() == "arxiv":
+            arxiv_sources += 1
     if placeholders:
         return [
             QualityIssue(
                 code="placeholder_records",
                 message=f"`{out_rel}` contains placeholder/demo records ({placeholders}); workspace template should start empty.",
+            )
+        ]
+    # Only enforce keyword hygiene when this looks like an online arXiv retrieval.
+    if arxiv_sources:
+        return _check_keyword_expansion(workspace)
+    return []
+
+
+def _check_dedupe_rank(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    core_rel = outputs[1] if len(outputs) >= 2 else "papers/core_set.csv"
+    path = workspace / core_rel
+    if not path.exists():
+        return [QualityIssue(code="missing_core_set", message=f"`{core_rel}` does not exist.")]
+
+    try:
+        import csv
+
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            rows = [row for row in reader]
+    except Exception as exc:
+        return [QualityIssue(code="invalid_core_set", message=f"Failed to read `{core_rel}`: {exc}")]
+
+    if not rows:
+        return [QualityIssue(code="empty_core_set", message=f"`{core_rel}` has no rows.")]
+
+    missing_id = 0
+    missing_title = 0
+    ids: list[str] = []
+    for row in rows:
+        pid = str(row.get("paper_id") or "").strip()
+        title = str(row.get("title") or "").strip()
+        if not pid:
+            missing_id += 1
+        else:
+            ids.append(pid)
+        if not title:
+            missing_title += 1
+
+    issues: list[QualityIssue] = []
+    if missing_id:
+        issues.append(
+            QualityIssue(
+                code="core_set_missing_paper_id",
+                message=f"`{core_rel}` has {missing_id} row(s) missing `paper_id`; ensure stable IDs for downstream mapping/citations.",
+            )
+        )
+    if missing_title:
+        issues.append(
+            QualityIssue(
+                code="core_set_missing_title",
+                message=f"`{core_rel}` has {missing_title} row(s) missing `title`; fix upstream normalization/dedupe.",
+            )
+        )
+    if ids and len(set(ids)) != len(ids):
+        issues.append(QualityIssue(code="core_set_duplicate_ids", message=f"`{core_rel}` contains duplicate `paper_id` values."))
+    return issues
+
+
+def _check_citations(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    from tooling.common import read_jsonl
+
+    bib_rel = outputs[0] if outputs else "citations/ref.bib"
+    verified_rel = outputs[1] if len(outputs) >= 2 else "citations/verified.jsonl"
+
+    bib_path = workspace / bib_rel
+    verified_path = workspace / verified_rel
+
+    if not bib_path.exists():
+        return [QualityIssue(code="missing_ref_bib", message=f"`{bib_rel}` does not exist.")]
+    if not verified_path.exists():
+        return [QualityIssue(code="missing_verified_jsonl", message=f"`{verified_rel}` does not exist.")]
+
+    bib_text = bib_path.read_text(encoding="utf-8", errors="ignore")
+    bib_keys = re.findall(r"(?im)^@\w+\s*\{\s*([^,\s]+)\s*,", bib_text)
+    if not bib_keys:
+        return [QualityIssue(code="empty_ref_bib", message=f"`{bib_rel}` has no BibTeX entries.")]
+
+    records = read_jsonl(verified_path)
+    recs = [r for r in records if isinstance(r, dict)]
+    if not recs:
+        return [QualityIssue(code="empty_verified_jsonl", message=f"`{verified_rel}` is empty.")]
+
+    by_key: dict[str, dict] = {}
+    for rec in recs:
+        key = str(rec.get("bibkey") or "").strip()
+        if key:
+            by_key[key] = rec
+
+    missing = [k for k in bib_keys if k not in by_key]
+    if missing:
+        sample = ", ".join(missing[:5])
+        suffix = "..." if len(missing) > 5 else ""
+        return [
+            QualityIssue(
+                code="citations_missing_verification_records",
+                message=f"Some BibTeX keys have no matching verification record in `{verified_rel}` (e.g., {sample}{suffix}).",
+            )
+        ]
+
+    bad_fields = 0
+    for k in bib_keys:
+        rec = by_key.get(k) or {}
+        title = str(rec.get("title") or "").strip()
+        url = str(rec.get("url") or "").strip()
+        date = str(rec.get("date") or "").strip()
+        if not title or not url or not date:
+            bad_fields += 1
+            continue
+        status = str(rec.get("verification_status") or "").strip()
+        if status and status not in {"verified_online", "offline_generated", "verify_failed", "needs_manual_verification"}:
+            bad_fields += 1
+
+    if bad_fields:
+        return [
+            QualityIssue(
+                code="citations_invalid_verification_records",
+                message=f"`{verified_rel}` has {bad_fields} record(s) missing required fields or with unknown `verification_status`.",
             )
         ]
     return []
@@ -212,7 +454,7 @@ def _check_taxonomy(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
     path = workspace / out_rel
     if path.exists():
         raw = path.read_text(encoding="utf-8", errors="ignore")
-        if "(placeholder)" in raw or re.search(r"\bTODO\b", raw):
+        if _check_placeholder_markers(raw):
             return [
                 QualityIssue(
                     code="taxonomy_scaffold",
@@ -231,6 +473,7 @@ def _check_taxonomy(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
     template_child_names = 0
     total_desc = 0
     total_child_names = 0
+    desc_values: list[str] = []
 
     child_name_templates = {"Overview", "Representative Approaches", "Benchmarks", "Open Problems"}
 
@@ -240,6 +483,7 @@ def _check_taxonomy(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
         desc = str(node.get("description") or "").strip()
         if desc:
             total_desc += 1
+            desc_values.append(desc)
             if desc.startswith("Papers and ideas centered on '") or desc.startswith("Key aspects of '"):
                 template_desc += 1
         name = str(node.get("name") or "").strip()
@@ -263,6 +507,15 @@ def _check_taxonomy(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
                 message="Many taxonomy node names look like generic placeholders (Overview/Benchmarks/Open Problems); rename to content-based subtopics.",
             )
         )
+
+    short, denom = _check_short_descriptions(desc_values, min_chars=32)
+    if denom and short / denom >= 0.6:
+        issues.append(
+            QualityIssue(
+                code="taxonomy_short_descriptions",
+                message="Many taxonomy node descriptions are very short; expand descriptions with concrete scope cues and representative works.",
+            )
+        )
     return issues
 
 
@@ -283,7 +536,7 @@ def _check_outline(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
     path = workspace / out_rel
     if path.exists():
         raw = path.read_text(encoding="utf-8", errors="ignore")
-        if "(placeholder)" in raw or re.search(r"\bTODO\b", raw):
+        if _check_placeholder_markers(raw):
             return [
                 QualityIssue(
                     code="outline_scaffold",
@@ -536,11 +789,11 @@ def _check_claim_evidence_matrix(workspace: Path, outputs: list[str]) -> list[Qu
                 message="Claim–evidence matrix still contains scaffold markers; rewrite claims and remove the `<!-- SCAFFOLD ... -->` line.",
             )
         ]
-    if "TODO" in text:
+    if re.search(r"(?i)\b(?:TODO|TBD|FIXME)\b", text):
         return [
             QualityIssue(
                 code="claim_matrix_todo",
-                message="Claim–evidence matrix still contains `TODO` placeholders; rewrite claims into specific statements and remove TODOs.",
+                message="Claim–evidence matrix still contains placeholder markers (TODO/TBD/FIXME); rewrite claims into specific statements and remove placeholders.",
             )
         ]
     claim_lines = [ln.strip() for ln in text.splitlines() if ln.strip().startswith("- Claim:")]
@@ -589,8 +842,8 @@ def _check_survey_visuals(workspace: Path, outputs: list[str]) -> list[QualityIs
             return None
         if "<!-- SCAFFOLD" in text:
             issues.append(QualityIssue(code="visuals_scaffold", message=f"`{rel}` still contains scaffold markers."))
-        if "TODO" in text:
-            issues.append(QualityIssue(code="visuals_todo", message=f"`{rel}` still contains `TODO` placeholders."))
+        if re.search(r"(?i)\b(?:TODO|TBD|FIXME)\b", text):
+            issues.append(QualityIssue(code="visuals_todo", message=f"`{rel}` still contains placeholder markers (TODO/TBD/FIXME)."))
         if re.search(r"\[@(?:Key|KEY)\d+", text):
             issues.append(QualityIssue(code="visuals_placeholder_cites", message=f"`{rel}` contains placeholder cite keys like `[@Key1]`."))
         return text
@@ -663,8 +916,10 @@ def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
     text = path.read_text(encoding="utf-8", errors="ignore")
 
     issues: list[QualityIssue] = []
-    if "TODO" in text:
+    if re.search(r"\bTODO\b", text):
         issues.append(QualityIssue(code="draft_contains_todo", message="Draft still contains `TODO` placeholders."))
+    if re.search(r"(?i)\b(?:TBD|FIXME)\b", text):
+        issues.append(QualityIssue(code="draft_contains_placeholders", message="Draft still contains `TBD/FIXME` placeholders."))
     if "<!-- SCAFFOLD" in text:
         issues.append(
             QualityIssue(code="draft_contains_scaffold", message="Draft still contains `<!-- SCAFFOLD ... -->` markers.")
@@ -679,6 +934,28 @@ def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
                 message="Draft still contains placeholder citation keys like `[@Key1]`; replace with real keys from `citations/ref.bib`.",
             )
         )
+
+    # If a BibTeX file exists, ensure every cited key is present (prevents LaTeX undefined-citation warnings).
+    bib_path = workspace / "citations" / "ref.bib"
+    if bib_path.exists():
+        bib_text = bib_path.read_text(encoding="utf-8", errors="ignore")
+        bib_keys = set(re.findall(r"(?im)^@\w+\s*\{\s*([^,\s]+)\s*,", bib_text))
+        cited: set[str] = set()
+        for m in re.finditer(r"\[@([^\]]+)\]", text):
+            inside = (m.group(1) or "").strip()
+            for k in re.findall(r"[A-Za-z0-9:_-]+", inside):
+                if k:
+                    cited.add(k)
+        missing = sorted([k for k in cited if k not in bib_keys])
+        if missing:
+            sample = ", ".join(missing[:8])
+            suffix = "..." if len(missing) > 8 else ""
+            issues.append(
+                QualityIssue(
+                    code="draft_cites_missing_in_bib",
+                    message=f"Draft cites keys that are missing from `citations/ref.bib` (e.g., {sample}{suffix}).",
+                )
+            )
 
     # Detect repeated "open problems" boilerplate across subsections.
     open_lines = [ln.strip() for ln in text.splitlines() if ln.strip().lower().startswith(("open problems:", "开放问题："))]
@@ -888,6 +1165,79 @@ def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
                     message=f"Draft contains repeated long paragraphs (e.g., `{example}...`); rewrite to be subsection-specific and avoid copy-paste boilerplate.",
                 )
             )
+    repeated = _check_repeated_template_text(text=text, min_len=48, min_repeats=10)
+    if repeated is not None:
+        example, count = repeated
+        issues.append(
+            QualityIssue(
+                code="draft_repeated_lines",
+                message=f"Draft contains repeated template-like lines ({count}×), e.g., `{example}...`; rewrite to be section-specific.",
+            )
+        )
+    return issues
+
+
+def _check_protocol(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    out_rel = outputs[0] if outputs else "output/PROTOCOL.md"
+    path = workspace / out_rel
+    if not path.exists():
+        return [QualityIssue(code="missing_protocol", message=f"`{out_rel}` does not exist.")]
+    text = path.read_text(encoding="utf-8", errors="ignore")
+
+    issues: list[QualityIssue] = []
+    if _check_placeholder_markers(text):
+        issues.append(QualityIssue(code="protocol_placeholders", message="Protocol contains placeholder markers (TODO/TBD/FIXME)."))
+
+    low = text.lower()
+    required = [
+        ("databases", "数据库"),
+        ("inclusion", "纳入"),
+        ("exclusion", "排除"),
+        ("extraction", "提取"),
+        ("time window", "时间窗"),
+    ]
+    missing = [en for en, zh in required if (en not in low and zh not in text)]
+    if missing:
+        issues.append(
+            QualityIssue(
+                code="protocol_missing_sections",
+                message=f"Protocol is missing key sections: {', '.join(missing)} (add databases/queries/inclusion-exclusion/time window/extraction fields).",
+            )
+        )
+    return issues
+
+
+def _check_tutorial_spec(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    out_rel = outputs[0] if outputs else "output/TUTORIAL_SPEC.md"
+    path = workspace / out_rel
+    if not path.exists():
+        return [QualityIssue(code="missing_tutorial_spec", message=f"`{out_rel}` does not exist.")]
+    text = path.read_text(encoding="utf-8", errors="ignore")
+
+    issues: list[QualityIssue] = []
+    if _check_placeholder_markers(text):
+        issues.append(
+            QualityIssue(
+                code="tutorial_spec_placeholders",
+                message="Tutorial spec contains placeholder markers (TODO/TBD/FIXME); fill target audience/prereqs/objectives/running example.",
+            )
+        )
+
+    low = text.lower()
+    required = [
+        ("audience", "受众"),
+        ("prereq", "先修"),
+        ("objective", "学习目标"),
+        ("running example", "运行示例"),
+    ]
+    missing = [en for en, zh in required if (en not in low and zh not in text)]
+    if missing:
+        issues.append(
+            QualityIssue(
+                code="tutorial_spec_missing_sections",
+                message=f"Tutorial spec is missing key sections: {', '.join(missing)}.",
+            )
+        )
     return issues
 
 
@@ -920,4 +1270,90 @@ def _check_latex_scaffold(workspace: Path, outputs: list[str]) -> list[QualityIs
         issues.append(QualityIssue(code="latex_markdown_bold", message="LaTeX still contains markdown bold markers `**...**`."))
     if "## " in text or "### " in text:
         issues.append(QualityIssue(code="latex_markdown_headings", message="LaTeX still contains markdown headings like `##`/`###`."))
+    return issues
+
+
+def _check_latex_compile_qa(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    pdf_rel = outputs[0] if outputs else "latex/main.pdf"
+    report_rel = outputs[1] if len(outputs) > 1 else "output/LATEX_BUILD_REPORT.md"
+
+    pdf_path = workspace / pdf_rel
+    report_path = workspace / report_rel
+    log_path = workspace / "latex" / "main.log"
+
+    if not pdf_path.exists():
+        return [QualityIssue(code="missing_main_pdf", message=f"`{pdf_rel}` does not exist.")]
+    if not report_path.exists():
+        return [QualityIssue(code="missing_build_report", message=f"`{report_rel}` does not exist.")]
+
+    report_text = report_path.read_text(encoding="utf-8", errors="ignore")
+    issues: list[QualityIssue] = []
+
+    if "Status: SUCCESS" not in report_text and "- Status: SUCCESS" not in report_text:
+        issues.append(
+            QualityIssue(
+                code="latex_build_not_success",
+                message=f"`{report_rel}` does not report SUCCESS; fix LaTeX build errors and re-run compile.",
+            )
+        )
+
+    # Prefer the final LaTeX log for undefined-citation checks. The build report may
+    # include warning counters (e.g., `citation_undefined: N`) which are not proof
+    # that the final PDF still contains unresolved cites.
+    undefined_text = ""
+    if log_path.exists():
+        undefined_text = log_path.read_text(encoding="utf-8", errors="ignore")
+    else:
+        undefined_text = report_text
+
+    if re.search(r"(?im)^Package\\s+natbib\\s+Warning: Citation.+undefined", undefined_text) or re.search(
+        r"(?im)There were undefined citations", undefined_text
+    ) or re.search(r"(?im)There were undefined references", undefined_text) or re.search(
+        r"(?im)^LaTeX\\s+Warning: Reference.+undefined", undefined_text
+    ):
+        issues.append(
+            QualityIssue(
+                code="latex_undefined_citations",
+                message="LaTeX build reports undefined citations/references; ensure all cited keys exist in `citations/ref.bib` and rerun until warnings disappear.",
+            )
+        )
+
+    try:
+        import fitz  # PyMuPDF
+
+        doc = fitz.open(pdf_path)
+        pages = int(len(doc))
+        sample_pages = min(pages, 4)
+        sample_text = ""
+        for i in range(sample_pages):
+            try:
+                sample_text += doc.load_page(i).get_text("text") + "\n"
+            except Exception:
+                continue
+        doc.close()
+    except Exception as exc:
+        issues.append(
+            QualityIssue(
+                code="pdf_page_count_unavailable",
+                message=f"Could not compute PDF page count for `{pdf_rel}` ({type(exc).__name__}: {exc}).",
+            )
+        )
+        return issues
+
+    if pages < 8:
+        issues.append(
+            QualityIssue(
+                code="pdf_too_short",
+                message=f"`{pdf_rel}` is too short ({pages} pages); expand the draft until the compiled PDF has >= 8 pages.",
+            )
+        )
+
+    if re.search(r"(?i)\b(?:TODO|TBD|FIXME)\b", sample_text) or "(placeholder)" in sample_text.lower() or "<!-- SCAFFOLD" in sample_text:
+        issues.append(
+            QualityIssue(
+                code="pdf_contains_placeholders",
+                message="PDF still contains placeholder text (TODO/TBD/FIXME/SCAFFOLD); rewrite the draft and recompile.",
+            )
+        )
+
     return issues

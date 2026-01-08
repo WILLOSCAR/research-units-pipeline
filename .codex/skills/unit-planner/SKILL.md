@@ -1,6 +1,12 @@
 ---
 name: unit-planner
-description: Instantiate or update a workspace `UNITS.csv` from a selected pipeline and units template, including dependencies, checkpoints, and acceptance criteria. Use when creating the execution contract or when scope changes require new/updated units.
+description: |
+  Instantiate or update a workspace `UNITS.csv` from a selected pipeline and units template (deps/checkpoints/acceptance).
+  **Trigger**: unit planner, generate UNITS.csv, execution contract, units template, 生成工作单元.
+  **Use when**: 初始化/更新执行合同：从 pipeline 选择生成 `UNITS.csv`，或 scope 扩展需要新增 units/依赖。
+  **Skip if**: `UNITS.csv` 已正确反映当前 scope（无需重写）。
+  **Network**: none.
+  **Guardrail**: 保持 CSV 合法；scope 增长时新增 units；只在满足验收后标 `DONE`。
 ---
 
 # Skill: unit-planner
@@ -21,6 +27,8 @@ description: Instantiate or update a workspace `UNITS.csv` from a selected pipel
 - Optional: `STATUS.md` updated with next runnable units
 
 ## Procedure (MUST FOLLOW)
+Uses: `templates/UNITS.*.csv`.
+
 
 1. Read `PIPELINE.lock.md` (or ask to create it via `pipeline-router`).
 2. Copy the pipeline’s `units_template` into the workspace as `UNITS.csv` if missing.

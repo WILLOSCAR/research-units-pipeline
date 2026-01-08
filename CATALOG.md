@@ -1,5 +1,18 @@
 # Catalog
 
+## Docs
+
+- `SKILL_INDEX.md`：按 Stage/触发词/输入输出快速查找 skills
+- `docs/SKILL_DEPENDENCIES.md`：skills ↔ artifacts 依赖图（含 pipeline 执行图；由 `python scripts/generate_skill_graph.py` 生成）
+- `docs/PIPELINE_FLOWS.md`：4 个主要 pipeline 的 Mermaid 流程图（必选/可选 + HUMAN checkpoint）
+
+## Tools
+
+- `scripts/pipeline.py`：pipeline workspace 初始化/运行（含 `--strict` quality gate）
+- `scripts/validate_repo.py`：pipeline↔templates↔skills 对齐校验（可选 `--check-quality` / `--report`）
+- `scripts/new_skill.py`：生成新 skill 骨架（`SKILL.md` + 可选 `scripts/run.py`）
+- `scripts/enhance_skill_descriptions.py`：批量补齐 `description` 的 Trigger/Guardrail 模板（dry-run 默认）
+
 ## Pipelines
 
 - `pipelines/lit-snapshot.pipeline.md`：48h 文献快照（bullets/evidence 为主）

@@ -1,9 +1,12 @@
 ---
 name: research-pipeline-runner
-description: >
-  Run this repo’s Units+Checkpoints research pipelines end-to-end (survey/综述/review/调研/教程/系统综述/审稿),
-  including kickoff, workspace creation under workspaces/, and auto-running units with a single HITL approval checkpoint (usually C2).
-  Use when a user says “写一篇关于 X 的 survey/综述/review/调研” or asks to start/continue/run the pipeline.
+description: |
+  Run this repo’s Units+Checkpoints research pipelines end-to-end (survey/综述/review/调研/教程/系统综述/审稿), with workspaces + checkpoints.
+  **Trigger**: run pipeline, kickoff, 继续执行, 自动跑, 写一篇, survey/综述/review/调研/教程/系统综述/审稿.
+  **Use when**: 用户希望端到端跑流程（创建 `workspaces/<name>/`、生成/执行 `UNITS.csv`、遇到 HUMAN checkpoint 停下等待）。
+  **Skip if**: 用户明确要手工逐条执行（用 `unit-executor`），或你不应自动推进到 prose 阶段。
+  **Network**: depends on selected pipeline (arXiv/PDF/citation verification may need network; offline import supported where available).
+  **Guardrail**: 必须尊重 checkpoints（无 Approve 不写 prose）；遇到 HUMAN 单元必须停下等待；禁止在 repo root 创建 workspace 工件。
 ---
 
 # Research Pipeline Runner

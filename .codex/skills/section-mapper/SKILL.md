@@ -1,6 +1,12 @@
 ---
 name: section-mapper
-description: Map papers from the core set to each outline subsection and write `outline/mapping.tsv` with coverage tracking. Use when ensuring each subsection has enough supporting papers before writing.
+description: |
+  Map papers from the core set to each outline subsection and write `outline/mapping.tsv` with coverage tracking.
+  **Trigger**: section mapper, mapping.tsv, coverage, paper-to-section mapping, 论文映射, 覆盖率.
+  **Use when**: structure 阶段（C2），已有 `papers/core_set.csv` + `outline/outline.yml`，需要确保每小节有足够支持论文再进入 evidence/writing。
+  **Skip if**: 还没有 outline（先跑 `outline-builder`）或 core set 还没收敛。
+  **Network**: none.
+  **Guardrail**: 覆盖率可审计（避免所有小节重复用同几篇）；为弱覆盖小节留下明确补救方向（扩 query / 合并小节）。
 ---
 
 # Section Mapper
@@ -48,8 +54,58 @@ Good mapping is **diverse** (avoids reusing the same paper everywhere) and **exp
 
 ## Helper script (optional)
 
-Bootstrap + diagnostics:
-- Run `python .codex/skills/section-mapper/scripts/run.py --help` first.
-- Then: `python .codex/skills/section-mapper/scripts/run.py --workspace <workspace_dir> --per-subsection 3`
+### Quick Start
 
-This helper adds a global reuse penalty and writes `outline/mapping_report.md`. In `pipeline.py --strict` it may be blocked until you replace generic `why` rationales with semantic ones.
+- `python .codex/skills/section-mapper/scripts/run.py --help`
+- `python .codex/skills/section-mapper/scripts/run.py --workspace <workspace_dir> --per-subsection 3`
+
+### All Options
+
+- `--per-subsection <n>`: target mapped papers per subsection
+- `--diversity-penalty <float>`: penalize repeated reuse of the same paper across many subsections
+- `--soft-limit <n>` / `--hard-limit <n>`: caps for per-paper reuse (0 = auto)
+
+### Examples
+
+- Higher diversity (reduce over-reuse):
+  - `python .codex/skills/section-mapper/scripts/run.py --workspace <ws> --per-subsection 4 --diversity-penalty 0.25`
+- Tighter reuse caps:
+  - `python .codex/skills/section-mapper/scripts/run.py --workspace <ws> --per-subsection 3 --soft-limit 6 --hard-limit 10`
+
+### Notes
+
+- Writes `outline/mapping_report.md` diagnostics.
+- In `pipeline.py --strict`, mapping may be blocked until generic `why` rationales are replaced with semantic ones.
+
+## Troubleshooting
+
+### Common Issues
+
+#### Issue: `outline/mapping.tsv` is empty or low-coverage
+
+**Symptom**:
+- Mapping has few rows, or many subsections have <3 papers.
+
+**Causes**:
+- Core set is too small or outline is too fine-grained.
+
+**Solutions**:
+- Increase core set size (rerun `dedupe-rank` with larger `--core-size`).
+- Merge weak-signal subsections or broaden the scope/queries.
+
+#### Issue: Mapping over-reuses the same papers
+
+**Symptom**:
+- Quality gate reports repeated papers across many unrelated subsections.
+
+**Causes**:
+- Diversity penalty too low; limited core set.
+
+**Solutions**:
+- Raise `--diversity-penalty` and/or set tighter `--soft-limit/--hard-limit`.
+- Manually diversify mappings for unrelated sections.
+
+### Recovery Checklist
+
+- [ ] Each subsection has ≥3 mapped papers (target).
+- [ ] `why` column contains semantic rationale (not just token overlap).

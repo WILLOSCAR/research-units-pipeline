@@ -92,16 +92,11 @@ def main() -> int:
         mapped_sections = sorted(mapping_info.get(paper_id, {}).get("sections", set()))
 
         bibkey = _make_bibkey(authors=authors, year=str(row.get("year") or ""), title=row["title"], used=used_bibkeys)
-
         if priority == "high":
-            summary_bullets = [
-                "TODO: 1–2 sentence summary of the contribution (be specific).",
-                "TODO: method/mechanism (what is new vs baselines).",
-                "TODO: key results (benchmarks/metrics; include numbers if stated).",
-            ]
-            method = "TODO: one-sentence method summary."
-            key_results = ["TODO: key result (numbers/benchmarks if available)."]
-            limitations = ["TODO: concrete limitations/assumptions/failure modes."]
+            summary_bullets = _high_priority_bullets(title=row["title"], abstract=abstract, mapped_sections=mapped_sections)
+            method = _infer_method(title=row["title"], abstract=abstract, bullets=summary_bullets)
+            key_results = _infer_key_results(abstract=abstract)
+            limitations = _infer_limitations(evidence_level=evidence_level, mapped_sections=mapped_sections, abstract=abstract)
         else:
             summary_bullets = _abstract_to_bullets(abstract)
             method = ""
@@ -258,6 +253,164 @@ def _make_bibkey(*, authors: list[Any], year: str, title: str, used: set[str]) -
 def _slug(text: str) -> str:
     text = re.sub(r"[^A-Za-z0-9]+", "", text)
     return text or "X"
+
+
+def _high_priority_bullets(*, title: str, abstract: str, mapped_sections: list[str]) -> list[str]:
+    title = (title or "").strip()
+    abstract = (abstract or "").strip()
+
+    bullets = _abstract_to_bullets(abstract)
+    if len([b for b in bullets if str(b).strip()]) >= 3:
+        return bullets
+
+    # Fall back to title-driven bullets when abstract is missing.
+    tokens = _salient_terms(title)
+    token_str = ", ".join(tokens[:6])
+    sec_str = ", ".join(mapped_sections[:5])
+
+    out: list[str] = []
+    if title:
+        out.append(f"Main idea (from title): {title}.")
+    if token_str:
+        out.append(f"Key terms hinted by title: {token_str}.")
+    if sec_str:
+        out.append(f"Mapped to outline subsections: {sec_str}.")
+
+    # Ensure at least 3 bullets.
+    while len(out) < 3:
+        out.append("Abstract not available in metadata; verify details in the full paper before using as key evidence.")
+    return out[:3]
+
+
+def _infer_method(*, title: str, abstract: str, bullets: list[str]) -> str:
+    abstract = (abstract or "").strip()
+    if abstract:
+        sent = _pick_sentence(
+            abstract,
+            patterns=[r"\bwe\s+(propose|present|introduce|develop|study|analyze)\b", r"\bour\s+(method|approach|framework|model)\b"],
+        )
+        if sent:
+            return sent
+
+    for b in bullets or []:
+        b = str(b).strip()
+        if b:
+            return b
+
+    title = (title or "").strip()
+    if title:
+        return f"The work targets the problem implied by the title and proposes a technique relevant to that setting: {title}."
+    return "Method summary unavailable from metadata; verify the full paper for implementation details."
+
+
+def _infer_key_results(*, abstract: str) -> list[str]:
+    abstract = (abstract or "").strip()
+    if abstract:
+        sent = _pick_sentence(
+            abstract,
+            patterns=[r"\b(achieve|outperform|state[- ]of[- ]the[- ]art|sota|improv|results?)\b", r"\b\d+(?:\.\d+)?\b"],
+        )
+        if sent:
+            return [sent]
+        # Fall back to the last sentence as a coarse "result" proxy.
+        last = _last_sentence(abstract)
+        if last:
+            return [last]
+    return ["Key quantitative results are not fully stated in available metadata; verify benchmarks/metrics in the full text before citing numbers."]
+
+
+def _infer_limitations(*, evidence_level: str, mapped_sections: list[str], abstract: str) -> list[str]:
+    evidence_level = (evidence_level or "").strip().lower() or "abstract"
+    sec_str = ", ".join(mapped_sections[:4])
+
+    lims: list[str] = []
+    if evidence_level == "fulltext":
+        lims.append("Even with extracted text, evaluation details may be incomplete; verify the official PDF for exact settings and ablations.")
+    else:
+        lims.append("Abstract-level evidence only: validate assumptions, evaluation protocol, and failure cases in the full paper before relying on this as key evidence.")
+
+    if sec_str:
+        lims.append(f"This work is mapped to: {sec_str}; confirm it is not over-used across unrelated subsections.")
+
+    # Add a light, non-repeated caveat if abstract is missing.
+    if not (abstract or "").strip():
+        lims.append("Abstract missing in metadata; treat all details as provisional until verified.")
+
+    return lims[:3]
+
+
+def _pick_sentence(text: str, *, patterns: list[str]) -> str:
+    text = re.sub(r"\s+", " ", (text or "").strip())
+    if not text:
+        return ""
+    sents = re.split(r"(?<=[.!?])\s+", text)
+    for pat in patterns:
+        rx = re.compile(pat, flags=re.IGNORECASE)
+        for s in sents:
+            s = s.strip()
+            if len(s) < 12:
+                continue
+            if rx.search(s):
+                return s
+    return ""
+
+
+def _last_sentence(text: str) -> str:
+    text = re.sub(r"\s+", " ", (text or "").strip())
+    if not text:
+        return ""
+    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    if not sents:
+        return ""
+    return sents[-1]
+
+
+def _salient_terms(title: str) -> list[str]:
+    # Cheap, deterministic tokenization; keep longer tokens and drop common filler words.
+    title = (title or "").lower()
+    title = re.sub(r"[^a-z0-9]+", " ", title)
+    toks = [t for t in title.split() if t]
+    stop = {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "by",
+        "for",
+        "from",
+        "in",
+        "is",
+        "of",
+        "on",
+        "or",
+        "the",
+        "to",
+        "with",
+        "via",
+        "using",
+        "towards",
+        "toward",
+        "model",
+        "models",
+        "method",
+        "methods",
+        "system",
+        "systems",
+        "approach",
+        "approaches",
+        "analysis",
+    }
+    out: list[str] = []
+    for t in toks:
+        if len(t) < 4:
+            continue
+        if t in stop:
+            continue
+        if t not in out:
+            out.append(t)
+    return out
 
 
 def _abstract_to_bullets(abstract: str) -> list[str]:

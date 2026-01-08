@@ -1,6 +1,12 @@
 ---
 name: claim-evidence-matrix
-description: Build a section-by-section claim–evidence matrix (`outline/claim_evidence_matrix.md`) using the outline and paper notes, ensuring each subsection has at least one claim backed by multiple sources. Use before any prose writing to make evidence explicit.
+description: |
+  Build a section-by-section claim–evidence matrix (`outline/claim_evidence_matrix.md`) from the outline and paper notes.
+  **Trigger**: claim–evidence matrix, evidence mapping, 证据矩阵, 主张-证据对齐.
+  **Use when**: 写 prose 之前需要把每个小节的可检验主张与证据来源显式化（outline + paper notes 已就绪）。
+  **Skip if**: 缺少 `outline/outline.yml` 或 `papers/paper_notes.jsonl`。
+  **Network**: none.
+  **Guardrail**: bullets-only（NO PROSE）；每个 claim 至少 2 个证据来源（或显式说明例外）。
 ---
 
 # Claim–Evidence Matrix
@@ -20,6 +26,8 @@ This should stay **bullets-only** (NO PROSE). The goal is to make later writing 
 - `outline/claim_evidence_matrix.md`
 
 ## Workflow (heuristic)
+Uses: `outline/outline.yml`, `outline/mapping.tsv`.
+
 
 1. For each subsection, write 1–3 claims that are:
    - specific (mechanism / assumption / empirical finding)
@@ -38,8 +46,20 @@ This should stay **bullets-only** (NO PROSE). The goal is to make later writing 
 
 ## Helper script (optional)
 
-Bootstrap scaffold only:
-- Run `python .codex/skills/claim-evidence-matrix/scripts/run.py --help` first.
-- Then: `python .codex/skills/claim-evidence-matrix/scripts/run.py --workspace <workspace_dir>`
+### Quick Start
 
-The helper produces a generic scaffold. In `pipeline.py --strict` it will be blocked if scaffold markers remain or if claims look templated.
+- `python .codex/skills/claim-evidence-matrix/scripts/run.py --help`
+- `python .codex/skills/claim-evidence-matrix/scripts/run.py --workspace <workspace_dir>`
+
+### All Options
+
+- See `--help` (this helper is intentionally minimal)
+
+### Examples
+
+- Generate a first-pass matrix, then refine manually:
+  - Run the helper once, then refine `outline/claim_evidence_matrix.md` by tightening claims and adding caveats when evidence is abstract-level.
+
+### Notes
+
+- The helper generates a baseline matrix (claims + evidence) and never overwrites non-placeholder work; in `pipeline.py --strict` it will be blocked only if placeholder markers remain.

@@ -1,6 +1,12 @@
 ---
 name: pipeline-router
-description: Select the most appropriate pipeline for a user goal (snapshot/survey/tutorial/systematic-review/peer-review), lock it in `PIPELINE.lock.md`, and create/route human checkpoint questions into `DECISIONS.md`. Use when the workflow or pipeline choice is unclear or needs confirmation.
+description: |
+  Select the most appropriate pipeline for a user goal, lock it in `PIPELINE.lock.md`, and route checkpoint questions into `DECISIONS.md`.
+  **Trigger**: pipeline router, choose pipeline, workflow selection, PIPELINE.lock.md, 选择流程.
+  **Use when**: 用户目标/交付物不清晰，需要在 snapshot/survey/tutorial/systematic-review/peer-review 中选一个并设置最小 HITL 问题集。
+  **Skip if**: pipeline 已锁定（`PIPELINE.lock.md` 存在）且所需问题已回答/签字完成。
+  **Network**: none.
+  **Guardrail**: 尽量一次性提问；信息不足就写 `DECISIONS.md` 并停下等待。
 ---
 
 # Pipeline Router
@@ -29,6 +35,8 @@ User goal → choose:
 - “snapshot / 速览” → `pipelines/lit-snapshot.pipeline.md`
 
 ## Workflow
+Uses: `assets/pipeline-selection-form.md`.
+
 
 1. Identify the intended deliverable and constraints (time window, paper count, language, need PDF output).
 2. If key details are missing, write a concise question list into `DECISIONS.md` and stop.
@@ -51,4 +59,23 @@ User goal → choose:
 
 ## Script
 
-- Draft checkpoint questions / summaries: `python .codex/skills/pipeline-router/scripts/run.py --workspace <workspace_dir> --checkpoint C0|C2`
+### Quick Start
+
+- `python .codex/skills/pipeline-router/scripts/run.py --help`
+- `python .codex/skills/pipeline-router/scripts/run.py --workspace <workspace_dir> --checkpoint C0`
+
+### All Options
+
+- `--checkpoint C0|C2`: which checkpoint question block to draft/update
+
+### Examples
+
+- Kickoff questions + seed queries (C0):
+  - `python .codex/skills/pipeline-router/scripts/run.py --workspace <ws> --checkpoint C0`
+- Scope/outline approval summary (C2):
+  - `python .codex/skills/pipeline-router/scripts/run.py --workspace <ws> --checkpoint C2`
+
+### Notes
+
+- This helper updates `DECISIONS.md` and seeds `queries.md` from `GOAL.md` (for C0).
+- It does not select a pipeline; pipeline selection is handled by `scripts/pipeline.py kickoff` / `PIPELINE.lock.md`.

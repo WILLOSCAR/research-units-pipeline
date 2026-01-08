@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -14,13 +15,27 @@ def main() -> int:
     parser.add_argument("--inputs", default="")
     parser.add_argument("--outputs", default="")
     parser.add_argument("--checkpoint", default="")
+
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Generate verification records without network verification (verification_status=offline_generated).",
+    )
+    parser.add_argument(
+        "--verify-only",
+        action="store_true",
+        help="Verify existing citations/verified.jsonl records (does not rewrite citations/ref.bib).",
+    )
+    parser.add_argument("--timeout", type=int, default=15, help="Network timeout (seconds) for verify-only.")
+    parser.add_argument("--max-bytes", type=int, default=2_000_000, help="Max bytes to read per URL for verify-only.")
     parser.add_argument("--verification-note", default="auto-generated; verify manually if needed")
+
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[4]
     sys.path.insert(0, str(repo_root))
 
-    from tooling.common import ensure_dir, parse_semicolon_list, read_jsonl, today_iso, write_jsonl, atomic_write_text
+    from tooling.common import atomic_write_text, ensure_dir, parse_semicolon_list, read_jsonl, today_iso, write_jsonl
 
     workspace = Path(args.workspace).resolve()
     inputs = parse_semicolon_list(args.inputs) or ["papers/paper_notes.jsonl"]
@@ -30,16 +45,67 @@ def main() -> int:
     bib_path = workspace / outputs[0]
     verified_path = workspace / outputs[1] if len(outputs) > 1 else workspace / "citations/verified.jsonl"
 
+    ensure_dir(verified_path.parent)
+
+    today = today_iso()
+
+    if args.verify_only:
+        records = read_jsonl(verified_path)
+        recs = [r for r in records if isinstance(r, dict)]
+        if not recs:
+            raise SystemExit(f"No verification records found: {verified_path}")
+
+        updated: list[dict[str, Any]] = []
+        for rec in recs:
+            status = str(rec.get("verification_status") or "").strip()
+            if status == "verified_online":
+                updated.append(rec)
+                continue
+
+            title = str(rec.get("title") or "").strip()
+            url = str(rec.get("url") or "").strip()
+            rec["date"] = today
+
+            if not title or not url:
+                rec["verification_status"] = "needs_manual_verification"
+                rec.setdefault("notes", args.verification_note)
+                updated.append(rec)
+                continue
+
+            ok, info = _verify_url_title(
+                url,
+                expected_title=title,
+                timeout=int(args.timeout),
+                max_bytes=int(args.max_bytes),
+            )
+
+            rec["verified_title"] = info.get("page_title") or ""
+            rec["verified_url"] = info.get("final_url") or url
+
+            if ok:
+                rec["verification_status"] = "verified_online"
+            else:
+                rec["verification_status"] = "verify_failed"
+                rec["error"] = info.get("error") or ""
+                rec.setdefault("notes", args.verification_note)
+
+            updated.append(rec)
+
+        write_jsonl(verified_path, updated)
+        return 0
+
     notes = read_jsonl(notes_path)
     if not notes:
         raise SystemExit(f"No paper notes found: {notes_path}")
 
     ensure_dir(bib_path.parent)
-    ensure_dir(verified_path.parent)
 
     bib_entries: list[str] = []
     verified: list[dict[str, Any]] = []
     for note in notes:
+        if not isinstance(note, dict):
+            continue
+
         bibkey = str(note.get("bibkey") or "").strip()
         title = str(note.get("title") or "").strip()
         url = str(note.get("url") or "").strip()
@@ -53,13 +119,29 @@ def main() -> int:
         if not bibkey:
             continue
 
-        bib_entries.append(_bibtex_entry(bibkey=bibkey, title=title, author=author_field, year=year_field, url=url, arxiv_id=arxiv_id, primary_class=primary_class))
+        bib_entries.append(
+            _bibtex_entry(
+                bibkey=bibkey,
+                title=title,
+                author=author_field,
+                year=year_field,
+                url=url,
+                arxiv_id=arxiv_id,
+                primary_class=primary_class,
+            )
+        )
+
+        verification_status = "offline_generated"  # record now, verify later
+        if not title or not url:
+            verification_status = "needs_manual_verification"
+
         verified.append(
             {
                 "bibkey": bibkey,
                 "title": title,
                 "url": url,
-                "date": today_iso(),
+                "date": today,
+                "verification_status": verification_status,
                 "notes": args.verification_note,
             }
         )
@@ -78,8 +160,13 @@ def _bibtex_author(authors: Any) -> str:
 
 
 def _escape_tex(text: str) -> str:
-    text = text or ""
-    return re.sub(r"([{}])", r"\\\1", text)
+    text = (text or "")
+    # BibTeX parses braces structurally (even when TeX-escaped).
+    # Upstream titles sometimes contain unbalanced braces (e.g., "4{K}" or stray leading "{")
+    # which can break `bibtex`, so we strip braces here.
+    text = text.replace("{", "").replace("}", "")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
 
 def _arxiv_id_from_note(note: dict[str, Any]) -> str:
@@ -87,7 +174,7 @@ def _arxiv_id_from_note(note: dict[str, Any]) -> str:
     if arxiv_id:
         return _strip_arxiv_version(arxiv_id)
     url = str(note.get("url") or "").strip()
-    m = re.search(r"arxiv\.org/(?:abs|pdf)/([^/?#]+)", url)
+    m = re.search(r"arxiv\\.org/(?:abs|pdf)/([^/?#]+)", url)
     if not m:
         return ""
     return _strip_arxiv_version(m.group(1))
@@ -96,7 +183,7 @@ def _arxiv_id_from_note(note: dict[str, Any]) -> str:
 def _strip_arxiv_version(arxiv_id: str) -> str:
     # 2509.03990v2 -> 2509.03990
     arxiv_id = (arxiv_id or "").strip()
-    return re.sub(r"v\d+$", "", arxiv_id)
+    return re.sub(r"v\\d+$", "", arxiv_id)
 
 
 def _bibtex_entry(*, bibkey: str, title: str, author: str, year: str, url: str, arxiv_id: str, primary_class: str) -> str:
@@ -127,6 +214,55 @@ def _bibtex_entry(*, bibkey: str, title: str, author: str, year: str, url: str, 
     fields.append("}")
     fields.append("")
     return "\n".join(fields)
+
+
+def _normalize_title(text: str) -> str:
+    text = (text or "").strip().lower()
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return " ".join(text.split())
+
+
+def _verify_url_title(url: str, *, expected_title: str, timeout: int, max_bytes: int) -> tuple[bool, dict[str, str]]:
+    expected = _normalize_title(expected_title)
+    if not url or not expected:
+        return False, {"final_url": url, "page_title": "", "error": "missing url/title"}
+
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "research-units-pipeline/1.0 (citation-verifier)",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=max(1, int(timeout))) as resp:
+            final_url = str(resp.geturl() or url)
+            raw = resp.read(max(1024, int(max_bytes)))
+    except Exception as exc:
+        return False, {"final_url": url, "page_title": "", "error": f"request failed: {type(exc).__name__}: {exc}"}
+
+    text = raw.decode("utf-8", errors="ignore")
+    m = re.search(r"(?is)<title[^>]*>(.*?)</title>", text)
+    page_title = re.sub(r"\s+", " ", (m.group(1) if m else "").strip())
+
+    got = _normalize_title(page_title)
+    info = {"final_url": final_url, "page_title": page_title}
+
+    if not got:
+        return False, {**info, "error": "no <title> found"}
+
+    if expected in got or got in expected:
+        return True, info
+
+    etoks = set(expected.split())
+    gtoks = set(got.split())
+    overlap = len(etoks & gtoks) / max(1, len(etoks))
+    if overlap >= 0.6:
+        return True, info
+
+    return False, {**info, "error": f"title mismatch (token_overlap={overlap:.2f})"}
 
 
 if __name__ == "__main__":

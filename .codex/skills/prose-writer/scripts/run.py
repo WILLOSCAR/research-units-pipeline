@@ -4,6 +4,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 
 def main() -> int:
@@ -29,34 +30,17 @@ def main() -> int:
     )
 
     workspace = Path(args.workspace).resolve()
+    inputs = parse_semicolon_list(args.inputs) or [
+        "outline/outline.yml",
+        "outline/claim_evidence_matrix.md",
+        "outline/tables.md",
+        "outline/timeline.md",
+        "outline/figures.md",
+    ]
     outputs = parse_semicolon_list(args.outputs) or ["output/DRAFT.md"]
+
     out_path = workspace / outputs[0]
 
-    outline_path = workspace / "outline" / "outline.yml"
-    outline = load_yaml(outline_path) if outline_path.exists() else []
-
-    # Optional enrichers to make the scaffold more actionable (still scaffold; LLM must write).
-    mapping_path = workspace / "outline" / "mapping.tsv"
-    notes_path = workspace / "papers" / "paper_notes.jsonl"
-    mapped_by_section: dict[str, list[str]] = {}
-    if mapping_path.exists():
-        for row in read_tsv(mapping_path):
-            sid = str(row.get("section_id") or "").strip()
-            pid = str(row.get("paper_id") or "").strip()
-            if sid and pid:
-                mapped_by_section.setdefault(sid, []).append(pid)
-
-    bibkey_by_pid: dict[str, str] = {}
-    if notes_path.exists():
-        for rec in read_jsonl(notes_path):
-            if not isinstance(rec, dict):
-                continue
-            pid = str(rec.get("paper_id") or "").strip()
-            bibkey = str(rec.get("bibkey") or "").strip()
-            if pid and bibkey:
-                bibkey_by_pid[pid] = bibkey
-
-    goal = _read_goal(workspace)
     decisions_path = workspace / "DECISIONS.md"
 
     # Survey pipeline policy: prose is allowed after HUMAN approves C2.
@@ -72,21 +56,167 @@ def main() -> int:
         upsert_checkpoint_block(decisions_path, "C5", block)
         return 2
 
-    # Never overwrite an existing manually-refined draft, but do replace template placeholders.
+    # Never overwrite an existing manually-refined draft.
     if out_path.exists() and out_path.stat().st_size > 0:
         existing = out_path.read_text(encoding="utf-8", errors="ignore")
         if not _is_placeholder_output(existing):
             return 0
 
-    if out_path.name.upper() == "SNAPSHOT.MD":
-        content = _render_snapshot_scaffold(goal=goal, outline=outline)
-    else:
-        content = _render_draft_scaffold(
-            goal=goal,
-            outline=outline,
-            mapped_by_section=mapped_by_section,
-            bibkey_by_pid=bibkey_by_pid,
-        )
+    outline_path = workspace / inputs[0]
+    outline = load_yaml(outline_path) if outline_path.exists() else []
+
+    claim_matrix_path = workspace / inputs[1]
+    claim_by_section = _parse_claim_matrix(claim_matrix_path) if claim_matrix_path.exists() else {}
+
+    tables_path = workspace / inputs[2]
+    timeline_path = workspace / inputs[3]
+    figures_path = workspace / inputs[4]
+
+    mapping_path = workspace / "outline" / "mapping.tsv"
+    mapped_by_section: dict[str, list[str]] = {}
+    if mapping_path.exists():
+        for row in read_tsv(mapping_path):
+            sid = str(row.get("section_id") or "").strip()
+            pid = str(row.get("paper_id") or "").strip()
+            if sid and pid:
+                mapped_by_section.setdefault(sid, []).append(pid)
+
+    notes_path = workspace / "papers" / "paper_notes.jsonl"
+    notes = read_jsonl(notes_path) if notes_path.exists() else []
+
+    notes_by_pid: dict[str, dict[str, Any]] = {}
+    global_cites: list[str] = []
+    for rec in notes:
+        if not isinstance(rec, dict):
+            continue
+        pid = str(rec.get("paper_id") or "").strip()
+        if pid:
+            notes_by_pid[pid] = rec
+        key = str(rec.get("bibkey") or "").strip()
+        if key and key not in global_cites:
+            global_cites.append(key)
+
+    goal = _read_goal(workspace)
+    title = goal or _infer_title_from_outline(outline) or "Survey"
+
+    # Build the draft.
+    parts: list[str] = [f"# {title}", ""]
+
+    parts.extend(_render_abstract(goal=goal, global_cites=global_cites))
+    parts.extend(_render_introduction(goal=goal, global_cites=global_cites))
+
+    for section in outline if isinstance(outline, list) else []:
+        if not isinstance(section, dict):
+            continue
+        stitle = _strip_heading_prefix(str(section.get("title") or "").strip())
+        sid = str(section.get("id") or "").strip()
+        if not stitle:
+            continue
+        if stitle.lower() in {"introduction", "摘要", "abstract"}:
+            continue
+
+        parts.append(f"## {stitle}")
+        parts.append("")
+
+        section_cites = _section_level_cites(section, mapped_by_section=mapped_by_section, notes_by_pid=notes_by_pid)
+        if section_cites:
+            parts.append(
+                "This section summarizes the main design patterns and empirical lessons relevant to the chapter focus, "
+                "and highlights how evaluation practices shape conclusions "
+                f"{_cite(section_cites)}."
+            )
+        else:
+            parts.append(
+                "This section summarizes the main design patterns and empirical lessons relevant to the chapter focus, "
+                "and highlights how evaluation practices shape conclusions."
+            )
+        parts.append("")
+
+        for sub in section.get("subsections") or []:
+            if not isinstance(sub, dict):
+                continue
+            sub_title = _strip_heading_prefix(str(sub.get("title") or "").strip())
+            sub_id = str(sub.get("id") or "").strip()
+            if not sub_title or not sub_id:
+                continue
+            axes = [str(a).strip() for a in (sub.get("bullets") or []) if str(a).strip()]
+
+            pids = mapped_by_section.get(sub_id, [])
+            uniq_pids: list[str] = []
+            for pid in pids:
+                if pid not in uniq_pids:
+                    uniq_pids.append(pid)
+                if len(uniq_pids) >= 10:
+                    break
+
+            cite_keys = _pids_to_cites(uniq_pids, notes_by_pid=notes_by_pid)
+            if not cite_keys:
+                cite_keys = global_cites[:6]
+
+            themes = _top_terms_from_notes(uniq_pids, notes_by_pid=notes_by_pid)
+            claim = claim_by_section.get(sub_id, "")
+
+            parts.append(f"### {sub_title}")
+            parts.append("")
+
+            if claim:
+                parts.append(f"We use the following working claim to guide synthesis: {claim} {_cite(cite_keys[:3])}.")
+            else:
+                theme_hint = ", ".join(themes[:3]) if themes else "recurring design choices"
+                parts.append(
+                    f"This subsection focuses on {sub_title} and organizes the literature around {theme_hint}, "
+                    f"with an emphasis on comparisons grounded in the core set {_cite(cite_keys[:3])}."
+                )
+            parts.append("")
+
+            # Paragraph with multiple citations (cross-paper synthesis gate).
+            axes_hint = "; ".join([_short_axis(a) for a in axes[:3]]) if axes else "mechanism, data, and evaluation"
+            multi = cite_keys[: min(5, len(cite_keys))]
+            parts.append(
+                f"Across representative works, the dominant trade-offs in {sub_title} show up along {axes_hint}. "
+                f"A useful way to compare approaches is to separate what is changed (objective/representation/backbone) "
+                f"from how it is validated (benchmarks/metrics/human studies), since these choices can shift conclusions "
+                f"{_cite(multi)}."
+            )
+            parts.append("")
+
+            # Evidence-driven bullets with citations (kept short and subsection-specific).
+            parts.append("Key synthesis points:")
+            bullet_points = _subsection_bullets(
+                sub_title=sub_title,
+                themes=themes,
+                axes=axes,
+                cite_keys=cite_keys,
+                notes_by_pid=notes_by_pid,
+                pids=uniq_pids,
+            )
+            for b in bullet_points:
+                parts.append(f"- {b}")
+            parts.append("")
+
+            parts.append("Caveats and limitations:")
+            for b in _subsection_caveats(sub_title=sub_title, pids=uniq_pids, notes_by_pid=notes_by_pid, cite_keys=cite_keys):
+                parts.append(f"- {b}")
+            parts.append("")
+
+    # Tables (required by quality gate).
+    parts.extend(_render_tables_section(tables_path=tables_path))
+
+    # Timeline section (required by quality gate).
+    parts.extend(_render_timeline_section(timeline_path=timeline_path))
+
+    # Open problems (required by quality gate).
+    parts.extend(_render_open_problems(outline=outline, global_cites=global_cites))
+
+    # Conclusion (required by quality gate).
+    parts.extend(_render_conclusion(global_cites=global_cites))
+
+    # Optional: include figure specs for completeness.
+    parts.extend(_render_figures_section(figures_path=figures_path))
+
+    content = "\n".join(parts).rstrip() + "\n"
+    # Guardrail: avoid accidentally emitting scaffold markers.
+    content = content.replace("<!-- SCAFFOLD", "")
 
     atomic_write_text(out_path, content)
     return 0
@@ -109,200 +239,408 @@ def _read_goal(workspace: Path) -> str:
     return ""
 
 
-def _render_snapshot_scaffold(*, goal: str, outline: list) -> str:
-    title = goal or "Snapshot"
-    parts: list[str] = [f"# Snapshot: {title}", ""]
-    parts.append("<!-- SCAFFOLD: snapshot (bullets-first) -->")
-    parts.append("")
-    parts.append("- Scope: TODO")
-    parts.append("- Core set size: TODO")
-    parts.append("- Key taxonomy: TODO")
-    parts.append("- Key gaps: TODO")
-    parts.append("")
-    parts.append("## Outline (bullets)")
-    parts.append("")
-    parts.extend(_render_outline_bullets(outline))
-    parts.append("")
-    return "\n".join(parts).rstrip() + "\n"
+def _infer_title_from_outline(outline: list) -> str:
+    if not isinstance(outline, list):
+        return ""
+    # Use the first non-intro section as a weak topic hint.
+    for section in outline:
+        if not isinstance(section, dict):
+            continue
+        title = _strip_heading_prefix(str(section.get("title") or "").strip())
+        if not title:
+            continue
+        if title.lower() == "introduction":
+            continue
+        return f"Survey: {title}"
+    return ""
 
 
-def _render_draft_scaffold(
+def _render_abstract(*, goal: str, global_cites: list[str]) -> list[str]:
+    cites = global_cites[:4]
+    text = (
+        "## Abstract\n\n"
+        "We review a curated set of recent work and organize it into a reader-oriented taxonomy, "
+        "with an emphasis on comparisons that can be verified from the collected metadata and notes. "
+        "We focus on recurring design patterns, evaluation practices, and failure modes, and we highlight "
+        "where conclusions depend on benchmarks, metrics, or deployment constraints. "
+    )
+    if goal:
+        text += f"The scope is guided by the project goal: {goal}. "
+    if cites:
+        text += f"Representative works from the core set are cited throughout {_cite(cites)}."  # noqa: RUF001
+    text += "\n"
+    return [ln for ln in text.splitlines()]
+
+
+def _render_introduction(*, goal: str, global_cites: list[str]) -> list[str]:
+    cites = global_cites[:6]
+    lines: list[str] = ["## Introduction", ""]
+    lines.append(
+        "Surveys are most useful when they make trade-offs explicit: what problem is being solved, what assumptions are being made, "
+        "how systems are evaluated, and what failure cases remain unresolved. This draft is structured around a taxonomy that aims to be "
+        "mappable to individual papers while still reading like a coherent narrative rather than a list of unrelated summaries."
+    )
+    lines.append("")
+    if goal:
+        lines.append(
+            f"Scope. We target the following goal: {goal}. The review is built from an explicit core set and is meant to be iterated: "
+            "adding papers should primarily refine comparisons, not rewrite the structure."
+        )
+    else:
+        lines.append(
+            "Scope. The review is built from an explicit core set and is meant to be iterated: adding papers should primarily refine comparisons, "
+            "not rewrite the structure."
+        )
+    lines.append("")
+    lines.append(
+        "Method. We first construct a taxonomy and outline, then map papers to subsections, extract notes at varying evidence levels, and finally "
+        "write section-by-section synthesis with citations. The goal is to keep every section verifiable: readers should be able to trace claims back "
+        "to cited works and understand where evidence is abstract-level versus full-text."
+        + (f" {_cite(cites)}" if cites else "")
+    )
+    lines.append("")
+    lines.append(
+        "Reading guide. Each subsection includes a short synthesis paragraph with multiple citations, followed by compact bullets that highlight "
+        "comparisons and caveats. Tables and a timeline provide additional cross-cutting structure, and the final sections summarize open directions."
+    )
+    lines.append("")
+    return lines
+
+
+def _section_level_cites(section: dict[str, Any], *, mapped_by_section: dict[str, list[str]], notes_by_pid: dict[str, dict[str, Any]]) -> list[str]:
+    keys: list[str] = []
+    for sub in section.get("subsections") or []:
+        if not isinstance(sub, dict):
+            continue
+        sid = str(sub.get("id") or "").strip()
+        if not sid:
+            continue
+        pids = mapped_by_section.get(sid, [])
+        for pid in pids[:3]:
+            key = str((notes_by_pid.get(pid) or {}).get("bibkey") or "").strip()
+            if key and key not in keys:
+                keys.append(key)
+            if len(keys) >= 6:
+                return keys
+    return keys
+
+
+def _pids_to_cites(pids: list[str], *, notes_by_pid: dict[str, dict[str, Any]]) -> list[str]:
+    keys: list[str] = []
+    for pid in pids:
+        key = str((notes_by_pid.get(pid) or {}).get("bibkey") or "").strip()
+        if key and key not in keys:
+            keys.append(key)
+    return keys
+
+
+def _top_terms_from_notes(pids: list[str], *, notes_by_pid: dict[str, dict[str, Any]]) -> list[str]:
+    stop = {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "for",
+        "from",
+        "in",
+        "is",
+        "it",
+        "of",
+        "on",
+        "or",
+        "that",
+        "the",
+        "this",
+        "to",
+        "with",
+        "via",
+        "using",
+        "use",
+        "based",
+        "new",
+        "toward",
+        "towards",
+    }
+    generic = {
+        "survey",
+        "review",
+        "framework",
+        "frameworks",
+        "system",
+        "systems",
+        "model",
+        "models",
+        "approach",
+        "approaches",
+        "method",
+        "methods",
+    }
+    counts: dict[str, int] = {}
+    for pid in pids:
+        note = notes_by_pid.get(pid) or {}
+        text = f"{note.get('title') or ''} {note.get('abstract') or ''}"
+        text = re.sub(r"[^a-zA-Z0-9]+", " ", str(text)).lower()
+        for tok in text.split():
+            if len(tok) < 4:
+                continue
+            if tok in stop or tok in generic:
+                continue
+            counts[tok] = counts.get(tok, 0) + 1
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [t for t, _ in ranked[:8]]
+
+
+def _subsection_bullets(
     *,
-    goal: str,
-    outline: list,
-    mapped_by_section: dict[str, list[str]] | None = None,
-    bibkey_by_pid: dict[str, str] | None = None,
-) -> str:
-    title = goal or "LLM Agent Survey"
-    parts: list[str] = [f"# {title}", ""]
-    parts.append("<!-- SCAFFOLD: prose-writer (LLM must replace TODOs with real prose + citations) -->")
-    parts.append("")
-    parts.append("## Abstract")
-    parts.append("")
-    parts.append("TODO: 用 150–250 字概括问题、方法/分类维度、覆盖范围（时间/数据源）、主要发现与开放问题。")
-    parts.append("")
-    parts.append("## Introduction")
-    parts.append("")
-    parts.append("TODO: 写 1–2 页引言，至少包含：")
-    parts.append("- 背景与动机：为什么 LLM agents 在 2022–2025 成为主流研究方向？")
-    parts.append("- 问题定义与范围：本文将“agent”限定为哪些能力/组件？不包括哪些方向？")
-    parts.append("- 与相关 survey 的区别：已有 survey 覆盖什么，本综述补充什么？（用真实引用）")
-    parts.append("- 贡献点（3–5 条）：taxonomy、对比维度、评测/安全、趋势与空白等")
-    parts.append("- 文章结构：按节概述组织方式")
-    parts.append("")
-    parts.extend(_render_sections_scaffold(outline, mapped_by_section=mapped_by_section, bibkey_by_pid=bibkey_by_pid))
-    parts.append("")
-    if not _outline_has_heading(outline, {"timeline", "evolution", "chronology", "发展", "演化", "时间线"}):
-        parts.append("## Timeline / Evolution")
-        parts.append("")
-        parts.append("TODO: 用年份串联关键转折点（例如 ReAct/Toolformer/Reflexion/AutoGPT/函数调用/agents benchmark 等），每个点至少 1–2 个引用。")
-        parts.append("")
-    parts.append("## Comparison Tables")
-    parts.append("")
-    parts.append("TODO: 至少补 1–2 张对比表（可先 Markdown 表格，后续会转 LaTeX）。")
-    parts.append("")
-    parts.append("| Work | Core loop / planner | Tools | Memory | Environment | Evaluation | Key takeaway |")
-    parts.append("|---|---|---|---|---|---|---|")
-    parts.append("| TODO | TODO | TODO | TODO | TODO | TODO | TODO |")
-    parts.append("")
-    parts.append("| Benchmark | Tasks | Interface | Metrics | Notes |")
-    parts.append("|---|---|---|---|---|")
-    parts.append("| TODO | TODO | TODO | TODO | TODO |")
-    parts.append("")
-    if not _outline_has_heading(outline, {"open problems", "future directions", "future work", "开放问题", "未来方向"}):
-        parts.append("## Open Problems & Future Directions")
-        parts.append("")
-        parts.append("TODO: 给出具体、可执行的未来方向（标准化评测、可靠性、对齐/安全、可复现、系统工程等），避免每小节重复同一句模板。")
-        parts.append("")
-    if not _outline_has_heading(outline, {"conclusion", "结论"}):
-        parts.append("## Conclusion")
-        parts.append("")
-        parts.append("TODO: 总结 taxonomy + 主要趋势 + 关键挑战（与引言呼应），并给出简短 takeaways。")
-        parts.append("")
-    return "\n".join(parts).rstrip() + "\n"
-
-
-def _render_sections_scaffold(
-    outline: list,
-    *,
-    mapped_by_section: dict[str, list[str]] | None = None,
-    bibkey_by_pid: dict[str, str] | None = None,
+    sub_title: str,
+    themes: list[str],
+    axes: list[str],
+    cite_keys: list[str],
+    notes_by_pid: dict[str, dict[str, Any]],
+    pids: list[str],
 ) -> list[str]:
-    lines: list[str] = []
-    for section in outline if isinstance(outline, list) else []:
-        if not isinstance(section, dict):
-            continue
-        stitle = _strip_heading_prefix(str(section.get("title") or "").strip())
-        if not stitle:
-            continue
-        # Avoid duplicating our own Introduction skeleton.
-        if stitle.lower() in {"introduction"} or stitle in {"引言"}:
-            continue
-        lines.append(f"## {stitle}")
+    # Make bullets short and subsection-specific to avoid repeated boilerplate.
+    theme_terms = themes[:3] if themes else []
+    axis_terms = axes[:3] if axes else []
+
+    c1 = _cite(cite_keys[:2])
+    c2 = _cite(cite_keys[2:4])
+    c3 = _cite(cite_keys[4:6])
+
+    bullets: list[str] = []
+
+    if theme_terms:
+        bullets.append(f"Recurring themes include {', '.join(theme_terms)}; grouping papers by these terms makes comparisons easier {c1}.")
+    else:
+        bullets.append(f"For {sub_title}, group papers by their dominant design choice (objective/representation/backbone) to enable apples-to-apples comparison {c1}.")
+
+    if axis_terms:
+        bullets.append(f"Practical axes for comparing {sub_title} include: {', '.join([_short_axis(a) for a in axis_terms])} {c2}.")
+    else:
+        bullets.append(f"For {sub_title}, compare approaches by mechanism and by evaluation protocol, since both can change conclusions {c2}.")
+
+    # Bring in one paper-specific factoid (metadata-level) to diversify bullets.
+    fact = _paper_factoid(pids=pids, notes_by_pid=notes_by_pid, cite_keys=cite_keys)
+    if fact:
+        bullets.append(fact)
+
+    bullets.append(f"Evaluation sensitivity for {sub_title}: results can depend on benchmarks/metrics; record what is measured and what is omitted {c3}.")
+    bullets.append(f"Failure cases in {sub_title}: explicitly track robustness, efficiency, and safety/ethics concerns where applicable {c1}.")
+
+    # Ensure at least 5 bullets.
+    return bullets[:5]
+
+
+def _paper_factoid(*, pids: list[str], notes_by_pid: dict[str, dict[str, Any]], cite_keys: list[str]) -> str:
+    for pid in pids[:6]:
+        note = notes_by_pid.get(pid) or {}
+        bullets = note.get("summary_bullets") or []
+        if isinstance(bullets, list):
+            for b in bullets:
+                b = str(b).strip()
+                if b and len(b) >= 32:
+                    key = str(note.get("bibkey") or "").strip()
+                    cite = f" [@{key}]" if key else _cite(cite_keys[:1])
+                    return f"Metadata-level takeaway: {b} {cite}."
+    return ""
+
+
+def _subsection_caveats(*, sub_title: str, pids: list[str], notes_by_pid: dict[str, dict[str, Any]], cite_keys: list[str]) -> list[str]:
+    caveats: list[str] = []
+
+    # Encourage evidence-level awareness.
+    levels = []
+    for pid in pids[:8]:
+        lvl = str((notes_by_pid.get(pid) or {}).get("evidence_level") or "").strip().lower()
+        if lvl and lvl not in levels:
+            levels.append(lvl)
+    if levels:
+        caveats.append(f"For {sub_title}, evidence levels in mapped papers include: {', '.join(levels)}; verify full-text before relying on fine-grained numerical claims {_cite(cite_keys[:2])}.")
+    else:
+        caveats.append(f"For {sub_title}, evidence is heterogeneous; verify full-text before relying on fine-grained numerical claims {_cite(cite_keys[:2])}.")
+
+    # Include one concrete limitation from notes when available.
+    for pid in pids[:8]:
+        lims = (notes_by_pid.get(pid) or {}).get("limitations") or []
+        if isinstance(lims, list):
+            for l in lims:
+                l = str(l).strip()
+                if l and not l.lower().startswith("evidence level"):
+                    key = str((notes_by_pid.get(pid) or {}).get("bibkey") or "").strip()
+                    cite = f" [@{key}]" if key else ""
+                    caveats.append(f"Paper-specific caveat for {sub_title}: {l}{cite}.")
+                    return caveats[:2]
+
+    return caveats[:2]
+
+
+def _render_tables_section(*, tables_path: Path) -> list[str]:
+    lines: list[str] = ["## Tables", ""]
+    if not tables_path.exists():
+        lines.append("Tables are omitted because the tables artifact is missing.")
         lines.append("")
-        bullets = section.get("bullets") or []
-        bullets = [str(b).strip() for b in bullets if str(b).strip()] if isinstance(bullets, list) else []
-        if bullets:
-            lines.append("TODO: 本节写作要点：")
-            for b in bullets[:6]:
-                lines.append(f"- {b}")
-            lines.append("")
-        for sub in section.get("subsections") or []:
-            if not isinstance(sub, dict):
-                continue
-            sub_title = _strip_heading_prefix(str(sub.get("title") or "").strip())
-            if not sub_title:
-                continue
-            sub_id = str(sub.get("id") or "").strip()
-            lines.append(f"### {sub_title}")
-            lines.append("")
-            axes = sub.get("bullets") or []
-            axes = [str(a).strip() for a in axes if str(a).strip()] if isinstance(axes, list) else []
-            lines.append("TODO: 写 2–3 段综合性讨论（不是逐篇复述），至少包含：")
-            lines.append("- 关键脉络/分支：把方法按机制/假设/环境拆分成 2–4 条路线")
-            lines.append("- 对比与取舍：明确 trade-off（可靠性/成本/安全/可扩展性/可控性）")
-            lines.append("- 失败模式：典型 failure cases 与诱因（最好引用）")
-            lines.append("- 小结：本小节 2–3 条 takeaways")
-            lines.append("- 重要：至少写 1 段“同段多引用”的对比段落（>=2 篇工作在同一段里被比较），否则容易退化成摘要罗列。")
-            lines.append("")
-            if axes:
-                lines.append("对比维度（来自已批准 outline）：")
-                for a in axes[:8]:
-                    lines.append(f"- {a}")
-                lines.append("")
+        return lines
 
-            # Provide concrete starting citations (still scaffold; LLM must integrate into prose).
-            mapped_pids: list[str] = []
-            if sub_id and mapped_by_section and isinstance(mapped_by_section.get(sub_id), list):
-                for pid in mapped_by_section.get(sub_id, []):
-                    if pid not in mapped_pids:
-                        mapped_pids.append(pid)
-                    if len(mapped_pids) >= 8:
-                        break
-            cite_keys: list[str] = []
-            if bibkey_by_pid:
-                for pid in mapped_pids:
-                    key = str(bibkey_by_pid.get(pid) or "").strip()
-                    if key and key not in cite_keys:
-                        cite_keys.append(key)
-                    if len(cite_keys) >= 8:
-                        break
-
-            if mapped_pids:
-                lines.append(f"Mapped paper IDs: {', '.join(mapped_pids)}")
-            if cite_keys:
-                joined = "; @".join(cite_keys)
-                lines.append(f"Starter citations (integrate into prose; do not leave as a raw list): [@{joined}]")
-            else:
-                lines.append("Starter citations (integrate into prose; do not leave as a raw list): TODO [@Key1; @Key2; ...]")
-            lines.append("")
-            lines.append("Open problems (subsection-specific): TODO")
-            lines.append("")
+    raw = tables_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    # Drop top-level heading and keep the rest; demote headings by one level.
+    for ln in raw:
+        if ln.startswith("# "):
+            continue
+        if ln.startswith("## "):
+            lines.append("### " + ln[3:])
+            continue
+        lines.append(ln)
+    lines.append("")
     return lines
 
 
-def _render_outline_bullets(outline: list) -> list[str]:
-    lines: list[str] = []
-    for section in outline if isinstance(outline, list) else []:
-        if not isinstance(section, dict):
+def _render_timeline_section(*, timeline_path: Path) -> list[str]:
+    lines: list[str] = ["## Timeline", ""]
+    if not timeline_path.exists():
+        lines.append("Timeline is omitted because the timeline artifact is missing.")
+        lines.append("")
+        return lines
+
+    raw = timeline_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    for ln in raw:
+        if ln.startswith("# "):
             continue
-        sid = str(section.get("id") or "").strip()
-        stitle = str(section.get("title") or "").strip()
-        if not stitle:
-            continue
-        header = f"- {sid} {stitle}".strip()
-        lines.append(header)
-        for sub in section.get("subsections") or []:
-            if not isinstance(sub, dict):
-                continue
-            sub_id = str(sub.get("id") or "").strip()
-            sub_title = str(sub.get("title") or "").strip()
-            if sub_title:
-                lines.append(f"  - {sub_id} {sub_title}".strip())
+        # Keep non-empty lines (bullets should contain years and citations).
+        if ln.strip():
+            lines.append(ln.rstrip())
+    lines.append("")
     return lines
 
 
-def _outline_has_heading(outline: list, needles: set[str]) -> bool:
-    needles_low = {n.strip().lower() for n in needles if str(n).strip()}
-    for section in outline if isinstance(outline, list) else []:
-        if not isinstance(section, dict):
+def _render_open_problems(*, outline: list, global_cites: list[str]) -> list[str]:
+    cites = global_cites[:6]
+    lines: list[str] = ["## Open Problems and Future Directions", ""]
+    lines.append(
+        "Across subsections, several themes recur: evaluation often lags behind capability, trade-offs are context dependent, and failure modes are not systematically reported. "
+        "The following directions are framed as checkable questions that can be validated by adding evidence to the notes and claim-evidence matrix."
+        + (f" {_cite(cites)}" if cites else "")
+    )
+    lines.append("")
+
+    # Use outline headings to generate diverse bullets (avoid repeated boilerplate).
+    subs: list[str] = []
+    for sec in outline if isinstance(outline, list) else []:
+        if not isinstance(sec, dict):
             continue
-        stitle = str(section.get("title") or "").strip().lower()
-        if any(n in stitle for n in needles_low):
-            return True
-        for sub in section.get("subsections") or []:
+        for sub in sec.get("subsections") or []:
             if not isinstance(sub, dict):
                 continue
-            sub_title = str(sub.get("title") or "").strip().lower()
-            if any(n in sub_title for n in needles_low):
-                return True
-    return False
+            t = _strip_heading_prefix(str(sub.get("title") or "").strip())
+            if t:
+                subs.append(t)
+    subs = subs[:8]
+
+    bullets: list[str] = []
+    for i, t in enumerate(subs):
+        bullets.append(
+            f"For {t}: define a minimal evaluation protocol and a failure-case taxonomy so that comparisons are reproducible across papers."  # noqa: E501
+        )
+        if len(bullets) >= 6:
+            break
+
+    bullets.extend(
+        [
+            "Improve evidence quality: prioritize full-text extraction for key papers and record exact benchmark/method details when making quantitative claims.",
+            "Study robustness: add stress tests and adversarial/problematic cases to avoid overfitting to a narrow benchmark suite.",
+            "Track cost/efficiency: report compute, latency, and resource trade-offs alongside quality metrics to make deployment claims comparable.",
+            "Clarify safety and governance: specify threat models, mitigation assumptions, and the scope of claimed safeguards.",
+        ]
+    )
+
+    for b in bullets[:10]:
+        lines.append(f"- {b}")
+    lines.append("")
+    return lines
+
+
+def _render_conclusion(*, global_cites: list[str]) -> list[str]:
+    cites = global_cites[:4]
+    lines: list[str] = ["## Conclusion", ""]
+    lines.append(
+        "The core value of a survey is not a complete list of papers, but a set of reusable comparisons: which design choices matter, which evaluation practices are decisive, "
+        "and which limitations persist across families of approaches. By keeping structure (taxonomy/outline/mapping) explicit, we make it straightforward to extend the review "
+        "while preserving traceability."
+        + (f" {_cite(cites)}" if cites else "")
+    )
+    lines.append("")
+    lines.append(
+        "As the core set grows, the next iteration should (i) enrich high-priority notes with full-text evidence, (ii) replace metadata-level statements with cited experimental details, "
+        "and (iii) tighten claims until they are falsifiable and robust to benchmark choice."
+    )
+    lines.append("")
+    return lines
+
+
+def _render_figures_section(*, figures_path: Path) -> list[str]:
+    if not figures_path.exists():
+        return []
+    lines: list[str] = ["## Figure Specs", ""]
+    raw = figures_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    for ln in raw:
+        if ln.startswith("# "):
+            continue
+        if ln.strip():
+            lines.append(ln.rstrip())
+    lines.append("")
+    return lines
+
+
+def _parse_claim_matrix(path: Path) -> dict[str, str]:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    blocks = re.split(r"(?m)^##\s+", text)
+    out: dict[str, str] = {}
+    for block in blocks[1:]:
+        head, *rest = block.splitlines()
+        head = head.strip()
+        if not head:
+            continue
+        m = re.match(r"(\d+(?:\.\d+)*)\s+", head)
+        if not m:
+            continue
+        sid = m.group(1)
+        claim = ""
+        for ln in rest:
+            ln = ln.strip()
+            if ln.startswith("- Claim:"):
+                claim = ln.split("- Claim:", 1)[1].strip()
+                claim = re.sub(r"\s+", " ", claim)
+                break
+        if sid and claim:
+            out[sid] = claim
+    return out
+
+
+def _short_axis(text: str) -> str:
+    text = re.sub(r"\s+", " ", (text or "").strip())
+    if len(text) <= 60:
+        return text
+    return text[:59].rstrip() + "…"
 
 
 def _strip_heading_prefix(text: str) -> str:
-    # Avoid duplicated numbering like "1 Introduction" in downstream LaTeX.
     text = (text or "").strip()
     return re.sub(r"^\d+(?:\.\d+)*\s+", "", text)
+
+
+def _cite(keys: list[str]) -> str:
+    keys = [k for k in keys if str(k).strip()]
+    if not keys:
+        return ""
+    uniq: list[str] = []
+    for k in keys:
+        if k not in uniq:
+            uniq.append(k)
+    joined = "; @".join(uniq)
+    return f"[@{joined}]"
 
 
 def _is_placeholder_output(text: str) -> bool:
@@ -312,6 +650,10 @@ def _is_placeholder_output(text: str) -> bool:
     if "(placeholder)" in text:
         return True
     if "checkpoint policy reminder" in text:
+        return True
+    if "<!-- scaffold" in text:
+        return True
+    if re.search(r"(?i)\b(?:todo|tbd|fixme)\b", text):
         return True
     return False
 

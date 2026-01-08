@@ -1,6 +1,12 @@
 ---
 name: outline-builder
-description: Convert a taxonomy (`outline/taxonomy.yml`) into a bullet-only outline (`outline/outline.yml`) with sections/subsections and at least 3 bullets per subsection. Use when preparing structure (NO PROSE) before mapping papers or writing.
+description: |
+  Convert a taxonomy (`outline/taxonomy.yml`) into a bullet-only outline (`outline/outline.yml`) with sections/subsections.
+  **Trigger**: outline builder, bullet outline, outline.yml, 大纲生成, bullets-only.
+  **Use when**: structure 阶段（NO PROSE），已有 taxonomy，需要生成可映射/可写作的章节与小节骨架（每小节≥3 bullets）。
+  **Skip if**: 已经有批准过且可映射的 outline（避免无意义 churn）。
+  **Network**: none.
+  **Guardrail**: bullets-only；移除 TODO/模板语句；每小节至少 3 个可检查 bullets。
 ---
 
 # Outline Builder
@@ -27,6 +33,8 @@ Bullets should describe *what the section must cover*, not draft prose.
 - `outline/outline.yml`
 
 ## Workflow (heuristic)
+Uses: `outline/taxonomy.yml`.
+
 
 1. Translate taxonomy nodes into section headings that read like a survey structure.
 2. For each subsection, write **≥3 bullets** that are:
@@ -52,8 +60,53 @@ Bullets should describe *what the section must cover*, not draft prose.
 
 ## Helper script (optional)
 
-Bootstrap scaffold only:
-- Run `python .codex/skills/outline-builder/scripts/run.py --help` first.
-- Then: `python .codex/skills/outline-builder/scripts/run.py --workspace <workspace_dir>`
+### Quick Start
 
-The script creates `TODO` bullets and never overwrites non-placeholder work; in `pipeline.py --strict` it will be blocked until `TODO`s are replaced with topic-specific bullets.
+- `python .codex/skills/outline-builder/scripts/run.py --help`
+- `python .codex/skills/outline-builder/scripts/run.py --workspace <workspace_dir>`
+
+### All Options
+
+- See `--help` (this helper is intentionally minimal)
+
+### Examples
+
+- Generate a baseline bullets-only outline, then refine bullets:
+  - Run the helper once, then replace every generic bullet / `TODO` with topic-specific, checkable bullets.
+
+### Notes
+
+- The script generates a baseline bullets-only outline and never overwrites non-placeholder work.
+- In `pipeline.py --strict` it will be blocked only if placeholder markers (TODO/TBD/FIXME/(placeholder)) remain.
+
+## Troubleshooting
+
+### Common Issues
+
+#### Issue: Outline still has `TODO` / scaffold bullets
+
+**Symptom**:
+- Quality gate blocks `outline_scaffold`.
+
+**Causes**:
+- Helper script generated a scaffold; bullets were not rewritten.
+
+**Solutions**:
+- Replace every generic bullet with topic-specific, checkable bullets (axes, comparisons, evaluation setups, failure modes).
+- Keep bullets-only (no prose paragraphs).
+
+#### Issue: Outline bullets are mostly generic templates
+
+**Symptom**:
+- Quality gate blocks `outline_template_bullets`.
+
+**Causes**:
+- Too many “Define problem…/Benchmarks…/Open problems…” template bullets.
+
+**Solutions**:
+- Add concrete terms, datasets, evaluation metrics, and known failure modes per subsection.
+
+### Recovery Checklist
+
+- [ ] Every subsection has ≥3 non-template bullets.
+- [ ] No `TODO`/`(placeholder)` remains.

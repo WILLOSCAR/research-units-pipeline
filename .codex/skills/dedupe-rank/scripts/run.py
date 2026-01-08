@@ -63,6 +63,11 @@ def main() -> int:
     from tooling.common import ensure_dir, normalize_title_for_dedupe, parse_semicolon_list, read_jsonl, write_jsonl
 
     workspace = Path(args.workspace).resolve()
+
+    core_size_cfg = _core_size_from_queries(workspace / 'queries.md')
+    if core_size_cfg:
+        args.core_size = int(core_size_cfg)
+
     inputs = parse_semicolon_list(args.inputs) or ["papers/papers_raw.jsonl"]
     outputs = parse_semicolon_list(args.outputs) or ["papers/papers_dedup.jsonl", "papers/core_set.csv"]
 
@@ -229,6 +234,28 @@ def _query_tokens(workspace: Path) -> set[str]:
                 continue
             tokens.add(t)
     return tokens
+
+
+def _core_size_from_queries(path: Path) -> int:
+    if not path.exists():
+        return 0
+    for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw.strip()
+        if not line.startswith("- "):
+            continue
+        if ":" not in line:
+            continue
+        key, value = line[2:].split(":", 1)
+        key = key.strip().lower().replace(" ", "_")
+        if key not in {"core_size", "core_set_size", "dedupe_core_size"}:
+            continue
+        value = value.split('#', 1)[0].strip().strip('"').strip("'")
+        try:
+            n = int(value)
+        except Exception:
+            return 0
+        return n if n > 0 else 0
+    return 0
 
 
 def _parse_queries_md(path: Path) -> list[str]:

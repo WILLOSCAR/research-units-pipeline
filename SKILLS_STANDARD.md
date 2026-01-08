@@ -20,6 +20,20 @@ Each skill is a folder under `.codex/skills/<skill>/` and must include:
 2. **`SKILL.md` body**: the workflow + checklists + guardrails.
 3. **Scripts/resources**: loaded only when the workflow calls for them.
 
+### Description field (routing-friendly)
+
+To make discovery reliable across tools, prefer a multi-line `description` with explicit triggers and guardrails:
+
+```yaml
+description: |
+  <one-line summary>.
+  **Trigger**: <keywords (EN/中文), comma-separated>.
+  **Use when**: <when this skill is the right next step>.
+  **Skip if**: <when not to use>.
+  **Network**: <none|required|optional + offline fallback>.
+  **Guardrail**: <NO PROSE / checkpoints / invariants>.
+```
+
 ## 2) Script policy (deterministic helpers only)
 
 Borrowing the best pattern from Anthropic’s `skills` repos:
@@ -76,4 +90,3 @@ For deterministic units (retrieval/dedupe/compile/format checks):
 Codex discovers skills under `.codex/skills/`. For Claude Code, keep `.claude/skills/` pointing at the same set (symlink or copy).
 
 Repo helper: `python scripts/validate_repo.py` checks pipeline↔template↔skill alignment.
-

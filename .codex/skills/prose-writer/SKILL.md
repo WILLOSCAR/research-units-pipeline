@@ -1,6 +1,12 @@
 ---
 name: prose-writer
-description: Write `output/DRAFT.md` or `output/SNAPSHOT.md` from approved outline and evidence, using only verified citation keys from `citations/ref.bib`. Use only after required HUMAN sign-off is recorded in `DECISIONS.md` (unless writing is explicitly bullets-only).
+description: |
+  Write `output/DRAFT.md` or `output/SNAPSHOT.md` from approved outline and evidence, using only verified citation keys from `citations/ref.bib`.
+  **Trigger**: write draft, prose writer, snapshot, survey writing, 写综述, 生成草稿.
+  **Use when**: outline + evidence 已就绪且 HITL 审批已记录在 `DECISIONS.md`（survey 默认：C2 通过后）。
+  **Skip if**: 缺少必要审批（`DECISIONS.md` 未勾选 Approve C*）或证据/引用尚未准备好。
+  **Network**: none.
+  **Guardrail**: 在审批前禁止写长 prose（可做 bullets-only artifacts）；只使用 `citations/ref.bib` 中存在的 citation keys。
 ---
 
 # Prose Writer
@@ -33,6 +39,8 @@ This skill is where “human-like iteration” matters: outline + evidence first
 - Draft: section-by-section prose with tables/timeline and subsection-specific synthesis.
 
 ## Workflow (heuristic)
+Uses: `outline/outline.yml`, `outline/figures.md`, `papers/core_set.csv`.
+
 
 1. Gate check: confirm writing is approved in `DECISIONS.md`.
    - If not approved, write a short request (what you plan to write, and what evidence you will rely on) and stop.
@@ -62,6 +70,7 @@ This skill is where “human-like iteration” matters: outline + evidence first
 
 ## Quality checklist
 
+- [ ] If targeting PDF (e.g., `arxiv-survey-latex`): draft length is sufficient to compile into >= 8 pages (checked at `latex-compile-qa`).
 - [ ] Writing respects checkpoint policy (no prose without approval).
 - [ ] All citation keys referenced exist in `citations/ref.bib`.
 - [ ] Draft includes: Introduction, Timeline/Evolution, Open Problems & Future Directions, Conclusion.
@@ -70,8 +79,55 @@ This skill is where “human-like iteration” matters: outline + evidence first
 
 ## Helper script (optional)
 
-Scaffold + guardrails only:
-- Run `python .codex/skills/prose-writer/scripts/run.py --help` first.
-- Then: `python .codex/skills/prose-writer/scripts/run.py --workspace <workspace_dir>`
+### Quick Start
 
-The helper only scaffolds if missing and never overwrites an existing refined draft; when `outline/mapping.tsv` + `papers/paper_notes.jsonl` exist it will also include starter mapped paper IDs + citation keys to make section writing less “empty template”. In `pipeline.py --strict` the quality gate will block template-y drafts.
+- `python .codex/skills/prose-writer/scripts/run.py --help`
+- `python .codex/skills/prose-writer/scripts/run.py --workspace <workspace_dir>`
+
+### All Options
+
+- See `--help` (the helper writes a first-pass draft and enforces approvals)
+
+### Examples
+
+- Generate a first-pass draft after approval:
+  - Tick `Approve C2` in `DECISIONS.md` (or run `python scripts/pipeline.py approve --workspace <ws> --checkpoint C2`), then run the script.
+
+### Notes
+
+- The helper writes a first-pass draft if missing and never overwrites an existing refined draft.
+- If `outline/mapping.tsv` + `papers/paper_notes.jsonl` exist it will include starter mapped paper IDs + citation keys.
+- In `pipeline.py --strict` the quality gate will block template-y drafts.
+
+## Troubleshooting
+
+### Common Issues
+
+#### Issue: Script refuses to write (missing approval)
+
+**Symptom**:
+- Unit is `BLOCKED` and `DECISIONS.md` asks for `Approve C2`.
+
+**Causes**:
+- Survey policy: prose is allowed only after HUMAN approves C2.
+
+**Solutions**:
+- Tick `Approve C2` in `DECISIONS.md` (or run `python scripts/pipeline.py approve --workspace <ws> --checkpoint C2`).
+
+#### Issue: Quality gate blocks template-y draft
+
+**Symptom**:
+- `output/QUALITY_GATE.md` reports draft looks like scaffolding/template.
+
+**Causes**:
+- Draft still contains repeated `TODO` blocks or generic paragraphs.
+
+**Solutions**:
+- Rewrite section-by-section using `outline/claim_evidence_matrix.md` and `outline/tables.md`/`timeline.md`/`figures.md`.
+- Add cross-paper comparisons and concrete trade-offs.
+
+### Recovery Checklist
+
+- [ ] `DECISIONS.md` has `Approve C2` ticked (survey).
+- [ ] `citations/ref.bib` exists if you plan to cite; use only existing keys.
+- [ ] Remove all scaffold markers / repeated boilerplate.

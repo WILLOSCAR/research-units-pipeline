@@ -1,21 +1,23 @@
 ---
 name: arxiv-survey-latex
-version: 1.0
+version: 1.1
 target_artifacts:
   - outline/taxonomy.yml
   - outline/outline.yml
   - outline/mapping.tsv
   - papers/fulltext_index.jsonl
   - papers/paper_notes.jsonl
+  - outline/claim_evidence_matrix.md
   - outline/tables.md
   - outline/timeline.md
   - outline/figures.md
   - citations/ref.bib
+  - citations/verified.jsonl
   - output/DRAFT.md
   - latex/main.tex
   - latex/main.pdf
   - output/LATEX_BUILD_REPORT.md
-default_checkpoints: [C0,C1,C2,C3,C4,C5]
+default_checkpoints: [C0,C1,C2,C3]
 units_template: templates/UNITS.arxiv-survey-latex.csv
 ---
 
@@ -61,38 +63,31 @@ human_checkpoint:
 - approve: scope + outline
 - write_to: DECISIONS.md
 
-## Stage 3 - Evidence (C3) [NO PROSE]
+## Stage 3 - Evidence → Draft → PDF (C3) [NO PROSE until C2 approved]
 required_skills:
 - pdf-text-extractor
 - paper-notes
 - claim-evidence-matrix
+- citation-verifier
+- survey-visuals
+- prose-writer
+- latex-scaffold
+- latex-compile-qa
 produces:
 - papers/fulltext_index.jsonl
 - papers/paper_notes.jsonl
 - outline/claim_evidence_matrix.md
-
-Notes:
-- `queries.md` can set `evidence_mode: "abstract"|"fulltext"` (default template uses `abstract`).
-- If `evidence_mode: "fulltext"`, `pdf-text-extractor` can be tuned via `fulltext_max_papers`, `fulltext_max_pages`, `fulltext_min_chars`.
-
-## Stage 4 - Citations + visuals (C4) [NO PROSE]
-required_skills:
-- citation-verifier
-- survey-visuals
-produces:
 - citations/ref.bib
 - citations/verified.jsonl
 - outline/tables.md
 - outline/timeline.md
 - outline/figures.md
-
-## Stage 5 - Writing + PDF (C5) [PROSE ALLOWED AFTER C2]
-required_skills:
-- prose-writer
-- latex-scaffold
-- latex-compile-qa
-produces:
 - output/DRAFT.md
 - latex/main.tex
 - latex/main.pdf
 - output/LATEX_BUILD_REPORT.md
+
+Notes:
+- `queries.md` can set `evidence_mode: "abstract"|"fulltext"` (default template uses `abstract`).
+- If `evidence_mode: "fulltext"`, `pdf-text-extractor` can be tuned via `fulltext_max_papers`, `fulltext_max_pages`, `fulltext_min_chars`, and `--local-pdfs-only`.
+- In strict mode, the pipeline should block if the PDF is too short (<8 pages) or if citations are undefined (even if LaTeX technically compiles).

@@ -12,6 +12,7 @@
 > 约束：在 `DECISIONS.md` 未通过需要的 Checkpoint 签字之前，禁止写长 prose（只能做 bullets / evidence / structure）。
 
 补充：
+- Skill 快速索引：`SKILL_INDEX.md`
 - Skill 设计与脚本使用约定见 `SKILLS_STANDARD.md`（对齐 Anthropic/Claude Code 的 “SKILL.md + deterministic scripts” 实践）。
 - repo 一致性自检：`python scripts/validate_repo.py`
 

@@ -1,6 +1,12 @@
 ---
 name: arxiv-search
-description: Retrieve paper metadata from arXiv using keyword queries and save results as JSONL (`papers/papers_raw.jsonl`). Use when a pipeline needs to collect an initial paper set from arXiv; requires network access or a provided export.
+description: |
+  Retrieve paper metadata from arXiv using keyword queries and save results as JSONL (`papers/papers_raw.jsonl`).
+  **Trigger**: arXiv, arxiv, paper search, metadata retrieval, 文献检索, 论文检索, 拉取元数据, 离线导入.
+  **Use when**: 需要一个初始论文集合（survey/snapshot 的 Stage C1），来源为 arXiv（在线检索或离线导入 export）。
+  **Skip if**: 已经有可用的 `papers/papers_raw.jsonl`，或数据源不是 arXiv。
+  **Network**: 在线检索需要网络；离线 `--input <export.*>` 不需要网络。
+  **Guardrail**: 只做 metadata；不要在 `output/` 写长 prose。
 ---
 
 # arXiv Search (metadata-first)
@@ -48,7 +54,62 @@ When online, prefer rich arXiv metadata (categories, arxiv_id, pdf_url, publishe
 
 ## Script
 
-- Online: `python .codex/skills/arxiv-search/scripts/run.py --workspace <workspace_dir> --query "..." --max-results 100`
+### Quick Start
+
+- `python .codex/skills/arxiv-search/scripts/run.py --help`
+- Online: `python .codex/skills/arxiv-search/scripts/run.py --workspace <workspace_dir> --query "<query>" --max-results 200`
 - Offline import: `python .codex/skills/arxiv-search/scripts/run.py --workspace <workspace_dir> --input <export.csv|json|jsonl>`
-- Offline (no flags): place an export at `<workspace>/papers/import.csv|json|jsonl` and run the unit normally.
-- Optional enrichment (needs network): `python .codex/skills/arxiv-search/scripts/run.py --workspace <workspace_dir> --input <export.*> --enrich-metadata`
+
+### All Options
+
+- `--query <q>`: repeatable; multiple queries are unioned
+- `--exclude <term>`: repeatable; excludes applied after retrieval
+- `--max-results <n>`: cap total retrieved
+- `--input <export.*>`: offline mode (CSV/JSON/JSONL)
+- `--enrich-metadata`: best-effort enrich via arXiv `id_list` (needs network)
+- `queries.md` also supports: `keywords`, `exclude`, `time window`, `max_results`, `enrich_metadata`
+
+### Examples
+
+- Online (multi-query + excludes):
+  - `python .codex/skills/arxiv-search/scripts/run.py --workspace <ws> --query "LLM agent" --query "tool use" --exclude "survey" --max-results 300`
+- Offline auto-detect (no flags):
+  - Place `papers/import.csv` (or `.json/.jsonl`) under the workspace, then run: `python .codex/skills/arxiv-search/scripts/run.py --workspace <ws>`
+- Offline import + time window (via `queries.md`):
+  - Set `- time window: { from: 2022, to: 2025 }` then run offline import normally
+
+## Troubleshooting
+
+### Common Issues
+
+#### Issue: `papers/papers_raw.jsonl` is empty
+
+**Symptom**:
+- Script exits with “No results returned …” or output file is empty.
+
+**Causes**:
+- Network is blocked (online mode).
+- Queries are too narrow or `queries.md` is empty.
+
+**Solutions**:
+- Use offline import: place `papers/import.csv|json|jsonl` in the workspace or pass `--input`.
+- Broaden keywords and reduce excludes in `queries.md`.
+- Run with explicit `--query` to sanity-check the parser.
+
+#### Issue: Offline import records miss fields
+
+**Symptom**:
+- Downstream steps fail because records miss `authors/year/abstract/url`.
+
+**Causes**:
+- Export columns don’t match expected fields; upstream export is incomplete.
+
+**Solutions**:
+- Ensure the export contains at least `title`, `authors`, `year`, `url`, `abstract`.
+- If you later have network, use `--enrich-metadata` to backfill missing fields (best effort).
+
+### Recovery Checklist
+
+- [ ] Confirm `queries.md` has non-empty `keywords` (or pass `--query`).
+- [ ] If offline: confirm workspace has `papers/import.*` and rerun.
+- [ ] Spot-check 3–5 JSONL lines: valid JSON + required fields.

@@ -1,6 +1,12 @@
 ---
 name: dedupe-rank
-description: Dedupe and rank a raw paper set (`papers/papers_raw.jsonl`) to produce a deduplicated set and a curated core set (`papers/papers_dedup.jsonl`, `papers/core_set.csv`). Use after retrieval to prepare the core paper list for taxonomy/outline building.
+description: |
+  Dedupe and rank a raw paper set (`papers/papers_raw.jsonl`) to produce `papers/papers_dedup.jsonl` and `papers/core_set.csv`.
+  **Trigger**: dedupe, rank, core set, 去重, 排序, 精选论文, 核心集合.
+  **Use when**: 检索后需要把广覆盖集合收敛成可管理的 core set（用于 taxonomy/outline/mapping）。
+  **Skip if**: 已经有人手工整理了稳定的 `papers/core_set.csv`（无需再次 churn）。
+  **Network**: none.
+  **Guardrail**: 偏 deterministic；输出应可重复（稳定 paper_id、字段规范）。
 ---
 
 # Dedupe + Rank
@@ -31,4 +37,53 @@ This is a deterministic “curation” step: it should be stable and repeatable.
 
 ## Script
 
+### Quick Start
+
+- `python .codex/skills/dedupe-rank/scripts/run.py --help`
 - `python .codex/skills/dedupe-rank/scripts/run.py --workspace <workspace_dir> --core-size 50`
+
+### All Options
+
+- `--core-size <n>`: target size for `papers/core_set.csv`
+- `queries.md` also supports `core_size` / `core_set_size` / `dedupe_core_size` (overrides default when present)
+
+### Examples
+
+- Smaller core set for fast iteration:
+  - `python .codex/skills/dedupe-rank/scripts/run.py --workspace <ws> --core-size 25`
+
+### Notes
+
+- This step is deterministic; reruns should be stable for the same inputs.
+
+## Troubleshooting
+
+### Common Issues
+
+#### Issue: `papers/core_set.csv` is too small / empty
+
+**Symptom**:
+- Core set has very few rows.
+
+**Causes**:
+- Input `papers/papers_raw.jsonl` is small, or many rows are missing required fields.
+
+**Solutions**:
+- Broaden retrieval (or provide a richer offline export) and rerun.
+- Lower `--core-size` only if you intentionally want a small core set.
+
+#### Issue: Duplicates still appear after dedupe
+
+**Symptom**:
+- Near-identical titles remain.
+
+**Causes**:
+- Title normalization is defeated by noisy exports.
+
+**Solutions**:
+- Clean title fields in the export (strip prefixes/suffixes, fix encoding) and rerun.
+
+### Recovery Checklist
+
+- [ ] `papers/papers_raw.jsonl` lines contain `title/year/url`.
+- [ ] `papers/core_set.csv` has stable `paper_id` values.

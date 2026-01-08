@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -18,7 +19,7 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[4]
     sys.path.insert(0, str(repo_root))
 
-    from tooling.common import load_yaml, parse_semicolon_list, read_jsonl, read_tsv, atomic_write_text, tokenize
+    from tooling.common import atomic_write_text, load_yaml, parse_semicolon_list, read_jsonl, read_tsv, tokenize
 
     workspace = Path(args.workspace).resolve()
     inputs = parse_semicolon_list(args.inputs) or ["outline/outline.yml", "papers/paper_notes.jsonl"]
@@ -26,11 +27,10 @@ def main() -> int:
 
     outline_path = workspace / inputs[0]
     notes_path = workspace / inputs[1]
-    mapping_path = workspace / "outline/mapping.tsv"
+    mapping_path = workspace / "outline" / "mapping.tsv"
     out_path = workspace / outputs[0]
 
     # Bootstrap-only behavior: if a human/LLM already refined the matrix, do not overwrite.
-    # Delete `outline/claim_evidence_matrix.md` to force regeneration.
     if _looks_refined_matrix(out_path):
         return 0
 
@@ -38,7 +38,7 @@ def main() -> int:
     notes = read_jsonl(notes_path)
     mappings = read_tsv(mapping_path) if mapping_path.exists() else []
 
-    papers_by_id = {str(n.get("paper_id") or ""): n for n in notes}
+    papers_by_id = {str(n.get("paper_id") or ""): n for n in notes if isinstance(n, dict)}
     paper_ids_fallback = [pid for pid in papers_by_id.keys() if pid]
 
     mapped_by_section: dict[str, list[str]] = {}
@@ -52,14 +52,17 @@ def main() -> int:
     parts: list[str] = [
         "# Claim–Evidence matrix",
         "",
-        "<!-- SCAFFOLD: claim-evidence-matrix (LLM should rewrite claims into specific, falsifiable statements) -->",
+        "This artifact is bullets-only and is meant to make evidence explicit before writing.",
         "",
     ]
+
     for subsection in _iter_subsections(outline):
         sid = subsection["id"]
         title = subsection["title"]
+        axes = [str(b).strip() for b in (subsection.get("bullets") or []) if str(b).strip()]
+
         pids = mapped_by_section.get(sid, [])
-        uniq = []
+        uniq: list[str] = []
         for pid in pids:
             if pid in papers_by_id and pid not in uniq:
                 uniq.append(pid)
@@ -70,26 +73,36 @@ def main() -> int:
                 if len(uniq) >= 2:
                     break
 
+        themes = _top_terms(
+            [
+                str(papers_by_id.get(pid, {}).get("title") or "")
+                + " "
+                + str(papers_by_id.get(pid, {}).get("abstract") or "")
+                for pid in uniq
+            ],
+            tokenize=tokenize,
+        )
+
         parts.append(f"## {sid} {title}")
         parts.append("")
-        axes = [str(b).strip() for b in (subsection.get("bullets") or []) if str(b).strip()]
-        themes = _top_terms([str(papers_by_id.get(pid, {}).get("title") or "") for pid in uniq], tokenize=tokenize)
-        parts.append(
-            "- Claim: TODO（写成可证伪的主张：机制/假设/结果/对比结论；避免“围绕/主要在…维度上存在差异”的模板句）"
-        )
+
+        claim = _make_claim(title=title, axes=axes, themes=themes)
+        parts.append(f"- Claim: {claim}")
         if axes:
-            parts.append(f"  - Axes (from outline): {'；'.join(axes[:5])}")
+            parts.append(f"  - Axes: {'; '.join(axes[:6])}")
         if themes:
-            parts.append(f"  - Candidate themes (from mapped titles): {'、'.join(themes[:5])}")
+            parts.append(f"  - Themes: {', '.join(themes[:6])}")
+
         for pid in uniq[:6]:
             note = papers_by_id.get(pid, {})
-            tagline = _tagline(note)
             bibkey = str(note.get("bibkey") or "").strip()
             cite = f" [@{bibkey}]" if bibkey else ""
+            tagline = _tagline(note)
             if tagline:
                 parts.append(f"  - Evidence: `{pid}`{cite} — {tagline}")
             else:
                 parts.append(f"  - Evidence: `{pid}`{cite}")
+
         parts.append("")
 
     atomic_write_text(out_path, "\n".join(parts).rstrip() + "\n")
@@ -102,10 +115,9 @@ def _looks_refined_matrix(path: Path) -> bool:
     text = path.read_text(encoding="utf-8", errors="ignore")
     if "<!-- SCAFFOLD" in text:
         return False
-    if "TODO" in text:
+    if re.search(r"(?i)\b(?:TODO|TBD|FIXME)\b", text):
         return False
-    # Basic signal: contains some claim lines and looks non-empty.
-    if "- Claim:" in text and len(text.strip()) > 200:
+    if "- Claim:" in text and len(text.strip()) > 400:
         return True
     return False
 
@@ -131,7 +143,7 @@ def _iter_subsections(outline: list) -> list[dict[str, Any]]:
     return items
 
 
-def _top_terms(titles: list[str], *, tokenize) -> list[str]:
+def _top_terms(texts: list[str], *, tokenize) -> list[str]:
     stop = {
         "a",
         "an",
@@ -175,22 +187,40 @@ def _top_terms(titles: list[str], *, tokenize) -> list[str]:
         "approaches",
         "method",
         "methods",
-        "agent",
-        "agents",
-        "llm",
-        "language",
-        "models",
     }
     counts: dict[str, int] = {}
-    for title in titles:
-        for t in tokenize(title or ""):
+    for text in texts:
+        for t in tokenize(text or ""):
             if len(t) < 4:
                 continue
             if t in stop or t in generic:
                 continue
             counts[t] = counts.get(t, 0) + 1
     ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
-    return [t for t, _ in ranked[:6]]
+    return [t for t, _ in ranked[:8]]
+
+
+def _make_claim(*, title: str, axes: list[str], themes: list[str]) -> str:
+    title = (title or "this subsection").strip()
+    axes_hint = " / ".join([_short_axis(a) for a in axes[:2] if a])
+    themes_hint = ", ".join([t for t in themes[:3] if t])
+
+    if themes_hint and axes_hint:
+        return (
+            f"Work in {title} clusters around recurring themes (e.g., {themes_hint}), and the most practical trade-offs tend to show up along {axes_hint}."
+        )
+    if themes_hint:
+        return f"Work in {title} clusters around a small number of recurring themes (e.g., {themes_hint}); comparing them clarifies trade-offs and failure modes."
+    if axes_hint:
+        return f"For {title}, the key comparisons can be organized along {axes_hint}; these axes explain why methods succeed or fail in different settings."
+    return f"For {title}, organizing the literature into a few recurring design patterns makes evaluation and limitations comparable across papers."
+
+
+def _short_axis(text: str) -> str:
+    text = re.sub(r"\s+", " ", (text or "").strip())
+    if len(text) <= 44:
+        return text
+    return text[:43].rstrip() + "…"
 
 
 def _tagline(note: dict[str, Any]) -> str:

@@ -17,6 +17,11 @@ def main() -> int:
     parser.add_argument("--max-pages", type=int, default=6)
     parser.add_argument("--min-chars", type=int, default=1500)
     parser.add_argument("--sleep", type=float, default=1.0, help="Delay between downloads (seconds)")
+    parser.add_argument(
+        "--local-pdfs-only",
+        action="store_true",
+        help="Do not download PDFs; only use cached PDFs under papers/pdfs/ (fulltext mode).",
+    )
     parser.add_argument("--unit-id", default="")
     parser.add_argument("--inputs", default="")
     parser.add_argument("--outputs", default="")
@@ -26,7 +31,7 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[4]
     sys.path.insert(0, str(repo_root))
 
-    from tooling.common import ensure_dir, parse_semicolon_list, read_tsv, write_jsonl
+    from tooling.common import atomic_write_text, ensure_dir, parse_semicolon_list, read_tsv, write_jsonl
 
     workspace = Path(args.workspace).resolve()
     inputs = parse_semicolon_list(args.inputs) or ["papers/core_set.csv"]
@@ -94,6 +99,7 @@ def main() -> int:
     ensure_dir(out_path.parent)
 
     index_records: list[dict[str, Any]] = []
+    missing_pdfs: list[dict[str, Any]] = []
     for row in prioritized:
         paper_id = row["paper_id"]
         title = row.get("title") or ""
@@ -121,9 +127,16 @@ def main() -> int:
             record["chars_extracted"] = int(text_path.stat().st_size)
             index_records.append(record)
             continue
-
         if not pdf_url:
             record["status"] = "skip_no_pdf_url"
+            missing_pdfs.append({**record, **{"reason": "no_pdf_url"}})
+            index_records.append(record)
+            continue
+
+        if bool(args.local_pdfs_only) and not pdf_path.exists():
+            record["status"] = "skip_local_pdfs_only"
+            record["error"] = "local_pdfs_only: missing cached PDF"
+            missing_pdfs.append({**record, **{"reason": "missing_local_pdf"}})
             index_records.append(record)
             continue
 
@@ -156,8 +169,73 @@ def main() -> int:
             record["error"] = str(exc)
             index_records.append(record)
 
+    if missing_pdfs:
+        _write_missing_pdfs_report(
+            workspace,
+            missing_pdfs,
+            local_pdfs_only=bool(args.local_pdfs_only),
+        )
     write_jsonl(out_path, index_records)
     return 0
+
+
+def _write_missing_pdfs_report(workspace: Path, rows: list[dict[str, Any]], *, local_pdfs_only: bool) -> None:
+    from tooling.common import ensure_dir, atomic_write_text
+
+    ensure_dir(workspace / "output")
+    ensure_dir(workspace / "papers")
+
+    md_path = workspace / "output" / "MISSING_PDFS.md"
+    csv_path = workspace / "papers" / "missing_pdfs.csv"
+
+    # CSV for automation.
+    fieldnames = [
+        "paper_id",
+        "title",
+        "year",
+        "url",
+        "arxiv_id",
+        "pdf_url",
+        "status",
+        "reason",
+        "error",
+    ]
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({k: str(r.get(k) or "") for k in fieldnames})
+
+    # Markdown summary for humans.
+    lines: list[str] = [
+        "# Missing PDFs report",
+        "",
+        f"- Mode: `fulltext`",
+        f"- local_pdfs_only: `{local_pdfs_only}`",
+        f"- Missing count: `{len(rows)}`",
+        "",
+        "## How to fix",
+        "",
+        "- Provide PDFs under `papers/pdfs/<paper_id>.pdf`.",
+        "- Or populate `pdf_url`/`arxiv_id` in `papers/core_set.csv` and rerun without `--local-pdfs-only`.",
+        "",
+        "## Items",
+        "",
+        "| paper_id | title | pdf_url | reason |",
+        "|---|---|---|---|",
+    ]
+    for r in rows[:200]:
+        pid = str(r.get("paper_id") or "").strip()
+        title = str(r.get("title") or "").strip().replace("|", "\|")
+        pdf_url = str(r.get("pdf_url") or "").strip().replace("|", "\|")
+        reason = str(r.get("reason") or "").strip().replace("|", "\|")
+        lines.append(f"| {pid} | {title} | {pdf_url} | {reason} |")
+
+    if len(rows) > 200:
+        lines.append("")
+        lines.append(f"(showing first 200 of {len(rows)} items)")
+
+    atomic_write_text(md_path, "\n".join(lines).rstrip() + "\n")
 
 
 def _load_core_set(path: Path) -> list[dict[str, str]]:

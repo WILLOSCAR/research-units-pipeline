@@ -1,6 +1,12 @@
 ---
 name: workspace-init
-description: Initialize a new workspace by copying the standard artifact template (STATUS.md, CHECKPOINTS.md, UNITS.csv, DECISIONS.md plus papers/outline/citations/output folders). Use when starting any pipeline workspace.
+description: |
+  Initialize a new workspace by copying the standard artifact template (STATUS.md, CHECKPOINTS.md, UNITS.csv, DECISIONS.md + folders).
+  **Trigger**: workspace init, initialize workspace, workspace template, 初始化 workspace.
+  **Use when**: 启动任何 pipeline run（必须先有 workspace 工件与目录骨架）。
+  **Skip if**: workspace 已初始化且不希望覆盖既有文件（除非显式 `--overwrite`）。
+  **Network**: none.
+  **Guardrail**: 不要修改 `.codex/skills/workspace-init/assets/` 模板；默认不覆盖已有文件。
 ---
 
 # Workspace Init
@@ -39,4 +45,18 @@ This skill is intentionally simple and deterministic.
 
 ## Script
 
+### Quick Start
+
+- `python .codex/skills/workspace-init/scripts/run.py --help`
 - `python .codex/skills/workspace-init/scripts/run.py --workspace <workspace_dir>`
+
+### All Options
+
+- `--overwrite`: allow overwriting existing files in the target workspace
+
+### Examples
+
+- Create a new workspace:
+  - `python .codex/skills/workspace-init/scripts/run.py --workspace workspaces/my-run`
+- Re-init and overwrite template files (be careful):
+  - `python .codex/skills/workspace-init/scripts/run.py --workspace workspaces/my-run --overwrite`

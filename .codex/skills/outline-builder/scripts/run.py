@@ -43,11 +43,11 @@ def main() -> int:
             "id": "1",
             "title": "Introduction",
             "bullets": [
-                "TODO: motivation + problem setting (why now)",
-                "TODO: definitions + scope/non-goals (per DECISIONS.md)",
-                "TODO: coverage note (data sources/time window/inclusion)",
-                "TODO: high-level taxonomy + how to read this survey",
-                "TODO: contributions + key open problems (high-level)",
+                "Motivation and scope: what is covered, what is excluded, and why the topic matters now.",
+                "Core terminology: define key terms used across sections and clarify ambiguous naming conventions.",
+                "Reader guide: how the taxonomy maps to the outline and how to navigate comparisons.",
+                "What we synthesize: common design patterns, evaluation practices, and recurring failure modes.",
+                "Reproducibility note: data sources/time window and how the core set was constructed.",
             ],
         }
     ]
@@ -59,7 +59,11 @@ def main() -> int:
         name = str(topic.get("name") or "").strip() or f"Topic {section_no}"
         children = topic.get("children") or []
         section_id = str(section_no)
-        section: dict[str, Any] = {"id": section_id, "title": name, "subsections": []}
+        section: dict[str, Any] = {
+            "id": section_id,
+            "title": name,
+            "subsections": [],
+        }
 
         subsection_no = 1
         for child in children if isinstance(children, list) else []:
@@ -71,12 +75,7 @@ def main() -> int:
                 {
                     "id": subsection_id,
                     "title": child_name,
-                    "bullets": [
-                        f"TODO: define terminology/problem setting for {child_name}",
-                        f"TODO: identify 2–4 representative mechanisms/design choices for {child_name}",
-                        f"TODO: list evaluation setups/benchmarks/metrics used for {child_name}",
-                        f"TODO: failure modes/limitations/open problems specific to {child_name}",
-                    ],
+                    "bullets": _subsection_bullets(parent=name, title=child_name),
                 }
             )
             subsection_no += 1
@@ -88,13 +87,27 @@ def main() -> int:
     return 0
 
 
+def _subsection_bullets(*, parent: str, title: str) -> list[str]:
+    title = (title or "").strip() or "this subtopic"
+    parent = (parent or "").strip() or "this chapter"
+    return [
+        f"Scope and definitions for {title}: what belongs here and how it differs from neighboring subtopics.",
+        f"Design space in {title}: enumerate 2-4 recurring mechanisms/choices and when each is preferred.",
+        f"Evaluation practice for {title}: typical benchmarks/metrics and what they fail to capture.",
+        f"Limitations for {title}: robustness, efficiency, safety/ethics, and common failure cases.",
+        f"Connections: how {title} interacts with other parts of {parent} (hybrids, shared components, trade-offs).",
+    ]
+
+
 def _is_placeholder(text: str) -> bool:
     text = (text or "").strip().lower()
     if not text:
         return True
     if "(placeholder)" in text:
         return True
-    if "todo" in text:
+    if "<!-- scaffold" in text:
+        return True
+    if re.search(r"\b(?:todo|tbd|fixme)\b", text, flags=re.IGNORECASE):
         return True
     if re.search(r"(?m)^\s*#\s*outline\s*\(placeholder\)", text):
         return True

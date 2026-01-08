@@ -1,6 +1,12 @@
 ---
 name: survey-seed-harvest
-description: Identify survey/review papers in a retrieved set and extract taxonomy seeds (topics, subtopics, standard terminology) into `outline/taxonomy.yml`. Use when bootstrapping a survey taxonomy from existing surveys/reviews.
+description: |
+  Identify survey/review papers in a retrieved set and extract taxonomy seeds into `outline/taxonomy.yml` (topics/subtopics/terminology).
+  **Trigger**: survey seed harvest, taxonomy seeds, 从 survey 提 taxonomy, bootstrap taxonomy.
+  **Use when**: retrieval/dedup 后想快速从已有 survey/review 论文中提取术语与主题结构，用于加速 `taxonomy-builder`。
+  **Skip if**: 已经有高质量 taxonomy（或你不想被 survey 既有框架限制）。
+  **Network**: none.
+  **Guardrail**: 产物是 seed，必须经 `taxonomy-builder` 重写与对齐 scope；避免生成泛化占位节点。
 ---
 
 # Survey Seed Harvest
@@ -18,6 +24,8 @@ This is an accelerator for the early structure stage: it should make `taxonomy-b
 - `outline/taxonomy.yml` (seed taxonomy; expected to be refined)
 
 ## Workflow (heuristic)
+Uses: `papers/papers_dedup.jsonl`.
+
 
 1. Find likely survey/review papers:
    - title/abstract contains “survey”, “review”, “systematic”, “meta-analysis”
@@ -38,7 +46,21 @@ This is an accelerator for the early structure stage: it should make `taxonomy-b
 
 ## Script (optional helper)
 
-- Run `python .codex/skills/survey-seed-harvest/scripts/run.py --help` first.
-- Then: `python .codex/skills/survey-seed-harvest/scripts/run.py --workspace <workspace_dir>`
+### Quick Start
 
-This script is keyword-based and best treated as a seed generator; expect to refine the taxonomy with `taxonomy-builder`, especially in `pipeline.py --strict` mode.
+- `python .codex/skills/survey-seed-harvest/scripts/run.py --help`
+- `python .codex/skills/survey-seed-harvest/scripts/run.py --workspace <workspace_dir>`
+
+### All Options
+
+- `--top-k <n>`: number of candidate terms to consider
+- `--min-freq <n>`: minimum frequency threshold
+
+### Examples
+
+- More conservative term selection:
+  - `python .codex/skills/survey-seed-harvest/scripts/run.py --workspace <ws> --top-k 80 --min-freq 3`
+
+### Notes
+
+- This helper is keyword-based; treat the output as *seeds* and refine with `taxonomy-builder`.
