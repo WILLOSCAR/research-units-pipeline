@@ -133,7 +133,7 @@ def main() -> int:
         "",
         "## Constraints (for table-filler)",
         "- Minimum tables: >=2.",
-        "- No placeholders: no `TODO`, `…`, or instruction text (e.g., 'enumerate 2-4 ...').",
+        "- No placeholders or instruction-like fragments (e.g., 'enumerate 2-4 items').",
         "- No long prose cells: keep each cell <= ~160 characters when possible.",
         "",
     ]

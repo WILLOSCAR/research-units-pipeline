@@ -10,7 +10,7 @@ from typing import Any
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", required=True)
-    parser.add_argument("--per-subsection", type=int, default=3)
+    parser.add_argument("--per-subsection", type=int, default=0)
     parser.add_argument(
         "--diversity-penalty",
         type=int,
@@ -41,6 +41,10 @@ def main() -> int:
     from tooling.common import load_yaml, normalize_title_for_dedupe, parse_semicolon_list, read_jsonl, tokenize, write_tsv
 
     workspace = Path(args.workspace).resolve()
+
+    per_cfg = _per_subsection_from_queries(workspace / "queries.md")
+    if int(args.per_subsection) <= 0:
+        args.per_subsection = int(per_cfg) if per_cfg else _default_per_subsection_for_workspace(workspace)
     inputs = parse_semicolon_list(args.inputs) or ["papers/core_set.csv", "outline/outline.yml"]
     outputs = parse_semicolon_list(args.outputs) or ["outline/mapping.tsv"]
 
@@ -437,6 +441,47 @@ def _render_mapping_report(
         lines.append("| (none) | - | - |")
     lines.append("")
     return "\n".join(lines)
+
+
+def _per_subsection_from_queries(path: Path) -> int:
+    if not path.exists():
+        return 0
+    for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw.strip()
+        if not line.startswith("- "):
+            continue
+        if ":" not in line:
+            continue
+        key, value = line[2:].split(":", 1)
+        key = key.strip().lower().replace(" ", "_")
+        if key not in {"per_subsection", "mapping_per_subsection", "section_mapper_per_subsection"}:
+            continue
+        value = value.split('#', 1)[0].strip().strip('"').strip("'")
+        try:
+            n = int(value)
+        except Exception:
+            return 0
+        return n if n > 0 else 0
+    return 0
+
+
+
+def _default_per_subsection_for_workspace(workspace: Path) -> int:
+    lock_path = workspace / "PIPELINE.lock.md"
+    if lock_path.exists():
+        try:
+            for raw in lock_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                line = raw.strip()
+                if not line.startswith("pipeline:"):
+                    continue
+                pipeline = line.split(":", 1)[1].strip().lower()
+                if "arxiv-survey" in pipeline:
+                    # Survey drafting needs high cite density to enable evidence-first writing.
+                    return 12
+                break
+        except Exception:
+            pass
+    return 3
 
 
 if __name__ == "__main__":

@@ -76,7 +76,7 @@ def main() -> int:
         if sid and pid:
             mapped_by_section.setdefault(sid, []).append(pid)
 
-    # Write artifacts (idempotent: do not overwrite refined files).
+    # Write artifacts (regenerate by default; skip only if explicit `*.refined.ok` marker exists).
     if out_tables is not None:
         _maybe_write(
             out_tables,
@@ -88,13 +88,28 @@ def main() -> int:
 
 
 def _maybe_write(path: Path, content: str) -> None:
+    freeze_marker = path.with_name(f"{path.name}.refined.ok")
     if path.exists() and path.stat().st_size > 0:
-        existing = path.read_text(encoding="utf-8", errors="ignore")
-        if not _is_placeholder(existing):
+        if freeze_marker.exists():
             return
+        _backup_existing(path)
+
     from tooling.common import atomic_write_text
 
     atomic_write_text(path, content)
+
+
+
+def _backup_existing(path: Path) -> None:
+    from datetime import datetime
+
+    stamp = datetime.now().replace(microsecond=0).isoformat().replace("-", "").replace(":", "")
+    backup = path.with_name(f"{path.name}.bak.{stamp}")
+    counter = 1
+    while backup.exists():
+        backup = path.with_name(f"{path.name}.bak.{stamp}.{counter}")
+        counter += 1
+    path.replace(backup)
 
 
 def _is_placeholder(text: str) -> bool:

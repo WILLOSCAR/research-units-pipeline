@@ -54,8 +54,12 @@ def main() -> int:
     bib_path = workspace / inputs[2]
     out_path = workspace / outputs[0]
 
-    if _looks_refined_jsonl(out_path):
-        return 0
+    # Explicit freeze policy: only skip regeneration if the user creates `outline/evidence_drafts.refined.ok`.
+    freeze_marker = out_path.parent / "evidence_drafts.refined.ok"
+    if out_path.exists() and out_path.stat().st_size > 0:
+        if freeze_marker.exists():
+            return 0
+        _backup_existing(out_path)
 
     briefs = read_jsonl(briefs_path)
     if not briefs:
@@ -103,7 +107,7 @@ def main() -> int:
             pids=cited_pids,
             notes_by_pid=notes_by_pid,
             bibkeys=bibkeys,
-            limit=6,
+            limit=10,
         )
 
         fulltext_n = int(evidence_summary.get("fulltext", 0) or 0) if isinstance(evidence_summary, dict) else 0
@@ -181,6 +185,19 @@ def main() -> int:
     return 0
 
 
+
+def _backup_existing(path: Path) -> None:
+    from datetime import datetime
+
+    stamp = datetime.now().replace(microsecond=0).isoformat().replace("-", "").replace(":", "")
+    backup = path.with_name(f"{path.name}.bak.{stamp}")
+    counter = 1
+    while backup.exists():
+        backup = path.with_name(f"{path.name}.bak.{stamp}.{counter}")
+        counter += 1
+    path.replace(backup)
+
+
 def _looks_refined_jsonl(path: Path) -> bool:
     if not path.exists() or path.stat().st_size == 0:
         return False
@@ -256,6 +273,19 @@ def _evidence_snippets(*, workspace: Path, pids: list[str], notes_by_pid: dict[s
             continue
         cite = f"@{bibkey}"
 
+        key_results = note.get("key_results")
+        preferred_snippet = ""
+        if isinstance(key_results, list):
+            for kr in key_results:
+                kr = str(kr).strip()
+                if not kr:
+                    continue
+                low = kr.lower()
+                if low.startswith("key quantitative results") or low.startswith("evidence level"):
+                    continue
+                preferred_snippet = kr
+                break
+
         evidence_level = str(note.get("evidence_level") or "").strip().lower() or "unknown"
         abstract = str(note.get("abstract") or "").strip()
 
@@ -265,14 +295,26 @@ def _evidence_snippets(*, workspace: Path, pids: list[str], notes_by_pid: dict[s
         text = ""
         provenance: dict[str, Any] = {"evidence_level": evidence_level}
 
-        if evidence_level == "fulltext" and fulltext_path and fulltext_path.exists() and fulltext_path.stat().st_size > 800:
+        if preferred_snippet:
+            text = preferred_snippet
+            provenance.update({"source": "paper_notes", "pointer": f"papers/paper_notes.jsonl:paper_id={pid}#key_results"})
+        elif evidence_level == "fulltext" and fulltext_path and fulltext_path.exists() and fulltext_path.stat().st_size > 800:
             raw = fulltext_path.read_text(encoding="utf-8", errors="ignore")[:3000]
             sents = _split_sentences(raw)
             text = " ".join(sents[:2]).strip()
             provenance.update({"source": "fulltext", "pointer": str(fulltext_rel)})
         elif abstract:
+            # Prefer a more informative sentence (e.g., numeric results / evaluation cues) over the first two sentences.
             sents = _split_sentences(abstract)
-            text = " ".join(sents[:2]).strip() if sents else abstract[:240].strip()
+            chosen = ""
+            for s in sents:
+                if re.search(r"\d+(?:\.\d+)?%?", s):
+                    chosen = s
+                    break
+                if re.search(r"(?i)(success|accuracy|score|outperform|benchmark|dataset|evaluation|human|tasks?)", s):
+                    chosen = s
+                    break
+            text = (chosen or " ".join(sents[:2]) or abstract[:240]).strip()
             provenance.update({"source": "abstract", "pointer": f"papers/paper_notes.jsonl:paper_id={pid}#abstract"})
         else:
             bullets = note.get("summary_bullets") or []

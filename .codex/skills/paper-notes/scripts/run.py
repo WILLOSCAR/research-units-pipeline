@@ -41,6 +41,7 @@ def main() -> int:
     mapping_info = _load_mapping(mapping_path) if mapping_path.exists() else {}
 
     priority_set = _select_priority_papers(core_rows, mapping_info=mapping_info)
+    core_by_id = {r["paper_id"]: r for r in core_rows}
 
     existing_notes_by_id: dict[str, dict[str, Any]] = {}
     if out_path.exists():
@@ -52,7 +53,12 @@ def main() -> int:
                 existing_notes_by_id[pid] = rec
 
     used_bibkeys: set[str] = set()
-    for rec in existing_notes_by_id.values():
+    for pid, rec in existing_notes_by_id.items():
+        row = core_by_id.get(pid)
+        if not row:
+            continue
+        if not _note_matches_row(rec, row):
+            continue
         bibkey = str(rec.get("bibkey") or "").strip()
         if bibkey:
             used_bibkeys.add(bibkey)
@@ -61,7 +67,7 @@ def main() -> int:
     for row in core_rows:
         paper_id = row["paper_id"]
         existing = existing_notes_by_id.get(paper_id)
-        if existing:
+        if existing and _note_matches_row(existing, row):
             notes.append(
                 _backfill_note(
                     existing,
@@ -211,6 +217,28 @@ def _select_priority_papers(core_rows: list[dict[str, str]], *, mapping_info: di
     target_n = min(15, max(10, core_n // 4))  # 50 -> 12
     top = {pid for _, pid in scored[:target_n]}
     return set(pinned) | set(top)
+
+
+
+def _note_matches_row(note: dict[str, Any], row: dict[str, str]) -> bool:
+    """Return True iff an existing note still corresponds to the core-set row for this paper_id.
+
+    This prevents catastrophic drift when `papers/core_set.csv` is regenerated and paper_ids are reassigned.
+    """
+
+    from tooling.common import normalize_title_for_dedupe
+
+    note_title = normalize_title_for_dedupe(str(note.get("title") or "").strip())
+    row_title = normalize_title_for_dedupe(str(row.get("title") or "").strip())
+    if not note_title or not row_title or note_title != row_title:
+        return False
+
+    n_year = str(note.get("year") or "").strip()
+    r_year = str(row.get("year") or "").strip()
+    if n_year and r_year and n_year != r_year:
+        return False
+
+    return True
 
 
 def _match_metadata(records: list[dict[str, Any]], *, title: str, year: str, url: str) -> dict[str, Any]:
@@ -424,7 +452,7 @@ def _abstract_to_bullets(abstract: str) -> list[str]:
     if not abstract:
         return []
     # Deterministic scaffold: use first few sentences as bullets (LLM should refine for priority papers).
-    parts = re.split(r"(?<=[.!?])\\s+", re.sub(r"\\s+", " ", abstract))
+    parts = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", abstract))
     bullets: list[str] = []
     for p in parts:
         p = p.strip()
@@ -454,9 +482,9 @@ def _backfill_note(
         return note
 
     note.setdefault("paper_id", pid)
-    note.setdefault("title", row.get("title") or "")
-    note.setdefault("year", int(row["year"]) if str(row.get("year") or "").isdigit() else str(row.get("year") or ""))
-    note.setdefault("url", row.get("url") or "")
+    note["title"] = row.get("title") or str(note.get("title") or "").strip()
+    note["year"] = int(row["year"]) if str(row.get("year") or "").isdigit() else str(row.get("year") or "")
+    note["url"] = row.get("url") or str(note.get("url") or "").strip()
 
     arxiv_id = str(note.get("arxiv_id") or "").strip() or str(row.get("arxiv_id") or "").strip() or str(meta.get("arxiv_id") or "").strip()
     note["arxiv_id"] = arxiv_id
@@ -467,7 +495,7 @@ def _backfill_note(
     note["pdf_url"] = pdf_url
 
     mapped_sections = sorted(mapping_info.get(pid, {}).get("sections", set()))
-    note.setdefault("mapped_sections", mapped_sections)
+    note["mapped_sections"] = mapped_sections
     note["priority"] = "high" if pid in priority_set else str(note.get("priority") or "normal")
 
     fulltext_path = fulltext_by_id.get(pid)
@@ -482,6 +510,27 @@ def _backfill_note(
 
     note.setdefault("authors", meta.get("authors") or [])
     note.setdefault("abstract", abstract)
+    abstract = str(note.get("abstract") or abstract or "").strip()
+
+    # If a paper becomes high-priority after mapping updates, upgrade the note in-place
+    # (method/key results/limitations) instead of keeping a normal-priority stub.
+    if str(note.get("priority") or "").strip().lower() == "high":
+        bullets = note.get("summary_bullets")
+        if not isinstance(bullets, list) or len([b for b in bullets if str(b).strip()]) < 3:
+            bullets = _high_priority_bullets(title=str(note.get("title") or ""), abstract=abstract, mapped_sections=mapped_sections)
+            note["summary_bullets"] = bullets
+
+        method = str(note.get("method") or "").strip()
+        if not method:
+            note["method"] = _infer_method(title=str(note.get("title") or ""), abstract=abstract, bullets=bullets or [])
+
+        key_results = note.get("key_results")
+        if not isinstance(key_results, list) or not key_results:
+            note["key_results"] = _infer_key_results(abstract=abstract)
+
+        lims = note.get("limitations")
+        if (not isinstance(lims, list)) or (not lims) or (len(lims) == 1 and str(lims[0]).lower().startswith("evidence level:")):
+            note["limitations"] = _infer_limitations(evidence_level=str(note.get("evidence_level") or ""), mapped_sections=mapped_sections, abstract=abstract)
 
     # Ensure bibkey exists (never overwrite).
     used: set[str] = set()

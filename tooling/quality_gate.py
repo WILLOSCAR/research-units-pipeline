@@ -1433,7 +1433,7 @@ def _check_evidence_drafts(workspace: Path, outputs: list[str]) -> list[QualityI
     bib_keys: set[str] = set()
     if bib_path.exists():
         bib_text = bib_path.read_text(encoding="utf-8", errors="ignore")
-        bib_keys = set(re.findall(r"(?im)^@\\w+\\s*\\{\\s*([^,\\s]+)\\s*,", bib_text))
+        bib_keys = set(re.findall(r"(?im)^@\w+\s*\{\s*([^,\s]+)\s*,", bib_text))
 
     def _collect_keys(citations: Any) -> set[str]:
         out: set[str] = set()
@@ -1761,14 +1761,14 @@ def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
                 message="Draft contains unicode ellipsis (`…`), which is treated as a hard failure signal (usually truncated scaffold text); regenerate after fixing outline/claims/visuals.",
             )
         )
-    if re.search(r"(?i)enumerate\\s+2-4\\s+recurring", text):
+    if re.search(r"(?i)enumerate\s+2-4\s+recurring", text):
         issues.append(
             QualityIssue(
                 code="draft_scaffold_instructions",
                 message="Draft still contains scaffold instructions like 'enumerate 2-4 recurring ...'; rewrite outline/claims into concrete content before drafting.",
             )
         )
-    if re.search(r"(?i)\\b(?:scope and definitions for|design space in|evaluation practice for)\\b", text):
+    if re.search(r"(?i)\b(?:scope and definitions for|design space in|evaluation practice for)\b", text):
         issues.append(
             QualityIssue(
                 code="draft_scaffold_phrases",
@@ -2086,7 +2086,7 @@ def _check_global_review(workspace: Path, outputs: list[str]) -> list[QualityIss
                 message="Global review still contains placeholder markers (TODO/TBD/FIXME/(placeholder)); fill the review and set `Status: PASS`.",
             )
         )
-    if not re.search(r"(?im)^-\\s*Status:\\s*(PASS|OK)\\b", text):
+    if not re.search(r"(?im)^-\s*Status:\s*(PASS|OK)\b", text):
         issues.append(
             QualityIssue(
                 code="global_review_status_missing",
@@ -2104,7 +2104,7 @@ def _check_global_review(workspace: Path, outputs: list[str]) -> list[QualityIss
 
     # Evidence-first audit sections (A–E) for writer failure modes.
     required = ["A.", "B.", "C.", "D.", "E."]
-    missing = [k for k in required if not re.search(rf"(?m)^##\\s+{re.escape(k)}", text)]
+    missing = [k for k in required if not re.search(rf"(?m)^##\s+{re.escape(k)}", text)]
     if missing:
         issues.append(
             QualityIssue(
@@ -2247,10 +2247,10 @@ def _check_latex_compile_qa(workspace: Path, outputs: list[str]) -> list[Quality
     else:
         undefined_text = report_text
 
-    if re.search(r"(?im)^Package\\s+natbib\\s+Warning: Citation.+undefined", undefined_text) or re.search(
+    if re.search(r"(?im)^Package\s+natbib\s+Warning: Citation.+undefined", undefined_text) or re.search(
         r"(?im)There were undefined citations", undefined_text
     ) or re.search(r"(?im)There were undefined references", undefined_text) or re.search(
-        r"(?im)^LaTeX\\s+Warning: Reference.+undefined", undefined_text
+        r"(?im)^LaTeX\s+Warning: Reference.+undefined", undefined_text
     ):
         issues.append(
             QualityIssue(

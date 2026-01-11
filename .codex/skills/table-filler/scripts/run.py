@@ -116,6 +116,19 @@ def _cluster_labels(brief: dict[str, Any]) -> list[str]:
     return out
 
 
+
+def _backup_existing(path: Path) -> None:
+    from datetime import datetime
+
+    stamp = datetime.now().replace(microsecond=0).isoformat().replace("-", "").replace(":", "")
+    backup = path.with_name(f"{path.name}.bak.{stamp}")
+    counter = 1
+    while backup.exists():
+        backup = path.with_name(f"{path.name}.bak.{stamp}.{counter}")
+        counter += 1
+    path.replace(backup)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", required=True)
@@ -142,12 +155,16 @@ def main() -> int:
     out_path = workspace / outputs[0]
     ensure_dir(out_path.parent)
 
+    freeze_marker = out_path.with_name(f"{out_path.name}.refined.ok")
     if out_path.exists() and out_path.stat().st_size > 0:
-        existing = out_path.read_text(encoding="utf-8", errors="ignore")
-        if _looks_refined(existing):
+        if freeze_marker.exists():
             return 0
+        _backup_existing(out_path)
 
     briefs = read_jsonl(workspace / inputs[1]) if (workspace / inputs[1]).exists() else []
+    bib_text = (workspace / inputs[3]).read_text(encoding="utf-8", errors="ignore") if (workspace / inputs[3]).exists() else ""
+    bib_keys = set(re.findall(r"(?im)^@\w+\s*\{\s*([^,\s]+)\s*,", bib_text))
+
     packs = read_jsonl(workspace / inputs[2]) if (workspace / inputs[2]).exists() else []
 
     briefs_by = {
@@ -191,7 +208,7 @@ def main() -> int:
         if snips:
             snippet = _truncate(str(snips[0].get("text") or ""), 140)
 
-        cite_keys = _collect_pack_citations(pack)
+        cite_keys = [k for k in _collect_pack_citations(pack) if (not bib_keys) or (k in bib_keys)]
         cites = _format_cites(cite_keys[:5])
 
         lines.append(
@@ -249,7 +266,7 @@ def main() -> int:
             110,
         )
 
-        cite_keys = _collect_pack_citations(pack)
+        cite_keys = [k for k in _collect_pack_citations(pack) if (not bib_keys) or (k in bib_keys)]
         cites = _format_cites(cite_keys[:5])
 
         lines.append(

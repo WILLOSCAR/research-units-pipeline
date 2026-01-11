@@ -313,31 +313,50 @@ def _pinned_records(workspace: Path, deduped: list[dict[str, Any]]) -> list[dict
     if not _looks_like_llm_agent_topic(workspace):
         return []
 
-    # Keep a small set of canonical classics even if they are older / lower-scoring.
-    pin_terms = ["react", "toolformer", "reflexion", "autogpt"]
-    by_term: dict[str, dict[str, Any]] = {}
-    for term in pin_terms:
-        best: tuple[int, int, str, dict[str, Any]] | None = None
-        for rec in deduped:
-            title = str(rec.get("title") or "").strip()
-            low = title.lower()
-            if term not in low:
-                continue
-            year = int(rec.get("year") or 0)
-            # Prefer the earliest (original) paper; break ties by title length.
-            score = -year
-            if low.startswith(term + ":") or low.startswith(term + " "):
-                score += 1000
-            cand = (score, -len(low), low, rec)
-            if best is None or cand > best:
-                best = cand
-        if best is not None:
-            by_term[term] = best[-1]
+    def _norm_arxiv_id(value: str) -> str:
+        value = (value or "").strip()
+        if not value:
+            return ""
+        # e.g. "2210.03629v3" -> "2210.03629"
+        if "v" in value:
+            base, _ = value.split("v", 1)
+            return base.strip()
+        return value
+
+    # Keep a small set of canonical LLM-agent "classics" even if they are older / lower-scoring.
+    #
+    # IMPORTANT: avoid ambiguous title-term pinning (e.g., "ReAct" in OOD detection vs
+    # "ReAct: Synergizing Reasoning and Acting in Language Models"). Prefer stable IDs.
+    pinned_arxiv_ids = [
+        "2210.03629",  # ReAct (reasoning + acting in LMs)
+        "2302.04761",  # Toolformer
+        "2303.11366",  # Reflexion
+        "2305.10601",  # Tree of Thoughts
+        "2305.16291",  # Voyager
+    ]
+
+    by_arxiv: dict[str, dict[str, Any]] = {}
+    for rec in deduped:
+        arxiv_id = _norm_arxiv_id(str(rec.get("arxiv_id") or ""))
+        if not arxiv_id:
+            continue
+        prev = by_arxiv.get(arxiv_id)
+        if prev is None:
+            by_arxiv[arxiv_id] = rec
+            continue
+        prev_abs = str(prev.get("abstract") or "")
+        rec_abs = str(rec.get("abstract") or "")
+        prev_auth = prev.get("authors") or []
+        rec_auth = rec.get("authors") or []
+        prev_score = len(prev_abs) + 10 * (len(prev_auth) if isinstance(prev_auth, list) else 0)
+        rec_score = len(rec_abs) + 10 * (len(rec_auth) if isinstance(rec_auth, list) else 0)
+        if rec_score > prev_score:
+            by_arxiv[arxiv_id] = rec
 
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for term in pin_terms:
-        rec = by_term.get(term)
+    for aid in pinned_arxiv_ids:
+        rec = by_arxiv.get(aid)
         if not rec:
             continue
         key = str(rec.get("dedup_key") or "").strip()
@@ -345,7 +364,9 @@ def _pinned_records(workspace: Path, deduped: list[dict[str, Any]]) -> list[dict
             continue
         seen.add(key)
         out.append(rec)
+
     return out
+
 
 
 def _relevance_score(record: dict[str, Any], *, query_tokens: set[str]) -> int:

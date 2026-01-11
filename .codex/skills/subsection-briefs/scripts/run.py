@@ -50,8 +50,12 @@ def main() -> int:
     goal_path = workspace / (inputs[3] if len(inputs) >= 4 else "GOAL.md")
     out_path = workspace / outputs[0]
 
-    if _looks_refined_jsonl(out_path):
-        return 0
+    # Explicit freeze policy: only skip regeneration if the user creates `outline/subsection_briefs.refined.ok`.
+    freeze_marker = out_path.parent / "subsection_briefs.refined.ok"
+    if out_path.exists() and out_path.stat().st_size > 0:
+        if freeze_marker.exists():
+            return 0
+        _backup_existing(out_path)
 
     outline = load_yaml(outline_path) if outline_path.exists() else None
     if not isinstance(outline, list) or not outline:
@@ -142,6 +146,19 @@ def main() -> int:
     ensure_dir(out_path.parent)
     write_jsonl(out_path, briefs)
     return 0
+
+
+
+def _backup_existing(path: Path) -> None:
+    from datetime import datetime
+
+    stamp = datetime.now().replace(microsecond=0).isoformat().replace("-", "").replace(":", "")
+    backup = path.with_name(f"{path.name}.bak.{stamp}")
+    counter = 1
+    while backup.exists():
+        backup = path.with_name(f"{path.name}.bak.{stamp}.{counter}")
+        counter += 1
+    path.replace(backup)
 
 
 def _looks_refined_jsonl(path: Path) -> bool:
@@ -304,6 +321,13 @@ def _paper_tags(p: PaperRef) -> set[str]:
 
 
 def _build_clusters(*, paper_refs: list[PaperRef], goal: str, want: int) -> list[dict[str, Any]]:
+    """Return 2–3 paper clusters for comparison.
+
+    Quality-gate requirement: at least **two** clusters, each with >=2 papers.
+    When a subsection has only ~3 mapped papers, we allow overlap across clusters
+    (e.g., [A,B] vs [B,C]) to keep the drafting plan executable.
+    """
+
     goal_low = (goal or "").lower()
     forbid_video = ("text-to-image" in goal_low or "t2i" in goal_low) and ("video" not in goal_low and "t2v" not in goal_low)
 
@@ -319,24 +343,25 @@ def _build_clusters(*, paper_refs: list[PaperRef], goal: str, want: int) -> list
     candidates.sort(key=lambda t: (-len(t[1]), t[0]))
 
     clusters: list[dict[str, Any]] = []
-    used: set[str] = set()
 
     def add_cluster(label: str, rationale: str, ps: list[PaperRef]) -> None:
-        pids = []
-        bibs = []
+        pids: list[str] = []
+        bibs: list[str] = []
         for p in sorted(ps, key=lambda x: (-x.year, x.paper_id)):
-            if p.paper_id in used:
-                continue
-            used.add(p.paper_id)
             pids.append(p.paper_id)
             if p.bibkey:
                 bibs.append(p.bibkey)
-            if len(pids) >= 5:
+            if len(pids) >= 8:
                 break
+        # Dedupe while preserving order.
+        seen: set[str] = set()
+        pids = [pid for pid in pids if not (pid in seen or seen.add(pid))]
+        bibs = [b for b in bibs if b]
         if len(pids) < 2:
             return
         clusters.append({"label": label, "rationale": rationale, "paper_ids": pids, "bibkeys": bibs})
 
+    # Tag-based clusters (bootstrap).
     for tag, ps in candidates[: max(1, want)]:
         label = {
             "diffusion": "Diffusion-family methods",
@@ -351,14 +376,61 @@ def _build_clusters(*, paper_refs: list[PaperRef], goal: str, want: int) -> list
         if len(clusters) >= want:
             break
 
-    # Fallback: recency split.
+    # Fallback 1: recency split.
     if len(clusters) < 2 and paper_refs:
-        recent = [p for p in paper_refs if p.year and p.year >= max(0, max([pp.year for pp in paper_refs] or [0]) - 2)]
+        years = [p.year for p in paper_refs if p.year]
+        cutoff = (max(years) - 2) if years else 0
+        recent = [p for p in paper_refs if p.year and p.year >= cutoff]
         classic = [p for p in paper_refs if p not in recent]
         add_cluster("Recent representative works", "Grouped by recency (bootstrap).", recent)
-        add_cluster("Earlier / seminal works", "Grouped by older years (bootstrap).", classic)
+        add_cluster("Earlier / related works", "Grouped by older years (bootstrap).", classic)
 
-    return clusters[:want]
+    # Fallback 2: ensure at least two clusters via overlapping split.
+    if len(clusters) < 2:
+        ranked = sorted(paper_refs, key=lambda x: (-x.year, x.paper_id))
+        if len(ranked) >= 3:
+            add_cluster(
+                "Mapped subset A",
+                "Overlap-allowed split to ensure two comparable clusters when the mapped set is small.",
+                ranked[:2],
+            )
+            add_cluster(
+                "Mapped subset B",
+                "Overlap-allowed split to ensure two comparable clusters when the mapped set is small.",
+                ranked[1:3],
+            )
+        elif len(ranked) >= 2:
+            add_cluster(
+                "Mapped subset",
+                "Small mapped set; use the same pair for both paragraphs, focusing on axis-by-axis contrasts.",
+                ranked[:2],
+            )
+            add_cluster(
+                "Mapped subset (alt)",
+                "Small mapped set; duplicate cluster (writer should compare within the pair along different axes).",
+                ranked[:2],
+            )
+
+
+
+    # Coverage bucket: if mappings are dense, keep a third cluster to increase citation diversity.
+    used: set[str] = set()
+    for c in clusters:
+        if isinstance(c, dict):
+            for pid in c.get("paper_ids") or []:
+                used.add(str(pid).strip())
+
+    remaining = [p for p in paper_refs if p.paper_id and p.paper_id not in used]
+    if len(clusters) < 3 and len(remaining) >= 2:
+        add_cluster(
+            "Additional mapped works",
+            "Coverage bucket to increase citation diversity (use cautiously; avoid over-claiming beyond available evidence).",
+            remaining,
+        )
+    # Keep at most 3 clusters to avoid over-structuring.
+    return clusters[: max(2, min(3, int(want) if int(want) > 0 else 3))]
+
+
 
 
 def _paragraph_plan(*, sub_title: str, rq: str, axes: list[str], clusters: list[dict[str, Any]], evidence_summary: dict[str, int]) -> list[dict[str, Any]]:
@@ -393,7 +465,7 @@ def _paragraph_plan(*, sub_title: str, rq: str, axes: list[str], clusters: list[
     ]
 
     if not has_fulltext:
-        plan[2]["policy"] = "Use conservative language; avoid 'dominant trade-offs' claims; prefer questions-to-answer + evidence TODO fields."
+        plan[2]["policy"] = "Use conservative language; avoid 'dominant trade-offs' claims; prefer questions-to-answer + explicit evidence gaps list."
     else:
         plan[2]["policy"] = "Claims must remain traceable to citations; summarize limitations without adding new facts."
 

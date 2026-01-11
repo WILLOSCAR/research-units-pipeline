@@ -116,11 +116,35 @@ def main() -> int:
                 )
                 records.append(norm)
 
-    if args.online or not records:
+    # Online retrieval policy:
+    # - If explicitly requested via --online: always try.
+    # - Otherwise, when the current pool is smaller than a reasonable minimum,
+    #   try online retrieval as a best-effort expansion step (so a single seed
+    #   import doesn't trap the pipeline in offline-only mode).
+    desired_min = 200
+    if max_results and max_results < desired_min:
+        desired_min = max_results
+
+    def _estimate_unique_count(rs: list[dict[str, Any]]) -> int:
+        from tooling.common import normalize_title_for_dedupe
+
+        keys: set[str] = set()
+        for r in rs:
+            if not isinstance(r, dict):
+                continue
+            title = str(r.get("title") or "").strip()
+            if not title:
+                continue
+            keys.add(_dedupe_key(r, normalize_title_for_dedupe=normalize_title_for_dedupe))
+        return len(keys)
+
+    should_try_online = bool(args.online) or (_estimate_unique_count(records) < desired_min)
+
+    if should_try_online:
         if not keywords:
             online_error = (
-                "No keywords found in queries.md and no offline exports detected. "
-                "Provide offline exports under papers/imports/ or enable network for online retrieval."
+                "No keywords found in queries.md. "
+                "Add keywords (recommended) or provide larger offline exports under papers/imports/."
             )
         else:
             try:
@@ -921,19 +945,19 @@ def _search_arxiv_paged(
     q = _build_arxiv_query(queries)
     if not q:
         return []
-    max_results = max(1, int(max_results))
+    target = max(1, int(max_results))
 
-    page_size = min(200, max_results)
+    page_size = min(200, target)
     all_records: list[dict[str, Any]] = []
     seen_urls: set[str] = set()
 
     start = 0
-    while start < max_results:
+    while len(all_records) < target:
         url = "http://export.arxiv.org/api/query?" + urllib.parse.urlencode(
             {"search_query": q, "start": start, "max_results": page_size}
         )
-        batch = _search_arxiv_once(url=url, query=q, excludes=excludes, year_from=year_from, year_to=year_to)
-        if not batch:
+        batch, raw_count = _search_arxiv_once(url=url, query=q, excludes=excludes, year_from=year_from, year_to=year_to)
+        if raw_count == 0:
             break
         for rec in batch:
             rec_url = str(rec.get("url") or "").strip()
@@ -942,12 +966,11 @@ def _search_arxiv_paged(
             if rec_url:
                 seen_urls.add(rec_url)
             all_records.append(rec)
-        got = len(batch)
-        start += got
-        if got < page_size:
+        start += raw_count
+        if raw_count < page_size:
             break
         time.sleep(3.0)
-    return all_records[:max_results]
+    return all_records[:target]
 
 
 def _search_arxiv_once(
@@ -957,7 +980,7 @@ def _search_arxiv_once(
     excludes: list[str],
     year_from: int | None,
     year_to: int | None,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], int]:
     try:
         with urllib.request.urlopen(url, timeout=30) as resp:
             content = resp.read()
@@ -969,8 +992,12 @@ def _search_arxiv_once(
         "a": "http://www.w3.org/2005/Atom",
         "arxiv": "http://arxiv.org/schemas/atom",
     }
+
+    entries = root.findall("a:entry", ns)
+    raw_count = len(entries)
+
     records: list[dict[str, Any]] = []
-    for entry in root.findall("a:entry", ns):
+    for entry in entries:
         title = (entry.findtext("a:title", default="", namespaces=ns) or "").strip()
         summary = (entry.findtext("a:summary", default="", namespaces=ns) or "").strip()
         published = (entry.findtext("a:published", default="", namespaces=ns) or "").strip()
@@ -1018,7 +1045,7 @@ def _search_arxiv_once(
         if excludes and _is_excluded(record, excludes):
             continue
         records.append(record)
-    return records
+    return (records, raw_count)
 
 
 def _build_arxiv_query(queries: list[str]) -> str:
@@ -1032,8 +1059,6 @@ def _build_arxiv_query(queries: list[str]) -> str:
             (" AND " in q)
             or (" OR " in q)
             or ("NOT " in q)
-            or ("(" in q)
-            or (")" in q)
             or re.search(r"\b(?:all|ti|abs|au|cat|co|jr|rn):", q)
         ):
             parts.append(q)
