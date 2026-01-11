@@ -29,6 +29,20 @@ def _looks_refined(text: str) -> bool:
     return len(bullets) >= 12
 
 
+
+
+def _backup_existing(path: Path) -> None:
+    from datetime import datetime
+
+    stamp = datetime.now().replace(microsecond=0).isoformat().replace('-', '').replace(':', '')
+    backup = path.with_name(f"{path.name}.bak.{stamp}")
+    counter = 1
+    while backup.exists():
+        backup = path.with_name(f"{path.name}.bak.{stamp}.{counter}")
+        counter += 1
+    path.replace(backup)
+
+
 def _pick_axis(axes: Any) -> str:
     if not isinstance(axes, list):
         return ""
@@ -39,22 +53,38 @@ def _pick_axis(axes: Any) -> str:
     return ""
 
 
-def _transition_sentence(*, a_title: str, a_axis: str, b_title: str, b_axis: str) -> str:
+def _pick_terms(terms: Any, *, limit: int = 2) -> str:
+    if not isinstance(terms, list):
+        return ""
+    cleaned: list[str] = []
+    for t in terms:
+        t = re.sub(r"\s+", " ", str(t or "").strip())
+        if not t:
+            continue
+        if t not in cleaned:
+            cleaned.append(t)
+        if len(cleaned) >= int(limit):
+            break
+    return "; ".join(cleaned)
+
+
+def _transition_sentence(*, a_id: str, a_title: str, a_hook: str, a_terms: str, b_id: str, b_title: str, b_hook: str, b_terms: str) -> str:
     a_title = (a_title or "").strip()
     b_title = (b_title or "").strip()
-    a_axis = (a_axis or "").strip()
-    b_axis = (b_axis or "").strip()
+    a_hook = (a_hook or "").strip()
+    b_hook = (b_hook or "").strip()
 
-    if a_axis and b_axis and a_axis != b_axis:
-        return (
-            f"After grounding the discussion in **{a_title}** (especially along *{a_axis}*), "
-            f"we next turn to **{b_title}**, shifting emphasis toward *{b_axis}*."
-        )
-    if a_axis:
-        return f"Building on **{a_title}** (key axis: *{a_axis}*), we now move to **{b_title}** to extend the comparison."
-    return f"With **{a_title}** in place, we now move to **{b_title}** to continue the survey’s argument chain."
+    a_bits = f"**{a_title}**" + (f" ({a_terms})" if a_terms else "")
+    b_bits = f"**{b_title}**" + (f" ({b_terms})" if b_terms else "")
 
-
+    # Three short templates to reduce repetition while staying fact-free.
+    if a_hook and b_hook and a_hook != b_hook:
+        return f"{a_bits} foregrounds *{a_hook}*; next, {b_bits} shifts the comparison to *{b_hook}*."
+    if b_hook:
+        return f"Building on {a_bits}, we move to {b_bits} with emphasis on *{b_hook}*."
+    if a_hook:
+        return f"After {a_bits} (focus: *{a_hook}*), we turn to {b_bits} to continue the argument chain."
+    return f"With {a_bits} in place, we now move to {b_bits}."
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", required=True)
@@ -76,10 +106,11 @@ def main() -> int:
     out_path = workspace / outputs[0]
     ensure_dir(out_path.parent)
 
+    freeze_marker = out_path.with_name("transitions.refined.ok")
     if out_path.exists() and out_path.stat().st_size > 0:
-        existing = out_path.read_text(encoding="utf-8", errors="ignore")
-        if _looks_refined(existing):
+        if freeze_marker.exists():
             return 0
+        _backup_existing(out_path)
 
     outline = load_yaml(workspace / inputs[0]) if (workspace / inputs[0]).exists() else []
     briefs = read_jsonl(workspace / inputs[1]) if (workspace / inputs[1]).exists() else []
@@ -126,9 +157,13 @@ def main() -> int:
             b_id = str(b.get("id") or "").strip()
             a_title = str(a.get("title") or "").strip()
             b_title = str(b.get("title") or "").strip()
-            a_axis = _pick_axis((briefs_by.get(a_id) or {}).get("axes"))
-            b_axis = _pick_axis((briefs_by.get(b_id) or {}).get("axes"))
-            sent = _transition_sentence(a_title=a_title, a_axis=a_axis, b_title=b_title, b_axis=b_axis)
+            a_brief = briefs_by.get(a_id) or {}
+            b_brief = briefs_by.get(b_id) or {}
+            a_hook = str(a_brief.get("contrast_hook") or _pick_axis(a_brief.get("axes")) or "").strip()
+            b_hook = str(b_brief.get("contrast_hook") or _pick_axis(b_brief.get("axes")) or "").strip()
+            a_terms = _pick_terms(a_brief.get("bridge_terms"))
+            b_terms = _pick_terms(b_brief.get("bridge_terms"))
+            sent = _transition_sentence(a_id=a_id, a_title=a_title, a_hook=a_hook, a_terms=a_terms, b_id=b_id, b_title=b_title, b_hook=b_hook, b_terms=b_terms)
             lines.append(f"- {a_id} → {b_id}: {sent}")
             wrote += 1
 

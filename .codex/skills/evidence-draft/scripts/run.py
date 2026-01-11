@@ -46,12 +46,32 @@ def main() -> int:
         "outline/subsection_briefs.jsonl",
         "papers/paper_notes.jsonl",
         "citations/ref.bib",
+        "papers/evidence_bank.jsonl",
+        "outline/evidence_bindings.jsonl",
     ]
     outputs = parse_semicolon_list(args.outputs) or ["outline/evidence_drafts.jsonl"]
 
-    briefs_path = workspace / inputs[0]
-    notes_path = workspace / inputs[1]
-    bib_path = workspace / inputs[2]
+    def _first(suffixes: tuple[str, ...], default: str) -> str:
+        for raw in inputs:
+            rel = str(raw or '').strip()
+            if not rel:
+                continue
+            for suf in suffixes:
+                if rel.endswith(suf):
+                    return rel
+        return default
+
+    briefs_rel = _first(("outline/subsection_briefs.jsonl", "subsection_briefs.jsonl"), "outline/subsection_briefs.jsonl")
+    notes_rel = _first(("papers/paper_notes.jsonl", "paper_notes.jsonl"), "papers/paper_notes.jsonl")
+    bib_rel = _first(("citations/ref.bib", "ref.bib"), "citations/ref.bib")
+    bank_rel = _first(("papers/evidence_bank.jsonl", "evidence_bank.jsonl"), "papers/evidence_bank.jsonl")
+    bindings_rel = _first(("outline/evidence_bindings.jsonl", "evidence_bindings.jsonl"), "outline/evidence_bindings.jsonl")
+
+    briefs_path = workspace / briefs_rel
+    notes_path = workspace / notes_rel
+    bib_path = workspace / bib_rel
+    bank_path = workspace / bank_rel
+    bindings_path = workspace / bindings_rel
     out_path = workspace / outputs[0]
 
     # Explicit freeze policy: only skip regeneration if the user creates `outline/evidence_drafts.refined.ok`.
@@ -80,6 +100,25 @@ def main() -> int:
         if pid:
             notes_by_pid[pid] = rec
 
+    # Optional: evidence bank + binder output (WebWeaver-style addressable memory).
+    bank_by_eid: dict[str, dict[str, Any]] = {}
+    if bank_path.exists() and bank_path.stat().st_size > 0:
+        for rec in read_jsonl(bank_path):
+            if not isinstance(rec, dict):
+                continue
+            eid = str(rec.get("evidence_id") or "").strip()
+            if eid:
+                bank_by_eid[eid] = rec
+
+    bindings_by_sub: dict[str, dict[str, Any]] = {}
+    if bindings_path.exists() and bindings_path.stat().st_size > 0:
+        for rec in read_jsonl(bindings_path):
+            if not isinstance(rec, dict):
+                continue
+            sid = str(rec.get("sub_id") or "").strip()
+            if sid:
+                bindings_by_sub[sid] = rec
+
     records: list[dict[str, Any]] = []
     md_dir = workspace / "outline" / "evidence_drafts"
     ensure_dir(md_dir)
@@ -102,13 +141,48 @@ def main() -> int:
         cited_pids = _pids_from_clusters(clusters)
         cite_keys = _cite_keys_for_pids(cited_pids, notes_by_pid=notes_by_pid, bibkeys=bibkeys)
 
-        evidence_snippets = _evidence_snippets(
-            workspace=workspace,
-            pids=cited_pids,
-            notes_by_pid=notes_by_pid,
-            bibkeys=bibkeys,
-            limit=10,
-        )
+        evidence_snippets: list[dict[str, Any]] = []
+        bound = bindings_by_sub.get(sub_id) or {}
+        bound_eids = bound.get("evidence_ids") or []
+        if isinstance(bound_eids, list) and bound_eids and bank_by_eid:
+            for eid in bound_eids:
+                eid = str(eid or '').strip()
+                if not eid:
+                    continue
+                it = bank_by_eid.get(eid) or {}
+                bibkey = str(it.get('bibkey') or '').strip()
+                if not bibkey or (bibkeys and bibkey not in bibkeys):
+                    continue
+                snippet = str(it.get('snippet') or '').strip()
+                if not snippet:
+                    continue
+                pid = str(it.get('paper_id') or '').strip()
+                lvl = str(it.get('evidence_level') or '').strip().lower() or 'unknown'
+                locator = it.get('locator') or {}
+                prov = {
+                    'evidence_level': lvl,
+                    'source': str((locator or {}).get('source') or '').strip() or 'evidence_bank',
+                    'pointer': str((locator or {}).get('pointer') or '').strip() or f"papers/evidence_bank.jsonl:evidence_id={eid}",
+                }
+                evidence_snippets.append(
+                    {
+                        'evidence_id': eid,
+                        'text': snippet,
+                        'paper_id': pid,
+                        'citations': [f"@{bibkey}"],
+                        'provenance': prov,
+                    }
+                )
+                if len(evidence_snippets) >= 10:
+                    break
+        else:
+            evidence_snippets = _evidence_snippets(
+                workspace=workspace,
+                pids=cited_pids,
+                notes_by_pid=notes_by_pid,
+                bibkeys=bibkeys,
+                limit=10,
+            )
 
         fulltext_n = int(evidence_summary.get("fulltext", 0) or 0) if isinstance(evidence_summary, dict) else 0
         abstract_n = int(evidence_summary.get("abstract", 0) or 0) if isinstance(evidence_summary, dict) else 0
@@ -162,6 +236,7 @@ def main() -> int:
         pack = {
             "sub_id": sub_id,
             "title": title,
+            "evidence_ids": [str(e or "").strip() for e in ((bound_eids if isinstance(bound_eids, list) and bound_eids else [s.get("evidence_id") for s in evidence_snippets]) or []) if str(e or "").strip()],
             "evidence_level_summary": {
                 "fulltext": fulltext_n,
                 "abstract": abstract_n,
@@ -350,16 +425,11 @@ def _verify_fields(*, axes: list[str], evidence_summary: dict[str, Any]) -> list
         if x and x not in fields:
             fields.append(x)
 
-    fulltext_n = int(evidence_summary.get("fulltext", 0) or 0)
-    abstract_n = int(evidence_summary.get("abstract", 0) or 0)
-
-    if fulltext_n == 0 and abstract_n > 0:
-        add("verify fine-grained details with full text before making strong conclusions (abstract-level evidence)")
-
     joined = " ".join([a.lower() for a in axes])
-    if "evaluation" in joined or "benchmark" in joined or "metric" in joined:
-        add("named benchmarks/datasets used")
-        add("metrics/human-eval protocol")
+
+    # Default verification checklist (keep as short phrases; no prose).
+    add("named benchmarks/datasets used")
+    add("metrics/human-eval protocol")
     if "compute" in joined or "efficien" in joined or "cost" in joined:
         add("compute/training/inference cost")
     if "data" in joined or "training" in joined:
@@ -593,13 +663,15 @@ def _write_md_pack(path: Path, pack: dict[str, Any]) -> None:
         if not isinstance(s, dict):
             continue
         text = str(s.get("text") or "").strip()
+        eid = str(s.get("evidence_id") or "").strip()
         cites = " ".join([c for c in (s.get("citations") or []) if str(c).strip()])
         prov = s.get("provenance")
         prov_s = ""
         if isinstance(prov, dict):
             prov_s = " | ".join([str(prov.get("source") or "").strip(), str(prov.get("pointer") or "").strip()]).strip(" |")
         if text:
-            line = f"- {text} {cites}".rstrip()
+            prefix = f"({eid}) " if eid else ""
+            line = f"- {prefix}{text} {cites}".rstrip()
             if prov_s:
                 line += f" (provenance: {prov_s})"
             lines.append(line)

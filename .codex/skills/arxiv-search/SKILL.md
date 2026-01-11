@@ -73,6 +73,8 @@ When online, prefer rich arXiv metadata (categories, arxiv_id, pdf_url, publishe
 
 - Online (multi-query + excludes):
   - `python .codex/skills/arxiv-search/scripts/run.py --workspace <ws> --query "LLM agent" --query "tool use" --exclude "survey" --max-results 300`
+- Fetch a single paper by arXiv ID (direct `id_list` fetch):
+  - `python .codex/skills/arxiv-search/scripts/run.py --workspace <ws> --query 2509.02547 --max-results 1`
 - Offline auto-detect (no flags):
   - Place `papers/import.csv` (or `.json/.jsonl`) under the workspace, then run: `python .codex/skills/arxiv-search/scripts/run.py --workspace <ws>`
 - Offline import + time window (via `queries.md`):

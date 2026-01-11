@@ -15,9 +15,13 @@ def _is_placeholder(text: str) -> bool:
         return True
     if "(placeholder)" in low:
         return True
-    if "…" in text:
+    # Treat unicode ellipsis as placeholder leakage.
+    if "…" in (text or ""):
         return True
-    if re.search(r"(?i)\b(?:todo|tbd|fixme)\b", low):
+    if re.search(r"(?i)(?:todo|tbd|fixme)", low):
+        return True
+    # Treat three-or-more dots as truncation / scaffold leakage in tables.
+    if re.search(r"(?m)\.\.+", text or ""):
         return True
     return False
 
@@ -48,7 +52,7 @@ def _format_cites(keys: list[str]) -> str:
             continue
         if k.startswith("[@") and k.endswith("]"):
             k = k[2:-1]
-        if k.startswith("@"):
+        if k.startswith("@"):  # tolerate @Key
             k = k[1:]
         for token in re.findall(r"[A-Za-z0-9:_-]+", k):
             if token and token not in cleaned:
@@ -62,8 +66,8 @@ def _truncate(text: str, n: int) -> str:
     text = re.sub(r"\s+", " ", (text or "").strip())
     if len(text) <= n:
         return text
-    # Use plain '...' to avoid triggering ellipsis placeholder gates.
-    return text[: max(0, n - 3)].rstrip() + "..."
+    # Do not emit `...` markers; prefer shorter schemas/cells.
+    return text[:n].rstrip()
 
 
 def _collect_pack_citations(pack: dict[str, Any]) -> list[str]:
@@ -78,7 +82,7 @@ def _collect_pack_citations(pack: dict[str, Any]) -> list[str]:
                 continue
             if c.startswith("[@") and c.endswith("]"):
                 c = c[2:-1]
-            if c.startswith("@"):
+            if c.startswith("@"):  # tolerate @Key
                 c = c[1:]
             for k in re.findall(r"[A-Za-z0-9:_-]+", c):
                 if k and k not in keys:
@@ -102,21 +106,6 @@ def _collect_pack_citations(pack: dict[str, Any]) -> list[str]:
     return keys
 
 
-def _cluster_labels(brief: dict[str, Any]) -> list[str]:
-    out: list[str] = []
-    clusters = brief.get("clusters") or []
-    if not isinstance(clusters, list):
-        return out
-    for c in clusters:
-        if not isinstance(c, dict):
-            continue
-        label = str(c.get("label") or "").strip()
-        if label and label not in out:
-            out.append(label)
-    return out
-
-
-
 def _backup_existing(path: Path) -> None:
     from datetime import datetime
 
@@ -127,6 +116,20 @@ def _backup_existing(path: Path) -> None:
         backup = path.with_name(f"{path.name}.bak.{stamp}.{counter}")
         counter += 1
     path.replace(backup)
+
+
+def _clean_axis(axis: str) -> str:
+    axis = re.sub(r"\s+", " ", (axis or "").strip())
+    axis = axis.rstrip(" .;:，；。")
+    # Make slashes breakable in LaTeX tables by surrounding with spaces.
+    axis = re.sub(r"\s*/\s*", " / ", axis)
+    return axis
+
+
+def _clean_verify_field(v: str) -> str:
+    v = re.sub(r"\s+", " ", (v or "").strip())
+    v = v.rstrip(" .;:，；。")
+    return v
 
 
 def main() -> int:
@@ -187,8 +190,8 @@ def main() -> int:
         "",
         "## Table 1: Subsection comparison map (axes + representative works)",
         "",
-        "| Subsection | Axes | Clusters | Evidence snippet | Representative works |",
-        "|---|---|---|---|---|",
+        "| Subsection | Axes | Representative works |",
+        "|---|---|---|",
     ]
 
     wrote = 0
@@ -196,30 +199,18 @@ def main() -> int:
         brief = briefs_by.get(sid) or {}
         pack = packs_by.get(sid) or {}
         title = str(brief.get("title") or pack.get("title") or "").strip()
-        axes = [str(a).strip() for a in (brief.get("axes") or []) if str(a).strip()]
-        clusters = _cluster_labels(brief)
 
-        snippet = ""
-        snips = [
-            s
-            for s in (pack.get("evidence_snippets") or [])
-            if isinstance(s, dict) and str(s.get("text") or "").strip()
-        ]
-        if snips:
-            snippet = _truncate(str(snips[0].get("text") or ""), 140)
+        axes_raw = [str(a).strip() for a in (brief.get("axes") or []) if str(a).strip()]
+        axes = [_clean_axis(a) for a in axes_raw if _clean_axis(a)]
 
         cite_keys = [k for k in _collect_pack_citations(pack) if (not bib_keys) or (k in bib_keys)]
         cites = _format_cites(cite_keys[:5])
 
         lines.append(
             "| "
-            + _truncate(f"{sid} {title}", 54).replace("|", " ")
+            + _truncate(f"{sid} {title}", 90).replace("|", " ")
             + " | "
-            + _truncate("; ".join(axes[:5]) or "—", 64).replace("|", " ")
-            + " | "
-            + _truncate(" vs ".join(clusters[:2]) or (clusters[0] if clusters else "—"), 54).replace("|", " ")
-            + " | "
-            + _truncate(snippet or "—", 90).replace("|", " ")
+            + ("<br>".join([_truncate(a, 72) for a in axes[:5]]) if axes else "—").replace("|", " ")
             + " | "
             + (cites or "—")
             + " |"
@@ -227,15 +218,15 @@ def main() -> int:
         wrote += 1
 
     if wrote == 0:
-        lines.append("| (no subsections) | - | - | - | - |")
+        lines.append("| (no subsections) | - | - |")
 
     lines.extend(
         [
             "",
-            "## Table 2: Evaluation practice + verification needs",
+            "## Table 2: Evidence readiness + verification needs",
             "",
-            "| Subsection | Evaluation protocol highlights | Verify fields | Evidence levels | Representative works |",
-            "|---|---|---|---|---|",
+            "| Subsection | Evidence levels | Verify fields | Representative works |",
+            "|---|---|---|---|",
         ]
     )
 
@@ -246,38 +237,28 @@ def main() -> int:
 
         ev = pack.get("evidence_level_summary") or {}
         if isinstance(ev, dict):
-            ev_txt = ", ".join(
-                [f"{k}={int(ev.get(k) or 0)}" for k in ["fulltext", "abstract", "title"] if k in ev]
-            )
+            ev_txt = ", ".join([f"{k}={int(ev.get(k) or 0)}" for k in ["fulltext", "abstract", "title"] if k in ev])
         else:
             ev_txt = ""
 
-        eval_bullets = []
-        for item in pack.get("evaluation_protocol") or []:
-            if isinstance(item, dict):
-                b = str(item.get("bullet") or "").strip()
-                if b:
-                    eval_bullets.append(b)
-        eval_txt = _truncate(eval_bullets[0] if eval_bullets else "—", 120)
-
         verify = pack.get("verify_fields") or []
-        verify_txt = _truncate(
-            "; ".join([str(v).strip() for v in verify if str(v).strip()][:6]) or "—",
-            110,
-        )
+        verify_items = [_clean_verify_field(v) for v in verify if _clean_verify_field(v)]
+
+        # Drop generic boilerplate if more specific fields exist.
+        generic_prefixes = ("verify fine-grained", "validate with full", "abstract-level evidence")
+        specific = [v for v in verify_items if not v.lower().startswith(generic_prefixes)]
+        verify_items = specific or verify_items
 
         cite_keys = [k for k in _collect_pack_citations(pack) if (not bib_keys) or (k in bib_keys)]
         cites = _format_cites(cite_keys[:5])
 
         lines.append(
             "| "
-            + _truncate(f"{sid} {title}", 54).replace("|", " ")
-            + " | "
-            + eval_txt.replace("|", " ")
-            + " | "
-            + verify_txt.replace("|", " ")
+            + _truncate(f"{sid} {title}", 90).replace("|", " ")
             + " | "
             + (ev_txt or "—")
+            + " | "
+            + ("<br>".join([_truncate(v, 80) for v in verify_items[:5]]) if verify_items else "—").replace("|", " ")
             + " | "
             + (cites or "—")
             + " |"

@@ -28,6 +28,7 @@ flowchart LR
     TB[taxonomy-builder]
     OB[outline-builder]
     SM[section-mapper]
+    OR[outline-refiner]
     C2A{{Approve C2 (HUMAN)}}:::human
   end
 
@@ -39,6 +40,7 @@ flowchart LR
 
   subgraph "C4 - Citations + visuals [NO PROSE]"
     CV[citation-verifier]
+    EB[evidence-binder]
     ED[evidence-draft]
     CMR[claim-matrix-rewriter]
     TS[table-schema]
@@ -48,17 +50,19 @@ flowchart LR
 
   subgraph "C5 - Writing [PROSE after C2]"
     TW[transition-weaver]
-    PW[prose-writer]
+    SW[subsection-writer]
+    MG[section-merger]
     DP[draft-polisher]
     GR[global-reviewer]
+    PA[pipeline-auditor]
     LS[latex-scaffold]:::optional
     LCQ[latex-compile-qa]:::optional
   end
 
-  WS --> LE --> DR --> TB --> OB --> SM --> C2A --> PT --> PN --> SB --> CV --> ED --> CMR --> TS --> TF --> SV --> TW --> PW --> DP --> GR
+  WS --> LE --> DR --> TB --> OB --> SM --> OR --> C2A --> PT --> PN --> SB --> CV --> EB --> ED --> CMR --> TS --> TF --> SV --> TW --> SW --> MG --> DP --> GR --> PA
   KX -.-> LE
   SSH -.-> TB
-  GR -.-> LS -.-> LCQ
+  PA -.-> LS -.-> LCQ
 ```
 
 ## arxiv-survey-latex (C0–C5)
@@ -83,6 +87,7 @@ flowchart LR
     TB[taxonomy-builder]
     OB[outline-builder]
     SM[section-mapper]
+    OR[outline-refiner]
     C2A{{Approve C2 (HUMAN)}}:::human
   end
 
@@ -94,6 +99,7 @@ flowchart LR
 
   subgraph "C4 - Citations + visuals [NO PROSE]"
     CV[citation-verifier]
+    EB[evidence-binder]
     ED[evidence-draft]
     CMR[claim-matrix-rewriter]
     TS[table-schema]
@@ -103,14 +109,16 @@ flowchart LR
 
   subgraph "C5 - Writing + PDF [PROSE after C2]"
     TW[transition-weaver]
-    PW[prose-writer]
+    SW[subsection-writer]
+    MG[section-merger]
     DP[draft-polisher]
     GR[global-reviewer]
+    PA[pipeline-auditor]
     LS[latex-scaffold]
     LCQ[latex-compile-qa]
   end
 
-  WS --> LE --> DR --> TB --> OB --> SM --> C2A --> PT --> PN --> SB --> CV --> ED --> CMR --> TS --> TF --> SV --> TW --> PW --> DP --> GR --> LS --> LCQ
+  WS --> LE --> DR --> TB --> OB --> SM --> OR --> C2A --> PT --> PN --> SB --> CV --> EB --> ED --> CMR --> TS --> TF --> SV --> TW --> SW --> MG --> DP --> GR --> PA --> LS --> LCQ
   KX -.-> LE
   SSH -.-> TB
 ```

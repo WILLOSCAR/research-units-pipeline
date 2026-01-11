@@ -1,14 +1,20 @@
 ---
 name: arxiv-survey
-version: 1.1
+version: 1.3
 target_artifacts:
+  - papers/retrieval_report.md
   - outline/taxonomy.yml
   - outline/outline.yml
   - outline/mapping.tsv
+  - outline/coverage_report.md
+  - outline/outline_state.jsonl
   - outline/subsection_briefs.jsonl
   - outline/transitions.md
   - papers/fulltext_index.jsonl
   - papers/paper_notes.jsonl
+  - papers/evidence_bank.jsonl
+  - outline/evidence_bindings.jsonl
+  - outline/evidence_binding_report.md
   - outline/claim_evidence_matrix.md
   - outline/table_schema.md
   - outline/tables.md
@@ -16,8 +22,14 @@ target_artifacts:
   - outline/figures.md
   - outline/evidence_drafts.jsonl
   - citations/ref.bib
+  - sections/sections_manifest.jsonl
+  - sections/abstract.md
+  - sections/open_problems.md
+  - sections/conclusion.md
   - output/GLOBAL_REVIEW.md
   - output/DRAFT.md
+  - output/MERGE_REPORT.md
+  - output/AUDIT_REPORT.md
 default_checkpoints: [C0,C1,C2,C3,C4,C5]
 units_template: templates/UNITS.arxiv-survey.csv
 ---
@@ -55,10 +67,13 @@ required_skills:
 - taxonomy-builder
 - outline-builder
 - section-mapper
+- outline-refiner
 produces:
 - outline/taxonomy.yml
 - outline/outline.yml
 - outline/mapping.tsv
+- outline/coverage_report.md
+- outline/outline_state.jsonl
 human_checkpoint:
 - approve: scope + outline
 - write_to: DECISIONS.md
@@ -74,6 +89,7 @@ required_skills:
 produces:
 - papers/fulltext_index.jsonl
 - papers/paper_notes.jsonl
+- papers/evidence_bank.jsonl
 - outline/subsection_briefs.jsonl
 
 Notes:
@@ -84,6 +100,7 @@ Notes:
 ## Stage 4 - Citations + visuals (C4) [NO PROSE]
 required_skills:
 - citation-verifier
+- evidence-binder
 - evidence-draft
 - claim-matrix-rewriter
 - table-schema
@@ -92,6 +109,8 @@ required_skills:
 produces:
 - citations/ref.bib
 - citations/verified.jsonl
+- outline/evidence_bindings.jsonl
+- outline/evidence_binding_report.md
 - outline/evidence_drafts.jsonl
 - outline/claim_evidence_matrix.md
 - outline/table_schema.md
@@ -105,18 +124,24 @@ Notes:
 - `table-schema` defines comparison table questions/columns and the evidence fields each column must be grounded in.
 - `table-filler` fills `outline/tables.md` from evidence packs; if fields are missing it must surface them explicitly (do not write long prose in cells).
 
-## Stage 5 - Writing (C5) [PROSE ALLOWED AFTER C2]
-required_skills:
-- transition-weaver
-- prose-writer
-- draft-polisher
-- global-reviewer
-optional_skills:
-- latex-scaffold
-- latex-compile-qa
+## Stage 5 - Draft (C5) [PROSE AFTER C2]
 produces:
-  - output/DRAFT.md
-  - output/GLOBAL_REVIEW.md
+- sections/sections_manifest.jsonl
+- output/MERGE_REPORT.md
+- output/DRAFT.md
+- output/GLOBAL_REVIEW.md
+- output/AUDIT_REPORT.md
+
+Notes:
+- WebWeaver-style “planner vs writer” split (single agent, two passes):
+  - Planner pass: for each section/subsection, pick the exact citation IDs to use from the evidence bank (`outline/evidence_drafts.jsonl`) and keep scope consistent with the outline.
+  - Writer pass: write that section using only those citation IDs; avoid dumping the whole notes set into context.
+- Treat this stage as an iteration loop: draft per H3 → de-template/cohere → global review → (if gaps) back to C3/C4 → regenerate.
+- Recommended skills (toolkit, not a rigid one-shot chain):
+  - Modular drafting: `subsection-writer` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor`.
+  - Legacy one-shot drafting: `prose-writer` (kept for quick experiments; less debuggable).
+- Add `pipeline-auditor` after `global-reviewer` as a regression test (blocks on ellipsis, repeated boilerplate, and citation hygiene).
+- If you also need a PDF deliverable, use `latex-scaffold` + `latex-compile-qa` (see `arxiv-survey-latex`).
 
 ## Quality gates (strict mode)
 - Citation coverage: expect a large, verifiable bibliography (e.g., ≥150 BibTeX entries) and subsection-level cite density (e.g., H3 ≥3).

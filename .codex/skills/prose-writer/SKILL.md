@@ -44,7 +44,7 @@ This skill should behave like a synthesis engine:
 - Snapshot: bullets-first, ~1 page; summarize what evidence exists + what is missing.
 - Draft: section-by-section prose that follows each subsection’s `paragraph_plan` and uses paragraph-level citations.
 
-## Workflow (v2: briefs + evidence packs)
+## Workflow (v3: planner↔writer, section-by-section)
 
 Before writing, load the structural and coherence inputs: `outline/outline.yml` (section order) and `outline/transitions.md` (transition map). Optionally consult `outline/claim_evidence_matrix.md` as an evidence index.
 
@@ -53,34 +53,47 @@ Before writing, load the structural and coherence inputs: `outline/outline.yml` 
    - If `Approve C2` is not ticked, write a short request block (what you plan to write + which evidence packs you will rely on), then stop.
 
 2. **Input integrity check (fail fast)**
-   - Read `outline/subsection_briefs.jsonl` and confirm:
-     - each H3 has a brief,
-     - `scope_rule/rq/axes/clusters/paragraph_plan` are filled,
-     - no placeholders/ellipsis.
-   - Read `outline/evidence_drafts.jsonl` and confirm:
-     - each H3 has >=3 concrete comparisons,
-     - `blocking_missing` is empty (or explicitly acknowledged and you switch to snapshot mode).
+   - Read `outline/subsection_briefs.jsonl` and confirm every H3 has a brief and the following fields are *filled and non-placeholder*: `scope_rule`, `rq`, `axes`, `clusters`, `paragraph_plan`.
+   - Read `outline/evidence_drafts.jsonl` and confirm every H3 has an evidence pack with:
+     - `blocking_missing` empty,
+     - `evidence_snippets` non-empty,
+     - `concrete_comparisons` >= 3.
 
-3. **Write per-subsection mini-essays (do NOT draft whole paper in one blob)**
-   - For each subsection (`H3`):
-     - read its brief (`rq`, `axes`, `clusters`, `paragraph_plan`, evidence-level policy)
-     - read its evidence pack (`claim_candidates`, `concrete_comparisons`, `evaluation_protocol`, `failures_limitations`)
-     - write 2–3 paragraphs following `paragraph_plan`:
-       - Paragraph structure: Claim → Evidence → Synthesis.
-       - Each paragraph must include citations that match the claims.
-     - The subsection must have a **unique thesis** (would be false in other subsections).
+3. **Planner pass (NO PROSE YET)**
+   - For each H3 subsection, read its brief + evidence pack and decide:
+     - **Thesis**: 1 sentence that is true for this subsection and would be false in other subsections.
+     - **Two contrasts**: 2 sentences of the form “A vs B” where each side is grounded in *specific* cited works (not “they differ”).
+     - **One limitation/failure mode**: 1 sentence grounded in the evidence pack’s `failures_limitations` or snippet provenance.
+     - **Cite placement**: which citations will appear in which paragraph (so citations are evidence, not decoration).
+   - If you cannot do this without guessing, stop and push the gap upstream (strengthen briefs/notes/evidence packs) rather than writing template prose.
 
-4. **Weave transitions (coherence)**
+4. **Writer pass (write per subsection; avoid global dump)**
+   - Write 2–3 paragraphs per H3 following `paragraph_plan`.
+   - Keep prose natural, but make every paragraph an argument: claim → cited evidence → synthesis.
+   - **Evidence note placement**: if the run is abstract-only, put a single short evidence note once (e.g., in the introduction or an “Evidence note” subsection). Do *not* repeat the same “abstract-only” disclaimer sentence in every H3; only mention verification needs when they are subsection-specific.
+   - Enforce `scope_rule` strictly to prevent silent drift; if you include an out-of-scope paper as a bridge, justify it once and keep it secondary.
+
+5. **Weave transitions (coherence)**
    - Between adjacent subsections/sections, add 1–2 transition sentences that reflect the taxonomy logic (not generic “Moreover/However”).
-   - Keep the scope boundary consistent with `scope_rule` (avoid silent drift like T2I→T2V).
-
-5. **One-pass rewrite (de-template)**
-   - Remove repeated phrasing across subsections.
-   - Replace generic claims (“trade-offs depend on benchmarks”) with concrete comparisons from evidence packs.
-   - If evidence is abstract-only, downgrade to “hypothesis + verification needed” rather than confident conclusions.
 
 6. **Integrate cross-cutting artifacts**
    - Insert `outline/tables.md` (>=2 tables), `outline/timeline.md` (>=8 cited milestones), and `outline/figures.md` (>=2 specs) into the draft.
+   - Prefer referencing tables in prose over restating an identical “axes list” sentence in every subsection.
+
+7. **Self-check + revise (hard fail signals)**
+   - If the draft contains `...`, unicode ellipsis `…`, scaffold phrases (e.g., “enumerate 2-4 …”), or repeated boilerplate sentences, treat it as a pipeline failure signal and rewrite.
+   - If tables contain truncation or instruction-like text, regenerate them upstream (C4) rather than patching them into the prose.
+
+## Anti-template bans (hard fail)
+
+Do not emit any of the following in final prose (rewrite upstream instead):
+- “Scope and definitions … / Design space … / Evaluation practice …”
+- “enumerate 2-4 …”
+- “We use the following working claim …”
+- “Across representative works, the dominant trade-offs …”
+- “A useful way to compare approaches is …”
+- “abstracts are treated as verification targets …”
+- “The main axes we track are …”
 
 ## Quality checklist
 

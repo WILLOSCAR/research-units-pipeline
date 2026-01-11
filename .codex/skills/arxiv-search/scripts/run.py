@@ -67,6 +67,20 @@ def main() -> int:
     if not queries:
         raise SystemExit("No query provided (use --query, fill queries.md, or place an offline export under papers/import.(csv|json|jsonl))")
 
+    # Convenience: if the user passes a raw arXiv identifier, fetch it directly via `id_list`.
+    if len(queries) == 1:
+        arxiv_id = _normalize_arxiv_id_query(queries[0])
+        if arxiv_id:
+            url = "http://export.arxiv.org/api/query?" + urllib.parse.urlencode({"id_list": arxiv_id})
+            records, _raw_count = _search_arxiv_once(url=url, queries=[arxiv_id], excludes=[], year_from=None, year_to=None)
+            if not records:
+                raise SystemExit(f"No results returned for arXiv id_list={arxiv_id} (network blocked or id not found)")
+            existing = read_jsonl(out_path)
+            combined = existing + records
+            write_jsonl(out_path, combined)
+            _write_csv_index(out_path.with_suffix(".csv"), combined)
+            return 0
+
     records = _search_arxiv_paged(
         queries=queries,
         excludes=excludes,
@@ -101,6 +115,24 @@ def _convert_export(path: Path) -> list[dict]:
             return [_normalize_record(row) for row in reader]
     raise SystemExit(f"Unsupported export format: {path}")
 
+
+
+
+def _normalize_arxiv_id_query(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    low = raw.lower()
+    for prefix in ("arxiv:", "arxiv_id:", "arxiv-id:", "id:"):
+        if low.startswith(prefix):
+            raw = raw[len(prefix) :].strip()
+            break
+    raw = _strip_arxiv_version(raw)
+    if re.fullmatch(r"\d{4}\.\d{4,5}", raw):
+        return raw
+    if re.fullmatch(r"[a-z-]+(?:\.[a-z-]+)?/\d{7}", raw):
+        return raw
+    return ""
 
 def _detect_offline_export(workspace: Path) -> str:
     candidates = [

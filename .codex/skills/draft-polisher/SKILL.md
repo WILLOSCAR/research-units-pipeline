@@ -1,98 +1,104 @@
 ---
 name: draft-polisher
 description: |
-  Polish `output/DRAFT.md` to remove template-y boilerplate and improve coherence while preserving citations and meaning.
-  **Trigger**: polish draft, de-template, coherence pass, 润色, 去套话, 过渡, 统一术语.
-  **Use when**: `prose-writer` produced a first-pass draft but it still reads like scaffolding (repetition/ellipsis/template phrases).
-  **Skip if**: Draft is already human-grade and passes quality gates; or prose is not approved in `DECISIONS.md`.
+  Audit-style editing pass for `output/DRAFT.md`: remove template boilerplate, improve coherence, and enforce citation anchoring.
+  **Trigger**: polish draft, de-template, coherence pass, remove boilerplate, 润色, 去套话, 去重复, 统一术语.
+  **Use when**: a first-pass draft exists but reads like scaffolding (repetition/ellipsis/template phrases) or needs a coherence pass before global review/LaTeX.
+  **Skip if**: the draft already reads human-grade and passes quality gates; or prose is not approved in `DECISIONS.md`.
   **Network**: none.
-  **Guardrail**: Do not add/remove/invent citations; keep all `[@BibKey]` keys valid and attached to the same claims.
+  **Guardrail**: do not add/remove/invent citation keys; do not move citations across subsections; do not change claims beyond what existing citations support.
 ---
 
-# Draft Polisher (Markdown)
+# Draft Polisher (Audit-style editing)
 
-Goal: turn a first-pass draft into readable survey prose **without changing the evidence contract**.
+Goal: turn a first-pass draft into readable survey prose **without breaking the evidence contract**.
 
-This skill is Stage D in the evidence-first pipeline: de-template + coherence.
+This is Stage D (local polish): de-template + coherence + terminology + redundancy pruning.
 
 ## Inputs
 
 - `output/DRAFT.md`
 - Optional context (read-only):
   - `outline/outline.yml`
-  - `outline/mapping.tsv`
-  - `papers/paper_notes.jsonl`
+  - `outline/subsection_briefs.jsonl`
+  - `outline/evidence_drafts.jsonl`
   - `citations/ref.bib`
 
 ## Output
 
 - `output/DRAFT.md` (in-place refinement)
 
-## Non-negotiables
+## Non-negotiables (hard rules)
 
-1. Preserve citations exactly
-   - Do not add new citation keys.
-   - Do not delete citations.
-   - Do not move a citation so it supports a different claim.
-2. No evidence inflation
-   - If a paragraph makes a claim, it must already be supported by citations that exist in the draft (or you must rewrite it into a qualified statement).
-3. No template language
-   - Remove scaffolding phrases like:
-     - “We use the following working claim …”
-     - “clusters around recurring themes …”
-     - “enumerate 2-4 …”
-     - “Scope and definitions / Design space / Evaluation practice …”
+1) **Citation keys are immutable**
+- Do not add new `[@BibKey]` keys.
+- Do not delete citation markers.
 
-## Workflow (section-by-section)
+2) **Citation anchoring is immutable**
+- Do not move citations across `###` subsections.
+- If you must restructure across subsections, stop and push the change upstream (outline/briefs/evidence), then regenerate.
 
-For each `##` section, and each `###` subsection:
+3) **No evidence inflation**
+- If a sentence sounds stronger than the evidence level (abstract-only), rewrite it into a qualified statement.
 
-1. **Pin citations**
-   - Identify all `[@...]` in the subsection.
-   - For each citation span, note which sentence/claim it supports.
-2. **Fix the paragraph structure**
-   - Prefer a repeating micro-structure:
-     - Claim (one clear sentence)
-     - Evidence (1–3 sentences; cite within the paragraph)
-     - Synthesis (contrast + trade-off + limitation)
-3. **De-template**
-   - Replace generic framing with content-bearing sentences.
-   - Eliminate ellipsis (`…`) and any instruction-like fragments.
-4. **Improve transitions**
-   - Add minimal transitions that connect subsections (avoid “Moreover/However” spam).
-   - Ensure each section has an opening paragraph that previews its substructure.
-5. **Reduce repetition**
-   - If two subsections share similar “takeaways/open problems” wording, rewrite both to be subsection-specific.
-6. **Terminology consistency**
-   - Pick canonical names for key concepts (e.g., “latent diffusion”, “DiT”, “classifier-free guidance”) and use them consistently.
+4) **No pipeline voice**
+- Remove scaffolding phrases like:
+  - “We use the following working claim …”
+  - “The main axes we track are …”
+  - “abstracts are treated as verification targets …”
+  - “Scope and definitions / Design space / Evaluation practice …”
+
+## Three passes (recommended)
+
+### Pass 1 — Subsection polish (structure + de-template)
+
+Role split:
+- **Editor**: rewrite sentences for clarity and flow.
+- **Skeptic**: deletes any generic/template sentence.
+
+Targets:
+- Each H3 reads like: tension → contrast → evidence → limitation.
+- Remove repeated “disclaimer paragraphs”; keep evidence-level note in one place.
+
+### Pass 2 — Terminology normalization
+
+Role split:
+- **Taxonomist**: chooses canonical terms and synonym policy.
+- **Integrator**: applies consistent replacements across the draft.
+
+Targets:
+- One concept = one name across sections.
+- Headings, tables, and prose use the same canonical terms.
+
+### Pass 3 — Redundancy pruning (global repetition)
+
+Role split:
+- **Compressor**: collapses repeated boilerplate.
+- **Narrative keeper**: ensures removing repetition does not break the argument chain.
+
+Targets:
+- Cross-section repeated intros/outros are removed.
+- Only subsection-specific content remains inside subsections.
+
+## Helper script (gate wrapper + anchoring baseline)
+
+This skill includes a deterministic wrapper script so it can be used as a verifiable unit in `UNITS.csv`.
+
+- `python .codex/skills/draft-polisher/scripts/run.py --workspace <ws>`
+
+Behavior:
+- On first run, it writes a citation anchoring baseline: `output/citation_anchors.prepolish.jsonl`.
+- On subsequent runs, it blocks if citations drift across H3 subsections.
+
+### Resetting the baseline (only if intentional)
+
+If you intentionally need to restructure and accept citation drift:
+- Delete `output/citation_anchors.prepolish.jsonl`, then rerun the polisher to regenerate a new baseline.
 
 ## Acceptance checklist
 
-- [ ] No `TODO/TBD/FIXME/(placeholder)` remains.
-- [ ] No ellipsis placeholders (`…`) remain.
-- [ ] No scaffold instruction fragments (“enumerate 2-4 …”) remain.
-- [ ] Every subsection has citations and at least one paragraph with ≥2 citations.
-- [ ] No obvious copy-paste boilerplate across many subsections.
-
-## Helper script (gate wrapper)
-
-This skill includes a tiny wrapper script so it can be used as a verifiable unit in `UNITS.csv`.
-
-- `python .codex/skills/draft-polisher/scripts/run.py --workspace <ws>`
-
-The wrapper runs the same quality-gate checks and blocks until the draft passes (even without `--strict`).
-
-### Quick Start
-
-- `python .codex/skills/draft-polisher/scripts/run.py --workspace <ws>`
-
-### All Options
-
-- See `python .codex/skills/draft-polisher/scripts/run.py --help`.
-- Optional read-only context for better polishing decisions: `outline/outline.yml`, `outline/mapping.tsv`, `papers/paper_notes.jsonl`, `citations/ref.bib`.
-
-### Examples
-
-- Polish a first-pass draft:
-  - Ensure `output/DRAFT.md` exists.
-  - Optionally consult `outline/outline.yml` + `outline/mapping.tsv` to avoid scope drift, and `papers/paper_notes.jsonl` + `citations/ref.bib` to preserve claim→citation alignment.
+- [ ] No `TODO/TBD/FIXME/(placeholder)`.
+- [ ] No `…` or `...` truncation.
+- [ ] No repeated boilerplate sentence across many subsections.
+- [ ] Citation anchoring passes (no cross-subsection drift).
+- [ ] Each H3 has at least one cross-paper synthesis paragraph (>=2 citations).

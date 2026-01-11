@@ -42,6 +42,18 @@ def _read_goal(workspace: Path) -> str:
         return line
     return ""
 
+def _backup_existing(path: Path) -> None:
+    from datetime import datetime
+
+    stamp = datetime.now().replace(microsecond=0).isoformat().replace("-", "").replace(":", "")
+    backup = path.with_name(f"{path.name}.bak.{stamp}")
+    counter = 1
+    while backup.exists():
+        backup = path.with_name(f"{path.name}.bak.{stamp}.{counter}")
+        counter += 1
+    path.replace(backup)
+
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -70,10 +82,11 @@ def main() -> int:
     out_path = workspace / outputs[0]
     ensure_dir(out_path.parent)
 
+    freeze_marker = out_path.with_name(f"{out_path.name}.refined.ok")
     if out_path.exists() and out_path.stat().st_size > 0:
-        existing = out_path.read_text(encoding="utf-8", errors="ignore")
-        if _looks_refined(existing):
+        if freeze_marker.exists():
             return 0
+        _backup_existing(out_path)
 
     outline = load_yaml(workspace / inputs[0]) if (workspace / inputs[0]).exists() else []
     briefs = read_jsonl(workspace / inputs[1]) if (workspace / inputs[1]).exists() else []
@@ -108,28 +121,22 @@ def main() -> int:
         "- Columns:",
         "  - Subsection (id + title)",
         "  - Axes (3–5 short phrases)",
-        "  - Clusters (2–3 labels; optional)",
-        "  - Evidence snippet (1 short factual snippet)",
         "  - Representative works (3–5 cite keys)",
         "- Evidence mapping:",
         "  - Axes: `outline/subsection_briefs.jsonl:axes`",
-        "  - Clusters: `outline/subsection_briefs.jsonl:clusters`",
-        "  - Evidence snippet: `outline/evidence_drafts.jsonl:evidence_snippets[0]`",
         "  - Representative works: cite keys from evidence pack blocks (snippets/claims/comparisons/limitations)",
         "",
-        "## Table 2: Evaluation practice + verification needs",
-        "- Question: What evaluation protocol elements are mentioned, and what fields must be verified before strong conclusions?",
+        "## Table 2: Evidence readiness + verification needs",
+        "- Question: For each H3, what is the evidence level and what fields must be verified before strong conclusions?",
         "- Row unit: H3 subsection (`sub_id`).",
         "- Columns:",
         "  - Subsection (id + title)",
-        "  - Evaluation protocol highlights (benchmarks/datasets/metrics if present)",
-        "  - Verify fields (short checklist; non-blocking)",
         "  - Evidence levels (fulltext/abstract/title counts)",
+        "  - Verify fields (short checklist; no prose)",
         "  - Representative works (3–5 cite keys)",
         "- Evidence mapping:",
-        "  - Evaluation: `outline/evidence_drafts.jsonl:evaluation_protocol` (fallback: `verify_fields`)",
-        "  - Verify fields: `outline/evidence_drafts.jsonl:verify_fields`",
         "  - Evidence levels: `outline/evidence_drafts.jsonl:evidence_level_summary`",
+        "  - Verify fields: `outline/evidence_drafts.jsonl:verify_fields`",
         "",
         "## Constraints (for table-filler)",
         "- Minimum tables: >=2.",

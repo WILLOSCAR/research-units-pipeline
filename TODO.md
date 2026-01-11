@@ -238,6 +238,34 @@ description: |
   - [x] 声明的inputs在workflow中未提及 (ERROR)
   - [x] 孤立的outputs (WARN)
 - [x] 添加 `--strict`, `--check-docs`, `--check-quality` flags
+
+---
+
+## ✍️ Sprint 8: Evidence-first 写作质量升级 (P0 - 最高优先级)
+
+目标：把 writer 从“灌水器”升级成“证据→段落”的合成器；把润色从“凭感觉”升级成“可回归的审计式编辑”。
+
+### 8.1 Writer 段落微技能（grad-paragraph）
+- [x] 新增 `.codex/skills/grad-paragraph/SKILL.md`（张力→对比→评测锚点→限制；双角色：Argument Planner + Writer）
+
+### 8.2 分片写作 gates（H3）强化
+- [x] 更新 `tooling/quality_gate.py`：H3 小节必须满足
+  - [x] 2+ 段落（避免单段摘要串讲）
+  - [x] 至少 1 个多引用段落（>=2 citations，强制 cross-paper synthesis）
+  - [x] 必须出现对比措辞 + 评测锚点 + 限制/待验证句（避免套话）
+
+### 8.3 润色回归：引用锚定（citation anchoring）
+- [x] 更新 `.codex/skills/draft-polisher/scripts/run.py`：首次运行生成 `output/citation_anchors.prepolish.jsonl`（baseline）
+- [x] 更新 `tooling/quality_gate.py`：`draft-polisher` 检测 citation anchoring drift（禁止跨 H3 小节漂移）
+
+### 8.4 可选写作/润色 skills（职责更清晰）
+- [x] 新增 `.codex/skills/subsection-polisher/SKILL.md`（pre-merge 小节润色）
+- [x] 新增 `.codex/skills/terminology-normalizer/SKILL.md`（术语一致性）
+- [x] 新增 `.codex/skills/redundancy-pruner/SKILL.md`（全局去重复/去套话）
+- [x] 新增 `.codex/skills/citation-anchoring/SKILL.md`（引用锚定回归说明）
+
+### 8.5 发现性更新
+- [x] 更新 `SKILL_INDEX.md`（加入 grad-paragraph 与 8.4 的可选 skills）
 - [x] 生成详细的validation报告
 
 ### 7.3 (可选) 批量更新工具

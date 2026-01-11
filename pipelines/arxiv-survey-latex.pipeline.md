@@ -1,14 +1,20 @@
 ---
 name: arxiv-survey-latex
-version: 1.2
+version: 1.4
 target_artifacts:
+  - papers/retrieval_report.md
   - outline/taxonomy.yml
   - outline/outline.yml
   - outline/mapping.tsv
+  - outline/coverage_report.md
+  - outline/outline_state.jsonl
   - outline/subsection_briefs.jsonl
   - outline/transitions.md
   - papers/fulltext_index.jsonl
   - papers/paper_notes.jsonl
+  - papers/evidence_bank.jsonl
+  - outline/evidence_bindings.jsonl
+  - outline/evidence_binding_report.md
   - outline/claim_evidence_matrix.md
   - outline/table_schema.md
   - outline/tables.md
@@ -17,8 +23,14 @@ target_artifacts:
   - outline/evidence_drafts.jsonl
   - citations/ref.bib
   - citations/verified.jsonl
+  - sections/sections_manifest.jsonl
+  - sections/abstract.md
+  - sections/open_problems.md
+  - sections/conclusion.md
   - output/GLOBAL_REVIEW.md
   - output/DRAFT.md
+  - output/MERGE_REPORT.md
+  - output/AUDIT_REPORT.md
   - latex/main.tex
   - latex/main.pdf
   - output/LATEX_BUILD_REPORT.md
@@ -61,10 +73,13 @@ required_skills:
 - taxonomy-builder
 - outline-builder
 - section-mapper
+- outline-refiner
 produces:
 - outline/taxonomy.yml
 - outline/outline.yml
 - outline/mapping.tsv
+- outline/coverage_report.md
+- outline/outline_state.jsonl
 human_checkpoint:
 - approve: scope + outline
 - write_to: DECISIONS.md
@@ -80,6 +95,7 @@ required_skills:
 produces:
 - papers/fulltext_index.jsonl
 - papers/paper_notes.jsonl
+- papers/evidence_bank.jsonl
 - outline/subsection_briefs.jsonl
 
 Notes:
@@ -88,6 +104,7 @@ Notes:
 ## Stage 4 - Citations + visuals (C4) [NO PROSE]
 required_skills:
 - citation-verifier
+- evidence-binder
 - evidence-draft
 - claim-matrix-rewriter
 - table-schema
@@ -96,6 +113,8 @@ required_skills:
 produces:
 - citations/ref.bib
 - citations/verified.jsonl
+- outline/evidence_bindings.jsonl
+- outline/evidence_binding_report.md
 - outline/evidence_drafts.jsonl
 - outline/claim_evidence_matrix.md
 - outline/table_schema.md
@@ -109,22 +128,27 @@ Notes:
 - `table-schema` defines comparison table questions/columns and the evidence fields each column must be grounded in.
 - `table-filler` fills `outline/tables.md` from evidence packs; if fields are missing it must surface them explicitly (do not write long prose in cells).
 
-## Stage 5 - Writing + PDF (C5) [PROSE ALLOWED AFTER C2]
-required_skills:
-- transition-weaver
-- prose-writer
-- draft-polisher
-- global-reviewer
-- latex-scaffold
-- latex-compile-qa
+## Stage 5 - Draft + PDF (C5) [PROSE AFTER C2]
 produces:
+- sections/sections_manifest.jsonl
+- output/MERGE_REPORT.md
 - output/DRAFT.md
 - output/GLOBAL_REVIEW.md
+- output/AUDIT_REPORT.md
 - latex/main.tex
 - latex/main.pdf
 - output/LATEX_BUILD_REPORT.md
 
 Notes:
+- WebWeaver-style “planner vs writer” split (single agent, two passes):
+  - Planner pass: for each section/subsection, pick the exact citation IDs to use from the evidence bank (`outline/evidence_drafts.jsonl`) and keep scope consistent with the outline.
+  - Writer pass: write that section using only those citation IDs; avoid dumping the whole notes set into context (prevents “lost in the middle” + template filler).
+- Treat this stage as an iteration loop:
+  - draft per H3 → de-template/cohere → global review → (if gaps) go back to C3/C4 to strengthen evidence packs → regenerate draft.
+- PDF compile should run early/often to catch LaTeX failures, but compile success is not narrative quality.
+- Recommended skills (toolkit, not a rigid one-shot chain):
+  - Modular drafting: `subsection-writer` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor` → `latex-*`.
+  - Legacy one-shot drafting: `prose-writer` (kept for quick experiments; less debuggable).
 - `queries.md` can set `evidence_mode: "abstract"|"fulltext"` (default template uses `abstract`).
 - If `evidence_mode: "fulltext"`, `pdf-text-extractor` can be tuned via `fulltext_max_papers`, `fulltext_max_pages`, `fulltext_min_chars`, and `--local-pdfs-only`.
 - In strict mode, the pipeline should block if the PDF is too short (<8 pages) or if citations are undefined (even if LaTeX technically compiles).

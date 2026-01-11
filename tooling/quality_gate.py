@@ -77,6 +77,37 @@ def _check_repeated_template_text(*, text: str, min_len: int = 32, min_repeats: 
     return None
 
 
+def _check_repeated_sentences(*, text: str, min_len: int = 80, min_repeats: int = 6) -> tuple[str, int] | None:
+    """Detect repeated sentence-level boilerplate (robust to hard line-wrapping)."""
+    raw = (text or "").strip()
+    if not raw:
+        return None
+
+    # Remove citations and collapse whitespace so wrapped lines don't defeat the check.
+    compact = re.sub(r"\[@[^\]]+\]", "", raw)
+    compact = re.sub(r"\s+", " ", compact).strip()
+    if not compact:
+        return None
+
+    # Cheap sentence splitting; good enough for boilerplate detection.
+    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", compact) if s.strip()]
+    counts: dict[str, int] = {}
+    for s in sents:
+        if len(s) < int(min_len):
+            continue
+        norm = re.sub(r"\s+", " ", s).strip().lower()
+        if len(norm) < int(min_len):
+            continue
+        counts[norm] = counts.get(norm, 0) + 1
+    if not counts:
+        return None
+
+    top_norm, top_count = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0]
+    if top_count >= int(min_repeats):
+        return top_norm[:140], top_count
+    return None
+
+
 def _check_keyword_expansion(workspace: Path) -> list[QualityIssue]:
     queries_path = workspace / "queries.md"
     if not queries_path.exists():
@@ -132,6 +163,8 @@ def check_unit_outputs(*, skill: str, workspace: Path, outputs: list[str]) -> li
         return _check_dedupe_rank(workspace, outputs)
     if skill == "citation-verifier":
         return _check_citations(workspace, outputs)
+    if skill == "outline-refiner":
+        return _check_coverage_report(workspace, outputs)
     if skill == "pdf-text-extractor":
         return _check_pdf_text_extractor(workspace, outputs)
     if skill == "taxonomy-builder":
@@ -152,18 +185,28 @@ def check_unit_outputs(*, skill: str, workspace: Path, outputs: list[str]) -> li
         return _check_tables_md(workspace, outputs)
     if skill == "subsection-briefs":
         return _check_subsection_briefs(workspace, outputs)
+    if skill == "evidence-binder":
+        return _check_evidence_bindings(workspace, outputs)
     if skill == "evidence-draft":
         return _check_evidence_drafts(workspace, outputs)
     if skill == "survey-visuals":
         return _check_survey_visuals(workspace, outputs)
     if skill == "transition-weaver":
         return _check_transitions(workspace, outputs)
+    if skill == "subsection-writer":
+        return _check_sections_manifest(workspace, outputs)
+    if skill == "section-merger":
+        return _check_merge_report(workspace, outputs)
     if skill == "prose-writer":
         return _check_draft(workspace, outputs)
     if skill == "draft-polisher":
-        return _check_draft(workspace, outputs)
+        issues = _check_draft(workspace, outputs)
+        issues.extend(_check_citation_anchoring(workspace, outputs))
+        return issues
     if skill == "global-reviewer":
         return _check_global_review(workspace, outputs)
+    if skill == "pipeline-auditor":
+        return _check_audit_report(workspace, outputs)
     if skill == "latex-scaffold":
         return _check_latex_scaffold(workspace, outputs)
     if skill == "latex-compile-qa":
@@ -317,6 +360,19 @@ def _next_action_lines(*, skill: str, unit_id: str) -> list[str]:
             "- Fill `outline/timeline.md` with ≥8 milestone bullets (year + cited works).",
             "- Fill `outline/figures.md` with ≥2 figure specs (purpose, elements, supporting citations).",
         ],
+        "subsection-writer": [
+            "- Write per-unit prose files under `sections/` (small, verifiable units):",
+            "  - `sections/abstract.md` (`## Abstract`), `sections/open_problems.md`, `sections/conclusion.md`.",
+            "  - `sections/S<section_id>.md` for H2 sections without H3 (body only).",
+            "  - `sections/S<sub_id>.md` for each H3 (body only; no headings).",
+            "- Each H3 file should have >=3 unique citations and avoid ellipsis/TODO/template boilerplate.",
+            "- Keep H3 citations subsection-scoped: cite only keys mapped in `outline/evidence_bindings.jsonl` for that H3 (or fix mapping/bindings).",
+        ],
+        "section-merger": [
+            "- Ensure all required `sections/*.md` exist (see `output/MERGE_REPORT.md` for missing paths), then rerun merge.",
+            "- Ensure evidence-first visuals exist: `outline/timeline.md`, `outline/tables.md`, `outline/figures.md`.",
+            "- After merge, polish/review the combined `output/DRAFT.md` (then run `pipeline-auditor` before LaTeX).",
+        ],
         "prose-writer": [
             "- Treat any leaked scaffold text (`…`, `enumerate 2-4 ...`, 'Scope and definitions ...') as a HARD FAIL: fix outline/claims first, then draft.",
             "- For each subsection, write a unique thesis + 2 contrast sentences (A vs B) + 1 failure mode, each backed by citations.",
@@ -353,6 +409,7 @@ def _check_arxiv_search(workspace: Path, outputs: list[str]) -> list[QualityIssu
 
     placeholders = 0
     arxiv_sources = 0
+    id_fetch = 0
     for rec in records:
         title = str(rec.get("title") or "").strip()
         url = str(rec.get("url") or rec.get("id") or "").strip()
@@ -360,6 +417,11 @@ def _check_arxiv_search(workspace: Path, outputs: list[str]) -> list[QualityIssu
             placeholders += 1
         if str(rec.get("source") or "").strip().lower() == "arxiv":
             arxiv_sources += 1
+        q = rec.get("query")
+        if isinstance(q, list) and len(q) == 1:
+            v = str(q[0] or "").strip()
+            if re.fullmatch(r"\d{4}\.\d{4,5}(?:v\d+)?", v) or re.fullmatch(r"[a-z-]+(?:\.[a-z-]+)?/\d{7}(?:v\d+)?", v):
+                id_fetch += 1
     if placeholders:
         return [
             QualityIssue(
@@ -369,6 +431,9 @@ def _check_arxiv_search(workspace: Path, outputs: list[str]) -> list[QualityIssu
         ]
     # Only enforce keyword hygiene when this looks like an online arXiv retrieval.
     if arxiv_sources:
+        # If the run is a direct id_list fetch, queries.md keywords are optional.
+        if id_fetch:
+            return []
         return _check_keyword_expansion(workspace)
     return []
 
@@ -617,6 +682,15 @@ def _check_citations(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
     bib_keys = re.findall(r"(?im)^@\w+\s*\{\s*([^,\s]+)\s*,", bib_text)
     if not bib_keys:
         return [QualityIssue(code="empty_ref_bib", message=f"`{bib_rel}` has no BibTeX entries.")]
+
+    dupes = len(bib_keys) - len(set(bib_keys))
+    if dupes:
+        return [
+            QualityIssue(
+                code="citations_duplicate_bibkeys",
+                message=f"`{bib_rel}` has duplicate BibTeX keys ({dupes}); dedupe/rename keys before compiling LaTeX.",
+            )
+        ]
 
     profile = _pipeline_profile(workspace)
     if profile == "arxiv-survey":
@@ -996,170 +1070,165 @@ def _check_paper_notes(workspace: Path, outputs: list[str]) -> list[QualityIssue
     if not notes:
         return [QualityIssue(code="empty_paper_notes", message=f"`{out_rel}` is empty.")]
 
-    total = len([n for n in notes if isinstance(n, dict)])
-    high = [n for n in notes if isinstance(n, dict) and str(n.get("priority") or "").strip().lower() == "high"]
-    high_total = len(high)
+    notes = [n for n in notes if isinstance(n, dict)]
+    if not notes:
+        return [QualityIssue(code="invalid_paper_notes", message=f"`{out_rel}` has no JSON objects.")]
 
-    # If priority isn't present (older workspaces), fall back to the old heuristics.
-    if total and high_total == 0:
-        method_empty = 0
-        results_empty = 0
-        bullets_short = 0
-        lim_first_counts: dict[str, int] = {}
-        fulltext = 0
-        for n in notes:
-            if not isinstance(n, dict):
-                continue
-            method = str(n.get("method") or "").strip()
-            if not method:
-                method_empty += 1
-            key_results = n.get("key_results") or []
-            if not isinstance(key_results, list) or len(key_results) == 0:
-                results_empty += 1
-            bullets = n.get("summary_bullets") or []
-            if not isinstance(bullets, list) or len([b for b in bullets if str(b).strip()]) < 3:
-                bullets_short += 1
-            lims = n.get("limitations") or []
-            if isinstance(lims, list) and lims:
-                first = str(lims[0]).strip()
-                first = re.sub(r"^\[[A-Za-z]+\]\s*", "", first)
-                if first:
-                    lim_first_counts[first] = lim_first_counts.get(first, 0) + 1
-            if str(n.get("evidence_level") or "").strip().lower() == "fulltext":
-                fulltext += 1
-
-        issues: list[QualityIssue] = []
-        if total and method_empty / total >= 0.7 and results_empty / total >= 0.7:
-            issues.append(
-                QualityIssue(
-                    code="paper_notes_missing_method_results",
-                    message="Most paper notes have empty `method` and `key_results`; enrich notes beyond title/abstract-only scaffolding.",
-                )
-            )
-        if total and bullets_short / total >= 0.7:
-            issues.append(
-                QualityIssue(
-                    code="paper_notes_short_summaries",
-                    message="Most paper notes have <3 summary bullets; add concrete contributions, setup, and findings.",
-                )
-            )
-        if total >= 10 and lim_first_counts:
-            top_lim, top_count = sorted(lim_first_counts.items(), key=lambda kv: (-kv[1], kv[0]))[0]
-            if top_count / total >= 0.4 and top_count >= 8:
-                issues.append(
-                    QualityIssue(
-                        code="paper_notes_repeated_limitations",
-                        message=f"Many papers share the same limitation text (e.g., `{top_lim}`); diversify with paper-specific assumptions/failures.",
-                    )
-                )
-        if total >= 20 and fulltext / total < 0.1:
-            issues.append(
-                QualityIssue(
-                    code="paper_notes_too_abstract",
-                    message="Most notes are abstract-level; run `pdf-text-extractor` and enrich key papers with full-text evidence before synthesis.",
-                )
-            )
-        return issues
-
-    # New heuristic: require *high-priority* papers to be enriched (LLM-first), allow long-tail to stay abstract-level.
-    min_high = 8 if total >= 30 else (5 if total >= 15 else 2)
+    # Intentionally keep `paper-notes` gates light: this stage is allowed to be metadata/abstract-heavy.
+    # Hard requirements are about integrity (coverage + minimal schema), not “note richness”.
     issues: list[QualityIssue] = []
-    if total and high_total < min_high:
-        issues.append(
-            QualityIssue(
-                code="paper_notes_missing_priority",
-                message=f"Expected at least {min_high} high-priority notes (found {high_total}); ensure `priority=high` exists for key papers.",
-            )
-        )
-        return issues
 
-    # Evidence-first: high-priority notes must not be title-only.
-    title_only = 0
-    abstract_missing = 0
-    for n in high:
+    seen: set[str] = set()
+    dupes = 0
+    missing_pid = 0
+    missing_title = 0
+    bad_level = 0
+    missing_lims = 0
+    for n in notes:
+        pid = str(n.get("paper_id") or "").strip()
+        title = str(n.get("title") or "").strip()
         lvl = str(n.get("evidence_level") or "").strip().lower()
-        abs_text = str(n.get("abstract") or "").strip()
-        if lvl == "title":
-            title_only += 1
-        if lvl == "abstract" and not abs_text:
-            abstract_missing += 1
-    if title_only:
-        issues.append(
-            QualityIssue(
-                code="paper_notes_title_only",
-                message=(
-                    f"{title_only}/{high_total} high-priority notes are title-only (no abstract/full text). "
-                    "Provide richer metadata (abstracts) or enable `evidence_mode: fulltext` so notes/claims can be evidence-grounded."
-                ),
-            )
-        )
-    if abstract_missing:
-        issues.append(
-            QualityIssue(
-                code="paper_notes_abstract_missing",
-                message=f"{abstract_missing}/{high_total} high-priority notes have `evidence_level=abstract` but empty `abstract`; fix upstream metadata merge or rerun retrieval enrichment.",
-            )
-        )
-
-    def _has_todo(value: Any) -> bool:
-        if value is None:
-            return False
-        if isinstance(value, str):
-            return "TODO" in value
-        if isinstance(value, list):
-            return any(isinstance(x, str) and "TODO" in x for x in value)
-        return False
-
-    complete = 0
-    todo_hits = 0
-    title_method = 0
-    for n in high:
-        method = str(n.get("method") or "").strip()
-        key_results = n.get("key_results") or []
-        bullets = n.get("summary_bullets") or []
         lims = n.get("limitations") or []
 
-        if _has_todo(method) or _has_todo(key_results) or _has_todo(bullets) or _has_todo(lims):
-            todo_hits += 1
+        if not pid:
+            missing_pid += 1
             continue
-        if not method:
-            continue
-        if method.lower().startswith("main idea (from title):"):
-            title_method += 1
-            continue
-        if not isinstance(key_results, list) or len([x for x in key_results if str(x).strip()]) < 1:
-            continue
-        if not isinstance(bullets, list) or len([b for b in bullets if str(b).strip()]) < 3:
-            continue
-        if not isinstance(lims, list) or len([x for x in lims if str(x).strip()]) < 1:
-            continue
-        first_lim = str(lims[0]).strip().lower()
-        if first_lim.startswith("evidence level:"):
-            continue
-        complete += 1
+        if pid in seen:
+            dupes += 1
+        seen.add(pid)
 
-    if todo_hits:
+        if not title:
+            missing_title += 1
+        if lvl not in {"fulltext", "abstract", "title"}:
+            bad_level += 1
+        if not isinstance(lims, list) or len([x for x in lims if str(x).strip()]) < 1:
+            missing_lims += 1
+
+    if missing_pid:
         issues.append(
             QualityIssue(
-                code="paper_notes_contains_todo",
-                message="High-priority paper notes still contain `TODO` placeholders; enrich them (method/results/limitations) before synthesis.",
+                code="paper_notes_missing_paper_id",
+                message=f"`{out_rel}` has {missing_pid} record(s) missing `paper_id`.",
             )
         )
-    if title_method:
+    if dupes:
         issues.append(
             QualityIssue(
-                code="paper_notes_title_method",
-                message="Some high-priority notes still use title-only method text (`Main idea (from title): ...`); replace with abstract/full-text grounded method summaries.",
+                code="paper_notes_duplicate_paper_id",
+                message=f"`{out_rel}` has duplicate `paper_id` entries ({dupes}).",
             )
         )
-    target_complete = max(5, int(high_total * 0.8))
-    if complete < target_complete:
+    if missing_title:
         issues.append(
             QualityIssue(
-                code="paper_notes_priority_incomplete",
-                message=f"Only {complete}/{high_total} high-priority notes look complete; target >= {target_complete}.",
+                code="paper_notes_missing_title",
+                message=f"`{out_rel}` has {missing_title} record(s) missing `title`.",
             )
         )
+    if bad_level:
+        issues.append(
+            QualityIssue(
+                code="paper_notes_bad_evidence_level",
+                message=f"`{out_rel}` has {bad_level} record(s) with invalid `evidence_level` (expected fulltext|abstract|title).",
+            )
+        )
+    if missing_lims:
+        issues.append(
+            QualityIssue(
+                code="paper_notes_missing_limitations",
+                message=f"`{out_rel}` has {missing_lims} record(s) missing `limitations` (need at least one item).",
+            )
+        )
+
+    # Coverage check against core_set.csv if present.
+    core_path = workspace / "papers" / "core_set.csv"
+    if core_path.exists():
+        import csv
+
+        expected: set[str] = set()
+        try:
+            with core_path.open("r", encoding="utf-8", newline="") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    pid = str(row.get("paper_id") or "").strip()
+                    if pid:
+                        expected.add(pid)
+        except Exception:
+            expected = set()
+
+        if expected:
+            missing = sorted([pid for pid in expected if pid not in seen])
+            if missing:
+                sample = ", ".join(missing[:8])
+                suffix = "..." if len(missing) > 8 else ""
+                issues.append(
+                    QualityIssue(
+                        code="paper_notes_missing_core_coverage",
+                        message=f"`{out_rel}` is missing notes for some core-set papers (e.g., {sample}{suffix}).",
+                    )
+                )
+
+    # Optional: evidence bank (addressable evidence items) produced alongside notes.
+    if len(outputs) >= 2:
+        bank_rel = outputs[1]
+        bank_path = workspace / bank_rel
+        bank = read_jsonl(bank_path) if bank_path.exists() else []
+        bank = [b for b in bank if isinstance(b, dict)]
+        if not bank_path.exists():
+            issues.append(QualityIssue(code="missing_evidence_bank", message=f"`{bank_rel}` does not exist."))
+        elif not bank:
+            issues.append(QualityIssue(code="empty_evidence_bank", message=f"`{bank_rel}` is empty."))
+        else:
+            seen_eid: set[str] = set()
+            dup_eid = 0
+            bad_items = 0
+            pids_in_bank: set[str] = set()
+            for it in bank:
+                eid = str(it.get("evidence_id") or "").strip()
+                pid = str(it.get("paper_id") or "").strip()
+                bibkey = str(it.get("bibkey") or "").strip()
+                claim_type = str(it.get("claim_type") or "").strip()
+                snippet = str(it.get("snippet") or "").strip()
+                locator = it.get("locator")
+                lvl = str(it.get("evidence_level") or "").strip()
+
+                if not eid or not pid or not bibkey or not claim_type or not snippet or not lvl or not isinstance(locator, dict):
+                    bad_items += 1
+                    continue
+                src = str(locator.get("source") or "").strip()
+                ptr = str(locator.get("pointer") or "").strip()
+                if not src or not ptr:
+                    bad_items += 1
+                    continue
+
+                if eid in seen_eid:
+                    dup_eid += 1
+                seen_eid.add(eid)
+                pids_in_bank.add(pid)
+
+            if dup_eid:
+                issues.append(QualityIssue(code="evidence_bank_duplicate_ids", message=f"`{bank_rel}` has duplicate evidence_id entries ({dup_eid})."))
+            if bad_items:
+                issues.append(QualityIssue(code="evidence_bank_bad_items", message=f"`{bank_rel}` has {bad_items} malformed item(s) (missing fields/locator)."))
+
+            missing_pid = sorted([pid for pid in seen if pid not in pids_in_bank])
+            if missing_pid:
+                sample = ", ".join(missing_pid[:8])
+                suffix = "..." if len(missing_pid) > 8 else ""
+                issues.append(
+                    QualityIssue(
+                        code="evidence_bank_missing_papers",
+                        message=f"`{bank_rel}` has no evidence items for some papers in notes (e.g., {sample}{suffix}).",
+                    )
+                )
+            if len(bank) < len(seen):
+                issues.append(
+                    QualityIssue(
+                        code="evidence_bank_too_small",
+                        message=f"`{bank_rel}` has only {len(bank)} items for {len(seen)} papers; expect >=1 evidence item per paper on average.",
+                    )
+                )
+
     return issues
 
 
@@ -1398,6 +1467,34 @@ def _check_subsection_briefs(workspace: Path, outputs: list[str]) -> list[Qualit
     return issues
 
 
+def _check_coverage_report(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    from tooling.common import read_jsonl
+
+    report_rel = outputs[0] if outputs else "outline/coverage_report.md"
+    state_rel = outputs[1] if len(outputs) >= 2 else "outline/outline_state.jsonl"
+
+    report_path = workspace / report_rel
+    state_path = workspace / state_rel
+
+    if not report_path.exists():
+        return [QualityIssue(code="missing_coverage_report", message=f"`{report_rel}` does not exist.")]
+    report = report_path.read_text(encoding="utf-8", errors="ignore").strip()
+    if not report:
+        return [QualityIssue(code="empty_coverage_report", message=f"`{report_rel}` is empty.")]
+    if _check_placeholder_markers(report) or "…" in report:
+        return [QualityIssue(code="coverage_report_placeholders", message=f"`{report_rel}` contains placeholders; regenerate planner report.")]
+    if "| Subsection |" not in report:
+        return [QualityIssue(code="coverage_report_missing_table", message=f"`{report_rel}` is missing the per-subsection table.")]
+
+    if not state_path.exists():
+        return [QualityIssue(code="missing_outline_state", message=f"`{state_rel}` does not exist.")]
+    recs = read_jsonl(state_path)
+    recs = [r for r in recs if isinstance(r, dict)]
+    if not recs:
+        return [QualityIssue(code="empty_outline_state", message=f"`{state_rel}` has no JSON records.")]
+    return []
+
+
 def _check_evidence_drafts(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
     from tooling.common import read_jsonl
 
@@ -1559,6 +1656,85 @@ def _check_evidence_drafts(workspace: Path, outputs: list[str]) -> list[QualityI
     return issues
 
 
+def _check_evidence_bindings(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    from tooling.common import load_yaml, read_jsonl
+
+    out_rel = outputs[0] if outputs else "outline/evidence_bindings.jsonl"
+    report_rel = outputs[1] if len(outputs) >= 2 else "outline/evidence_binding_report.md"
+
+    path = workspace / out_rel
+    if not path.exists():
+        return [QualityIssue(code="missing_evidence_bindings", message=f"`{out_rel}` does not exist.")]
+    raw = path.read_text(encoding="utf-8", errors="ignore").strip()
+    if not raw:
+        return [QualityIssue(code="empty_evidence_bindings", message=f"`{out_rel}` is empty.")]
+    if _check_placeholder_markers(raw) or "…" in raw:
+        return [QualityIssue(code="evidence_bindings_placeholders", message=f"`{out_rel}` contains placeholders; regenerate evidence bindings.")]
+
+    records = read_jsonl(path)
+    binds = [r for r in records if isinstance(r, dict)]
+    if not binds:
+        return [QualityIssue(code="invalid_evidence_bindings", message=f"`{out_rel}` has no JSON objects.")]
+
+    by_sub = {str(r.get("sub_id") or "").strip(): r for r in binds if str(r.get("sub_id") or "").strip()}
+
+    # Coverage against outline subsections (best-effort).
+    expected: set[str] = set()
+    outline_path = workspace / "outline" / "outline.yml"
+    if outline_path.exists():
+        outline = load_yaml(outline_path) or []
+        for sec in outline if isinstance(outline, list) else []:
+            if not isinstance(sec, dict):
+                continue
+            for sub in sec.get("subsections") or []:
+                if not isinstance(sub, dict):
+                    continue
+                sid = str(sub.get("id") or "").strip()
+                if sid:
+                    expected.add(sid)
+    if expected:
+        missing = sorted([sid for sid in expected if sid not in by_sub])
+        if missing:
+            sample = ", ".join(missing[:6])
+            suffix = "..." if len(missing) > 6 else ""
+            return [QualityIssue(code="evidence_bindings_missing_sections", message=f"`{out_rel}` missing some subsections (e.g., {sample}{suffix}).")]
+
+    # Evidence IDs must exist in the bank if present.
+    bank_path = workspace / "papers" / "evidence_bank.jsonl"
+    bank_ids: set[str] = set()
+    if bank_path.exists():
+        for it in read_jsonl(bank_path):
+            if isinstance(it, dict):
+                eid = str(it.get("evidence_id") or "").strip()
+                if eid:
+                    bank_ids.add(eid)
+
+    bad = 0
+    missing_bank = 0
+    for sid, rec in by_sub.items():
+        title = str(rec.get("title") or "").strip()
+        eids = rec.get("evidence_ids") or []
+        if not title or not isinstance(eids, list) or len([e for e in eids if str(e).strip()]) < 6:
+            bad += 1
+            continue
+        if bank_ids and any(str(e).strip() and str(e).strip() not in bank_ids for e in eids):
+            missing_bank += 1
+
+    if bad:
+        return [QualityIssue(code="evidence_bindings_incomplete", message=f"`{out_rel}` has {bad} record(s) missing title or with too few evidence_ids (<6).")]
+    if missing_bank:
+        return [QualityIssue(code="evidence_bindings_missing_bank_ids", message=f"`{out_rel}` references evidence_ids not found in `papers/evidence_bank.jsonl` ({missing_bank} subsection(s)).")]
+
+    # Optional human-facing summary file.
+    report_path = workspace / report_rel
+    if report_path.exists():
+        report = report_path.read_text(encoding="utf-8", errors="ignore").strip()
+        if report and (_check_placeholder_markers(report) or "…" in report):
+            return [QualityIssue(code="evidence_binding_report_placeholders", message=f"`{report_rel}` contains placeholders; regenerate binder report.")]
+
+    return []
+
+
 def _check_survey_visuals(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
     # Backward compatible:
     # - legacy: outputs = tables + timeline + figures
@@ -1685,8 +1861,13 @@ def _check_tables_md(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
     text = path.read_text(encoding="utf-8", errors="ignore").strip()
     if not text:
         return [QualityIssue(code="empty_tables_md", message=f"`{out_rel}` is empty.")]
-    if _check_placeholder_markers(text) or "…" in text:
-        return [QualityIssue(code="tables_placeholders", message=f"`{out_rel}` contains placeholders/ellipsis; fill tables from evidence packs.")]
+    if _check_placeholder_markers(text) or "…" in text or re.search(r"(?m)\.\.\.+", text):
+        return [
+            QualityIssue(
+                code="tables_placeholders",
+                message=f"`{out_rel}` contains placeholders/ellipsis (including `...` truncation); fill tables from evidence packs and remove truncation markers.",
+            )
+        ]
     table_seps = re.findall(r"(?m)^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$", text)
     if len(table_seps) < 2:
         return [QualityIssue(code="tables_missing", message=f"`{out_rel}` should contain >=2 Markdown tables (found {len(table_seps)}).")]
@@ -1723,6 +1904,324 @@ def _check_transitions(workspace: Path, outputs: list[str]) -> list[QualityIssue
                 message=f"`{out_rel}` looks too short (bullets={len(bullets)}); generate more subsection transitions.",
             )
         ]
+    rep = _check_repeated_template_text(text=text, min_len=60, min_repeats=8)
+    if rep:
+        example, count = rep
+        return [
+            QualityIssue(
+                code="transitions_repeated_text",
+                message=f"`{out_rel}` contains repeated transition boilerplate ({count}×), e.g., `{example}`; rewrite to be more subsection-specific.",
+            )
+        ]
+    return []
+
+
+def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    from tooling.common import load_yaml, read_jsonl
+
+    out_rel = outputs[0] if outputs else "sections/sections_manifest.jsonl"
+    path = workspace / out_rel
+    if not path.exists():
+        return [QualityIssue(code="missing_sections_manifest", message=f"`{out_rel}` does not exist.")]
+
+    records = read_jsonl(path)
+    if not records:
+        return [QualityIssue(code="empty_sections_manifest", message=f"`{out_rel}` is empty.")]
+
+    base_dir = Path(out_rel).parent
+
+    def _slug_unit_id(unit_id: str) -> str:
+        raw = str(unit_id or "").strip()
+        out: list[str] = []
+        for ch in raw:
+            if ch.isalnum():
+                out.append(ch)
+            else:
+                out.append("_")
+        safe = "".join(out).strip("_")
+        return f"S{safe}" if safe else "S"
+
+    outline_path = workspace / "outline" / "outline.yml"
+    outline = load_yaml(outline_path) if outline_path.exists() else []
+
+    expected_units: list[dict[str, str]] = []
+    if isinstance(outline, list):
+        for sec in outline:
+            if not isinstance(sec, dict):
+                continue
+            sec_id = str(sec.get("id") or "").strip()
+            sec_title = str(sec.get("title") or "").strip()
+            subs = sec.get("subsections") or []
+            if subs and isinstance(subs, list):
+                for sub in subs:
+                    if not isinstance(sub, dict):
+                        continue
+                    sub_id = str(sub.get("id") or "").strip()
+                    sub_title = str(sub.get("title") or "").strip()
+                    if sub_id and sub_title:
+                        expected_units.append({"kind": "h3", "id": sub_id, "title": sub_title, "section_title": sec_title})
+            else:
+                if sec_id and sec_title:
+                    expected_units.append({"kind": "h2", "id": sec_id, "title": sec_title, "section_title": sec_title})
+
+    # Required global sections (kept outside outline for consistency).
+    required_globals = [
+        ("abstract", "Abstract", base_dir / "abstract.md"),
+        ("open_problems", "Open Problems", base_dir / "open_problems.md"),
+        ("conclusion", "Conclusion", base_dir / "conclusion.md"),
+    ]
+    optional_globals = [
+        ("evidence_note", "Evidence note", base_dir / "evidence_note.md"),
+    ]
+
+    expected_files: list[tuple[str, str, str]] = []
+    for gid, title, rel in required_globals:
+        expected_files.append(("global", gid, rel.as_posix()))
+    for gid, title, rel in optional_globals:
+        expected_files.append(("global_optional", gid, rel.as_posix()))
+    for u in expected_units:
+        rel = (base_dir / f"{_slug_unit_id(u['id'])}.md").as_posix()
+        expected_files.append((u["kind"], u["id"], rel))
+
+    issues: list[QualityIssue] = []
+
+    # Basic existence.
+    missing_required: list[str] = []
+    for kind, uid, rel in expected_files:
+        p = workspace / rel
+        if kind == "global_optional":
+            continue
+        if not p.exists() or p.stat().st_size <= 0:
+            missing_required.append(rel)
+    if missing_required:
+        sample = ", ".join(missing_required[:8])
+        suffix = "..." if len(missing_required) > 8 else ""
+        issues.append(
+            QualityIssue(
+                code="sections_missing_files",
+                message=f"Missing per-section files under `{base_dir.as_posix()}` (e.g., {sample}{suffix}).",
+            )
+        )
+
+    # Load bibliography keys for cite hygiene.
+    bib_path = workspace / "citations" / "ref.bib"
+    bib_keys: set[str] = set()
+    if bib_path.exists():
+        bib_text = bib_path.read_text(encoding="utf-8", errors="ignore")
+        bib_keys = set(re.findall(r"(?im)^@\\w+\\s*\\{\\s*([^,\\s]+)\\s*,", bib_text))
+
+    # Load evidence bindings to enforce subsection-scoped citations.
+    bindings_path = workspace / "outline" / "evidence_bindings.jsonl"
+    mapped_by_sub: dict[str, set[str]] = {}
+    if bindings_path.exists():
+        for rec in read_jsonl(bindings_path):
+            if not isinstance(rec, dict):
+                continue
+            sid = str(rec.get("sub_id") or "").strip()
+            mapped = rec.get("mapped_bibkeys") or []
+            if sid and isinstance(mapped, list):
+                mapped_by_sub[sid] = set(str(x).strip() for x in mapped if str(x).strip())
+    else:
+        issues.append(
+            QualityIssue(
+                code="missing_evidence_bindings",
+                message="Missing `outline/evidence_bindings.jsonl`; run `evidence-binder` before subsection writing so citations can be scoped per H3.",
+            )
+        )
+
+    def _extract_keys(text: str) -> set[str]:
+        keys: set[str] = set()
+        for m in re.finditer(r"\\[@([^\\]]+)\\]", text):
+            inside = (m.group(1) or "").strip()
+            for k in re.findall(r"[A-Za-z0-9:_-]+", inside):
+                if k:
+                    keys.add(k)
+        return keys
+
+    # Content checks per file.
+    for kind, uid, rel in expected_files:
+        p = workspace / rel
+        if not p.exists() or p.stat().st_size <= 0:
+            continue
+        text = p.read_text(encoding="utf-8", errors="ignore")
+        if _check_placeholder_markers(text) or "…" in text or re.search(r"(?m)\\.\\.\\.+", text):
+            issues.append(
+                QualityIssue(
+                    code="sections_contains_placeholders",
+                    message=f"`{rel}` contains placeholders/ellipsis (`TODO`/`…`/`...`); rewrite this unit into complete, checkable prose.",
+                )
+            )
+            break
+        if re.search(r"(?i)\\babstracts are treated as verification targets\\b", text) or re.search(r"(?i)\\bthe main axes we track are\\b", text):
+            issues.append(
+                QualityIssue(
+                    code="sections_contains_pipeline_voice",
+                    message=f"`{rel}` contains pipeline-style boilerplate; rewrite to be subsection-specific and avoid repeated template sentences.",
+                )
+            )
+            break
+
+        # H3 body files must not contain headings.
+        if kind == "h3":
+            for ln in text.splitlines():
+                if ln.strip().startswith("#"):
+                    issues.append(
+                        QualityIssue(
+                            code="sections_h3_has_headings",
+                            message=f"`{rel}` should be body-only (no `#`/`##`/`###` headings); headings are added by `section-merger`.",
+                        )
+                    )
+                    break
+
+            cite_keys = _extract_keys(text)
+            profile = _pipeline_profile(workspace)
+            if profile == "arxiv-survey" and len(cite_keys) < 3:
+                issues.append(
+                    QualityIssue(
+                        code="sections_h3_sparse_citations",
+                        message=f"`{rel}` has <3 unique citations ({len(cite_keys)}); each H3 should be evidence-first (>=3) for survey-quality runs.",
+                    )
+                )
+
+            if profile == "arxiv-survey":
+                paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text.strip()) if p.strip()]
+                if len(paragraphs) < 2:
+                    issues.append(
+                        QualityIssue(
+                            code="sections_h3_too_few_paragraphs",
+                            message=f"`{rel}` has too few paragraphs ({len(paragraphs)}); aim for 2–3 paragraphs per H3 (tension → contrast → limitation), not a single block.",
+                        )
+                    )
+
+                has_multi_cite = any(len(_extract_keys(p)) >= 2 for p in paragraphs)
+                if not has_multi_cite:
+                    issues.append(
+                        QualityIssue(
+                            code="sections_h3_no_multi_cite_paragraph",
+                            message=f"`{rel}` has no paragraph with >=2 citations; add at least one cross-paper synthesis paragraph (contrast A vs B with multiple cites).",
+                        )
+                    )
+
+                # “Grad paragraph” micro-structure signals: contrast + evaluation anchor + limitation.
+                contrast_re = r"(?i)\b(?:whereas|however|in\s+contrast|by\s+contrast|versus|vs\.)\b|相比|不同于|相较|对比|反之"
+                eval_re = r"(?i)\b(?:benchmark|dataset|datasets|metric|metrics|evaluation|eval\.|protocol|human|ablation)\b|评测|基准|数据集|指标|协议|人工|实验"
+                limitation_re = r"(?i)\b(?:limitation|limited|unclear|sensitive|caveat|downside|failure|risk|open\s+question|remains)\b|受限|尚不明确|缺乏|需要核验|局限|失败|风险|待验证"
+
+                if not re.search(contrast_re, text):
+                    issues.append(
+                        QualityIssue(
+                            code="sections_h3_missing_contrast",
+                            message=f"`{rel}` lacks explicit contrast phrasing (e.g., whereas/in contrast/相比/不同于); survey paragraphs should compare routes, not only summarize.",
+                        )
+                    )
+                if not re.search(eval_re, text):
+                    issues.append(
+                        QualityIssue(
+                            code="sections_h3_missing_eval_anchor",
+                            message=f"`{rel}` lacks an evaluation anchor (benchmark/dataset/metric/protocol/评测); add at least one concrete evaluation reference even at abstract level.",
+                        )
+                    )
+                if not re.search(limitation_re, text):
+                    issues.append(
+                        QualityIssue(
+                            code="sections_h3_missing_limitation",
+                            message=f"`{rel}` lacks a limitation/provisional sentence (limited/unclear/受限/待验证); include at least one explicit caveat to avoid overclaiming.",
+                        )
+                    )
+            if bib_keys:
+                missing = sorted([k for k in cite_keys if k not in bib_keys])
+                if missing:
+                    sample = ", ".join(missing[:8])
+                    suffix = "..." if len(missing) > 8 else ""
+                    issues.append(
+                        QualityIssue(
+                            code="sections_cites_missing_in_bib",
+                            message=f"`{rel}` cites keys missing from `citations/ref.bib` (e.g., {sample}{suffix}).",
+                        )
+                    )
+            if mapped_by_sub.get(uid):
+                allowed = mapped_by_sub.get(uid) or set()
+                outside = sorted([k for k in cite_keys if k not in allowed])
+                if outside:
+                    sample = ", ".join(outside[:8])
+                    suffix = "..." if len(outside) > 8 else ""
+                    issues.append(
+                        QualityIssue(
+                            code="sections_cites_outside_mapping",
+                            message=f"`{rel}` cites keys not mapped to subsection {uid} (e.g., {sample}{suffix}); keep citations subsection-scoped (or fix mapping/bindings).",
+                        )
+                    )
+        elif kind == "global":
+            # Minimal heading sanity for required global sections.
+            if uid == "abstract" and not re.search(r"(?im)^##\\s+(abstract|摘要)\\b", text):
+                issues.append(
+                    QualityIssue(
+                        code="sections_abstract_missing_heading",
+                        message=f"`{rel}` should start with `## Abstract` (or `## 摘要`).",
+                    )
+                )
+            if uid == "open_problems" and not re.search(r"(?im)^##\\s+(open problems|future directions|future work|开放问题|未来方向|未来工作)\\b", text):
+                issues.append(
+                    QualityIssue(
+                        code="sections_open_problems_missing_heading",
+                        message=f"`{rel}` should include an `## Open Problems & Future Directions` heading (or equivalent).",
+                    )
+                )
+            if uid == "conclusion" and not re.search(r"(?im)^##\\s+(conclusion|结论)\\b", text):
+                issues.append(
+                    QualityIssue(
+                        code="sections_conclusion_missing_heading",
+                        message=f"`{rel}` should include an `## Conclusion/结论` heading.",
+                    )
+                )
+        else:
+            # H2 body files: encourage at least one citation.
+            if kind == "h2" and "[@" not in text:
+                issues.append(
+                    QualityIssue(
+                        code="sections_h2_no_citations",
+                        message=f"`{rel}` contains no citations; H2 sections should be grounded with citations (or keep claims purely structural).",
+                    )
+                )
+
+    return issues
+
+
+def _check_merge_report(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    draft_rel = outputs[0] if outputs else "output/DRAFT.md"
+    report_rel = outputs[1] if len(outputs) > 1 else "output/MERGE_REPORT.md"
+
+    report_path = workspace / report_rel
+    if not report_path.exists():
+        return [QualityIssue(code="missing_merge_report", message=f"`{report_rel}` does not exist.")]
+    report = report_path.read_text(encoding="utf-8", errors="ignore")
+    if "- Status: PASS" not in report:
+        return [QualityIssue(code="merge_not_pass", message=f"`{report_rel}` is not PASS; fix missing section files and rerun merge.")]
+
+    draft_path = workspace / draft_rel
+    if not draft_path.exists():
+        return [QualityIssue(code="missing_merged_draft", message=f"`{draft_rel}` does not exist.")]
+    draft = draft_path.read_text(encoding="utf-8", errors="ignore")
+    if re.search(r"(?m)^TODO:\\s+MISSING\\s+`", draft):
+        return [
+            QualityIssue(
+                code="merge_contains_missing_markers",
+                message="Merged draft still contains `TODO: MISSING ...` markers; write the missing `sections/*.md` units and merge again.",
+            )
+        ]
+    return []
+
+
+def _check_audit_report(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    out_rel = outputs[0] if outputs else "output/AUDIT_REPORT.md"
+    path = workspace / out_rel
+    if not path.exists():
+        return [QualityIssue(code="missing_audit_report", message=f"`{out_rel}` does not exist.")]
+    text = path.read_text(encoding="utf-8", errors="ignore").strip()
+    if not text:
+        return [QualityIssue(code="empty_audit_report", message=f"`{out_rel}` is empty.")]
+    if "- Status: PASS" not in text:
+        return [QualityIssue(code="audit_report_not_pass", message=f"`{out_rel}` does not report PASS; fix issues and rerun auditor.")]
     return []
 
 
@@ -1761,6 +2260,13 @@ def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
                 message="Draft contains unicode ellipsis (`…`), which is treated as a hard failure signal (usually truncated scaffold text); regenerate after fixing outline/claims/visuals.",
             )
         )
+    if re.search(r"(?m)\.\.\.+", text):
+        issues.append(
+            QualityIssue(
+                code="draft_contains_truncation_dots",
+                message="Draft contains `...` truncation markers, which read as scaffold leakage; remove truncation and rewrite into complete sentences/cells.",
+            )
+        )
     if re.search(r"(?i)enumerate\s+2-4\s+recurring", text):
         issues.append(
             QualityIssue(
@@ -1773,6 +2279,26 @@ def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
             QualityIssue(
                 code="draft_scaffold_phrases",
                 message="Draft still contains outline scaffold phrases (scope/design space/evaluation practice). Replace with subsection-specific content grounded in evidence fields and mapped papers.",
+            )
+        )
+    if re.search(r"(?i)\babstracts are treated as verification targets\b", text):
+        issues.append(
+            QualityIssue(
+                code="draft_pipeline_voice_abstract_only",
+                message=(
+                    "Draft contains pipeline-style evidence-mode boilerplate ('abstracts are treated as verification targets'). "
+                    "Move evidence caveats into a single, short 'Evidence note' (once), and keep subsections focused on concrete comparisons."
+                ),
+            )
+        )
+    if re.search(r"(?i)\bthe main axes we track are\b", text):
+        issues.append(
+            QualityIssue(
+                code="draft_pipeline_voice_axes_template",
+                message=(
+                    "Draft contains the repeated axes template ('The main axes we track are ...'), which reads as scaffolding. "
+                    "Use subsection-specific axes from `outline/subsection_briefs.jsonl` / `outline/evidence_drafts.jsonl` and avoid repeating a global template sentence."
+                ),
             )
         )
 
@@ -2068,6 +2594,127 @@ def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
                 message=f"Draft contains repeated template-like lines ({count}×), e.g., `{example}...`; rewrite to be section-specific.",
             )
         )
+    repeated_sent = _check_repeated_sentences(text=text, min_len=90, min_repeats=6)
+    if repeated_sent is not None:
+        example, count = repeated_sent
+        issues.append(
+            QualityIssue(
+                code="draft_repeated_sentences",
+                message=f"Draft contains repeated boilerplate sentences ({count}×), e.g., `{example}`; remove template repetition and make each subsection's thesis/comparisons specific.",
+            )
+        )
+    return issues
+
+
+def _draft_h3_cite_sets(text: str) -> dict[str, set[str]]:
+    # Map `### <title>` → set(cite_keys in that H3 block).
+    def _extract_keys(block: str) -> set[str]:
+        keys: set[str] = set()
+        for m in re.finditer(r"\[@([^\]]+)\]", block or ""):
+            inside = (m.group(1) or "").strip()
+            for k in re.findall(r"[A-Za-z0-9:_-]+", inside):
+                if k:
+                    keys.add(k)
+        return keys
+
+    out: dict[str, set[str]] = {}
+    cur_title = ""
+    cur_lines: list[str] = []
+
+    def _flush() -> None:
+        nonlocal cur_title, cur_lines
+        if not cur_title:
+            return
+        out[cur_title] = _extract_keys("\n".join(cur_lines))
+
+    for raw in (text or "").splitlines():
+        if raw.startswith("### "):
+            _flush()
+            cur_title = raw[4:].strip()
+            cur_lines = []
+            continue
+        if raw.startswith("## "):
+            _flush()
+            cur_title = ""
+            cur_lines = []
+            continue
+        if cur_title:
+            cur_lines.append(raw)
+
+    _flush()
+    return out
+
+
+def _check_citation_anchoring(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    # Detect “polish drift”: citations moved across H3 subsections after polishing.
+    #
+    # Baseline is captured once by `draft-polisher` into:
+    # - `output/citation_anchors.prepolish.jsonl`
+    #
+    # Policy: citations may be moved within a subsection (sentence/paragraph), but the
+    # set of cite keys per H3 should not change (no cross-subsection migration).
+    from tooling.common import read_jsonl
+
+    draft_rel = outputs[0] if outputs else "output/DRAFT.md"
+    baseline_rel = "output/citation_anchors.prepolish.jsonl"
+    baseline_path = workspace / baseline_rel
+    draft_path = workspace / draft_rel
+
+    if not baseline_path.exists():
+        return []
+    if not draft_path.exists():
+        return []
+
+    baseline_records = [r for r in read_jsonl(baseline_path) if isinstance(r, dict)]
+    baseline_map: dict[str, set[str]] = {}
+    for rec in baseline_records:
+        if str(rec.get("kind") or "").strip() != "h3":
+            continue
+        title = str(rec.get("title") or "").strip()
+        keys = rec.get("cite_keys") or []
+        if not title or not isinstance(keys, list):
+            continue
+        baseline_map[title] = set(str(k).strip() for k in keys if str(k).strip())
+
+    if not baseline_map:
+        return [
+            QualityIssue(
+                code="citation_anchors_empty",
+                message=f"`{baseline_rel}` exists but has no H3 citation anchors; delete it and rerun `draft-polisher` to regenerate a baseline.",
+            )
+        ]
+
+    draft_text = draft_path.read_text(encoding="utf-8", errors="ignore")
+    current_map = _draft_h3_cite_sets(draft_text)
+
+    issues: list[QualityIssue] = []
+    for title, before_keys in baseline_map.items():
+        after_keys = current_map.get(title)
+        if after_keys is None:
+            issues.append(
+                QualityIssue(
+                    code="citation_anchor_missing_h3",
+                    message=f"After polishing, H3 heading `{title}` is missing or renamed; keep headings stable (or delete `{baseline_rel}` to reset the baseline).",
+                )
+            )
+            continue
+        if before_keys != after_keys:
+            removed = sorted([k for k in before_keys if k not in after_keys])
+            added = sorted([k for k in after_keys if k not in before_keys])
+            sample_removed = ", ".join(removed[:6])
+            sample_added = ", ".join(added[:6])
+            issues.append(
+                QualityIssue(
+                    code="citation_anchoring_drift",
+                    message=(
+                        f"Citation anchoring drift in H3 `{title}`: "
+                        f"removed {{{sample_removed}}}, added {{{sample_added}}}. "
+                        f"Polishing must not move citations across subsections; keep cite keys in the same H3, "
+                        f"or delete `{baseline_rel}` to intentionally reset."
+                    ).rstrip(),
+                )
+            )
+
     return issues
 
 

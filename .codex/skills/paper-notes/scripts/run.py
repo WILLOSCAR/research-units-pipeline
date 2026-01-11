@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import csv
 import re
 import sys
@@ -24,13 +25,14 @@ def main() -> int:
 
     workspace = Path(args.workspace).resolve()
     inputs = parse_semicolon_list(args.inputs) or ["papers/core_set.csv"]
-    outputs = parse_semicolon_list(args.outputs) or ["papers/paper_notes.jsonl"]
+    outputs = parse_semicolon_list(args.outputs) or ["papers/paper_notes.jsonl", "papers/evidence_bank.jsonl"]
 
     core_path = workspace / inputs[0]
     fulltext_index_path = workspace / "papers" / "fulltext_index.jsonl"
     mapping_path = workspace / "outline" / "mapping.tsv"
     dedup_path = workspace / "papers" / "papers_dedup.jsonl"
     out_path = workspace / outputs[0]
+    bank_path = workspace / (outputs[1] if len(outputs) >= 2 else "papers/evidence_bank.jsonl")
 
     core_rows = _load_core_set(core_path)
     if not core_rows:
@@ -106,12 +108,10 @@ def main() -> int:
             limitations = _infer_limitations(evidence_level=evidence_level, mapped_sections=mapped_sections, abstract=abstract)
         else:
             summary_bullets = _abstract_to_bullets(abstract)
-            method = ""
-            key_results = []
-            if evidence_level == "abstract":
-                limitations = [f"Evidence level: abstract ({len(abstract)} chars). Validate with full text if used as key evidence."]
-            else:
-                limitations = ["Evidence level: title only (no abstract/full text). Do not infer technical details; verify the source before using as evidence."]
+            # Keep normal-priority notes lightweight, but still extract method/results so the evidence bank is usable.
+            method = _infer_method(title=row["title"], abstract=abstract, bullets=summary_bullets)
+            key_results = _infer_key_results(abstract=abstract)
+            limitations = _infer_limitations(evidence_level=evidence_level, mapped_sections=mapped_sections, abstract=abstract)
 
         notes.append(
             {
@@ -138,6 +138,15 @@ def main() -> int:
         )
 
     write_jsonl(out_path, notes)
+
+    # Evidence bank: addressable evidence items for binder/writer/auditor.
+    bank_freeze = bank_path.with_name("evidence_bank.refined.ok")
+    if not (bank_path.exists() and bank_path.stat().st_size > 0 and bank_freeze.exists()):
+        if bank_path.exists() and bank_path.stat().st_size > 0:
+            _backup_existing(bank_path)
+        bank_items = _build_evidence_bank(notes)
+        write_jsonl(bank_path, bank_items)
+
     return 0
 
 
@@ -373,11 +382,35 @@ def _infer_limitations(*, evidence_level: str, mapped_sections: list[str], abstr
     return lims[:3]
 
 
+_ABBREV_RX = re.compile(
+    r"(?:e\.g\.|i\.e\.|etc\.|cf\.|vs\.|et al\.|fig\.|figs\.|eq\.|eqs\.|sec\.|secs\.|no\.|dr\.|mr\.|ms\.|prof\.)",
+    flags=re.IGNORECASE,
+)
+
+
+def _split_sentences(text: str) -> list[str]:
+    text = re.sub(r"\s+", " ", (text or "").strip())
+    if not text:
+        return []
+
+    def protect(m: re.Match[str]) -> str:
+        return (m.group(0) or "").replace(".", "__DOT__")
+
+    protected = _ABBREV_RX.sub(protect, text)
+    parts = re.split(r"(?<=[.!?])\s+", protected)
+    out: list[str] = []
+    for p in parts:
+        p = (p or "").replace("__DOT__", ".").strip()
+        if p:
+            out.append(p)
+    return out
+
+
 def _pick_sentence(text: str, *, patterns: list[str]) -> str:
     text = re.sub(r"\s+", " ", (text or "").strip())
     if not text:
         return ""
-    sents = re.split(r"(?<=[.!?])\s+", text)
+    sents = _split_sentences(text)
     for pat in patterns:
         rx = re.compile(pat, flags=re.IGNORECASE)
         for s in sents:
@@ -390,10 +423,7 @@ def _pick_sentence(text: str, *, patterns: list[str]) -> str:
 
 
 def _last_sentence(text: str) -> str:
-    text = re.sub(r"\s+", " ", (text or "").strip())
-    if not text:
-        return ""
-    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    sents = _split_sentences(text)
     if not sents:
         return ""
     return sents[-1]
@@ -451,8 +481,9 @@ def _abstract_to_bullets(abstract: str) -> list[str]:
     abstract = (abstract or "").strip()
     if not abstract:
         return []
+
     # Deterministic scaffold: use first few sentences as bullets (LLM should refine for priority papers).
-    parts = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", abstract))
+    parts = _split_sentences(abstract)
     bullets: list[str] = []
     for p in parts:
         p = p.strip()
@@ -532,6 +563,26 @@ def _backfill_note(
         if (not isinstance(lims, list)) or (not lims) or (len(lims) == 1 and str(lims[0]).lower().startswith("evidence level:")):
             note["limitations"] = _infer_limitations(evidence_level=str(note.get("evidence_level") or ""), mapped_sections=mapped_sections, abstract=abstract)
 
+
+
+    # For normal-priority notes, still ensure method/results exist so downstream evidence binding is usable.
+    bullets = note.get("summary_bullets")
+    if not isinstance(bullets, list) or len([b for b in bullets if str(b).strip()]) < 1:
+        bullets = _abstract_to_bullets(abstract)
+        note["summary_bullets"] = bullets
+
+    method = str(note.get("method") or "").strip()
+    if not method:
+        note["method"] = _infer_method(title=str(note.get("title") or ""), abstract=abstract, bullets=bullets or [])
+
+    key_results = note.get("key_results")
+    if not isinstance(key_results, list) or not [k for k in key_results if str(k).strip()]:
+        note["key_results"] = _infer_key_results(abstract=abstract)
+
+    lims = note.get("limitations")
+    if not isinstance(lims, list) or not [x for x in lims if str(x).strip()]:
+        note["limitations"] = _infer_limitations(evidence_level=str(note.get("evidence_level") or ""), mapped_sections=mapped_sections, abstract=abstract)
+
     # Ensure bibkey exists (never overwrite).
     used: set[str] = set()
     bibkey = str(note.get("bibkey") or "").strip()
@@ -541,6 +592,129 @@ def _backfill_note(
     return note
 
 
+
+
+
+def _backup_existing(path: Path) -> None:
+    from datetime import datetime
+
+    stamp = datetime.now().replace(microsecond=0).isoformat().replace('-', '').replace(':', '')
+    backup = path.with_name(f"{path.name}.bak.{stamp}")
+    counter = 1
+    while backup.exists():
+        backup = path.with_name(f"{path.name}.bak.{stamp}.{counter}")
+        counter += 1
+    path.replace(backup)
+
+
+def _build_evidence_bank(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Extract addressable evidence items from paper notes.
+
+    This is best-effort and stays conservative: it only turns existing note fields
+    into short, citeable snippets with stable IDs and provenance pointers.
+    """
+
+    def norm(s: str) -> str:
+        s = re.sub(r"\s+", " ", (s or '').strip())
+        return s
+
+    def bad_lim(s: str) -> bool:
+        low = (s or '').strip().lower()
+        return (
+            low.startswith('evidence level:')
+            or low.startswith('abstract-level evidence only')
+            or low.startswith('title-only evidence')
+            or low.startswith('even with extracted text')
+        )
+
+    def evidence_id(pid: str, kind: str, snippet: str) -> str:
+        h = hashlib.sha1(f"{kind}|{snippet}".encode('utf-8', errors='ignore')).hexdigest()[:10]
+        return f"E-{pid}-{h}"
+
+    def confidence(level: str) -> str:
+        level = (level or '').strip().lower()
+        if level == 'fulltext':
+            return 'high'
+        if level == 'abstract':
+            return 'medium'
+        return 'low'
+
+    def tags_for(snippet: str) -> list[str]:
+        low = (snippet or '').lower()
+        tags: set[str] = set()
+        if any(w in low for w in ['benchmark', 'benchmarks', 'dataset', 'datasets', 'metric', 'metrics', 'eval', 'evaluation']):
+            tags.add('evaluation')
+        if any(w in low for w in ['tool', 'tools', 'api', 'function call', 'function-calling', 'mcp', 'schema']):
+            tags.add('tooling')
+        if any(w in low for w in ['memory', 'retrieval', 'rag', 'cache']):
+            tags.add('memory')
+        if any(w in low for w in ['attack', 'vulnerab', 'prompt injection', 'exfiltration', 'jailbreak', 'guardrail', 'sandbox']):
+            tags.add('security')
+        if re.search(r"\b\d+(?:\.\d+)?%?\b", low):
+            tags.add('numbers')
+        return sorted(tags)
+
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for note in [n for n in notes if isinstance(n, dict)]:
+        pid = str(note.get('paper_id') or '').strip()
+        if not pid:
+            continue
+        bibkey = str(note.get('bibkey') or '').strip()
+        level = str(note.get('evidence_level') or '').strip().lower()
+        title = str(note.get('title') or '').strip()
+        year = note.get('year')
+
+        def add(kind: str, snippet: str, pointer: str) -> None:
+            snippet = norm(snippet)
+            if not snippet or len(snippet) < 24:
+                return
+            if kind == 'limitation' and bad_lim(snippet):
+                return
+            eid = evidence_id(pid, kind, snippet)
+            if eid in seen:
+                return
+            seen.add(eid)
+            items.append(
+                {
+                    'evidence_id': eid,
+                    'paper_id': pid,
+                    'bibkey': bibkey,
+                    'title': title,
+                    'year': year,
+                    'evidence_level': level or 'unknown',
+                    'claim_type': kind,
+                    'snippet': snippet,
+                    'locator': {'source': 'paper_notes', 'pointer': pointer},
+                    'confidence': confidence(level),
+                    'tags': tags_for(snippet),
+                }
+            )
+
+        # Method / results / summary bullets are the best structured sources.
+        method = note.get('method')
+        if isinstance(method, str) and method.strip():
+            add('method', method, f"papers/paper_notes.jsonl:paper_id={pid}#method")
+
+        for idx, kr in enumerate(note.get('key_results') or []):
+            if isinstance(kr, str) and kr.strip():
+                add('result', kr, f"papers/paper_notes.jsonl:paper_id={pid}#key_results[{idx}]")
+
+        for idx, b in enumerate(note.get('summary_bullets') or []):
+            if isinstance(b, str) and b.strip():
+                add('summary', b, f"papers/paper_notes.jsonl:paper_id={pid}#summary_bullets[{idx}]")
+
+        for idx, lim in enumerate(note.get('limitations') or []):
+            if isinstance(lim, str) and lim.strip():
+                add('limitation', lim, f"papers/paper_notes.jsonl:paper_id={pid}#limitations[{idx}]")
+
+        # Ensure at least one addressable snippet per paper (fallback to title).
+        if not any(it.get('paper_id') == pid for it in items):
+            add('title', title or f"Paper {pid}", f"papers/paper_notes.jsonl:paper_id={pid}#title")
+
+    return items
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
-

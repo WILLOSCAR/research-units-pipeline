@@ -132,6 +132,9 @@ def main() -> int:
                 "rq": rq,
                 "scope_rule": scope_rule,
                 "axes": axes,
+                "bridge_terms": _bridge_terms(sub_title=sub_title, axes=axes, goal=goal),
+                "contrast_hook": _contrast_hook(sub_title=sub_title, axes=axes, goal=goal),
+                "required_evidence_fields": _required_evidence_fields(sub_title=sub_title, axes=axes, goal=goal),
                 "clusters": clusters,
                 "paragraph_plan": paragraph_plan,
                 "evidence_level_summary": {
@@ -252,17 +255,28 @@ def _paper_ref(pid: str, *, notes_by_id: dict[str, dict[str, Any]]) -> PaperRef:
 def _choose_axes(*, sub_title: str, goal: str, evidence_needs: list[str], outline_axes: list[str]) -> list[str]:
     axes: list[str] = []
 
+    def norm(x: str) -> str:
+        x = re.sub(r"\s+", " ", (x or "").strip().lower())
+        x = x.rstrip(" .;:，；。")
+        x = re.sub(r"\s*/\s*", " / ", x)
+        return x
+
     def add(x: str) -> None:
         x = re.sub(r"\s+", " ", (x or "").strip())
+        x = x.rstrip(" .;:，；。")
+        x = re.sub(r"\s*/\s*", " / ", x)
         if not x:
             return
         low = x.lower()
         if "refine" in low and "evidence" in low:
             return
+        # Drop ultra-generic axis tokens that are almost always scaffold leakage.
+        if norm(x) in {"mechanism", "data", "evaluation", "efficiency", "limitation", "limitations"}:
+            return
         if x not in axes:
             axes.append(x)
 
-    # Prefer evidence_needs / outline axes.
+    # Prefer evidence_needs / outline axes as seeds, but treat generic "scaffold" axes as low priority.
     for a in evidence_needs:
         add(a)
     for a in outline_axes:
@@ -271,31 +285,223 @@ def _choose_axes(*, sub_title: str, goal: str, evidence_needs: list[str], outlin
     title_low = (sub_title or "").lower()
     goal_low = (goal or "").lower()
 
+    # Domain-specific axes for LLM-agent surveys (cheap heuristics; should become evidence-driven with richer notes).
+    is_agent_domain = any(k in goal_low for k in ["agent", "agents", "llm agent", "tool use", "tool-use", "memory", "planning"]) or any(
+        k in title_low for k in ["agent", "tool", "memory", "rag", "planning", "reasoning", "multi-agent", "evaluation", "safety", "security"]
+    )
+
+    if is_agent_domain:
+        if any(t in title_low for t in ["plan", "planning", "reason", "reasoning", "deliberation", "search", "tree", "thought"]):
+            add("control loop design (planner / executor, search)")
+            add("deliberation method (CoT / ToT / MCTS)")
+            add("action grounding (tool calls vs environment actions)")
+        if any(t in title_low for t in ["tool", "orchestration", "mcp", "api", "function", "protocol"]):
+            add("tool interface (function calling, schemas, protocols)")
+            add("tool selection / routing policy")
+            add("sandboxing / permissions / observability")
+        if any(t in title_low for t in ["memory", "retrieval", "rag", "cache", "long-horizon"]):
+            add("memory type (episodic / semantic / scratchpad)")
+            add("retrieval source + index (docs / web / logs)")
+            add("write / update / forgetting policy")
+        if any(t in title_low for t in ["multi-agent", "coordination", "debate", "collaboration", "swarm"]):
+            add("communication protocol + role assignment")
+            add("aggregation (vote / debate / referee)")
+            add("stability (collusion, mode collapse, incentives)")
+        if any(t in title_low for t in ["train", "alignment", "preference", "rl", "reinforcement", "self-improvement", "reflection"]):
+            add("training signal (SFT / preference / RL)")
+            add("data synthesis + evaluator / reward")
+            add("generalization + regression control")
+        if any(t in title_low for t in ["evaluation", "benchmark", "suite", "deploy", "deployment"]):
+            add("task suites (web / code / embodied / tools)")
+            add("metrics (success, cost, reliability, safety)")
+            add("contamination + reproducibility controls")
+        if any(t in title_low for t in ["safety", "security", "attack", "guardrail", "defense", "vulnerab"]):
+            add("threat model (prompt/tool injection, exfiltration)")
+            add("defense surface (policy, sandbox, monitoring)")
+            add("security evaluation protocol")
+
+    # Existing T2I-specific heuristics (kept for backward compatibility).
     if any(t in title_low for t in ["representation", "latent", "token", "pixel", "tokenizer", "codebook"]):
-        add("representation (pixel/latent/token)")
+        add("representation (pixel / latent / token)")
     if any(t in title_low for t in ["sampling", "solver", "distillation", "speed", "efficiency", "steps"]):
-        add("sampling/solver (steps, solver, distillation)")
+        add("sampling / solver (steps, solver, distillation)")
     if any(t in title_low for t in ["guidance", "cfg", "classifier-free"]):
         add("guidance strategy (CFG, conditioning)")
     if any(t in title_low for t in ["control", "editing", "personalization", "inversion", "lora", "dreambooth"]):
-        add("control/personalization interface")
+        add("control / personalization interface")
     if any(t in title_low for t in ["evaluation", "benchmark", "metrics"]):
-        add("evaluation protocol (benchmarks/metrics/human)")
+        add("evaluation protocol (benchmarks / metrics / human)")
 
     if "text-to-image" in goal_low or "t2i" in goal_low or "image generation" in goal_low:
-        add("datasets/benchmarks (COCO, DrawBench, GenEval, etc.)")
+        add("datasets / benchmarks (COCO, DrawBench, GenEval, etc.)")
 
-    # Final fallback: stable 5-axis set.
+    # Final fallback: stable generic set.
     for a in [
-        "mechanism/architecture",
-        "data/training setup",
+        "mechanism / architecture",
+        "data / training setup",
         "evaluation protocol",
-        "compute/efficiency",
-        "failure modes/limitations",
+        "compute / efficiency",
+        "failure modes / limitations",
     ]:
         add(a)
 
-    return axes[:5]
+    generic = {
+        "mechanism / architecture",
+        "data / training setup",
+        "evaluation protocol",
+        "evaluation protocol (benchmarks / metrics / human)",
+        "evaluation protocol (datasets / metrics / human)",
+        "compute / efficiency",
+        "efficiency / compute",
+        "failure modes / limitations",
+        "failure modes/limitations",
+        "failure modes / limitations.",
+    }
+
+    # Reorder: keep non-generic axes first so heuristics aren't crowded out by scaffold-y outline axes.
+    ordered: list[str] = []
+    for a in axes:
+        if norm(a) not in generic and a not in ordered:
+            ordered.append(a)
+    for a in axes:
+        if norm(a) in generic and a not in ordered:
+            ordered.append(a)
+
+    specific = [a for a in ordered if norm(a) not in generic]
+    generic_axes = [a for a in ordered if norm(a) in generic]
+
+    # Avoid repeating the same generic axis list in every subsection.
+    # Keep generic axes only as a fallback when we don't have enough specific ones.
+    out: list[str] = list(specific)
+    if len(out) < 3:
+        for a in generic_axes:
+            if a not in out:
+                out.append(a)
+            if len(out) >= 3:
+                break
+
+    return out[:5]
+
+
+
+
+def _bridge_terms(*, sub_title: str, axes: list[str], goal: str) -> list[str]:
+    """Return 3–6 bridge terms for transition-weaver (NO NEW FACTS)."""
+
+    title_low = (sub_title or "").lower()
+    goal_low = (goal or "").lower()
+
+    terms: list[str] = []
+
+    def add(x: str) -> None:
+        x = re.sub(r"\s+", " ", (x or "").strip())
+        if not x:
+            return
+        if x.lower() in {"mechanism", "data", "evaluation", "efficiency", "limitations"}:
+            return
+        if x not in terms:
+            terms.append(x)
+
+    # Agent-domain heuristics (cheap but useful for coherence).
+    if any(k in goal_low for k in ["agent", "agents", "tool use", "tool-use", "memory", "planning"]) or any(
+        k in title_low for k in ["agent", "tool", "memory", "rag", "planning", "reasoning", "multi-agent", "evaluation", "safety", "security"]
+    ):
+        if any(t in title_low for t in ["plan", "planning", "reason", "reasoning", "deliberation", "search", "tree", "thought"]):
+            for t in ["planner/executor", "search", "deliberation", "action grounding"]:
+                add(t)
+        if any(t in title_low for t in ["tool", "orchestration", "mcp", "api", "function", "protocol"]):
+            for t in ["function calling", "tool schema", "routing", "sandbox", "observability"]:
+                add(t)
+        if any(t in title_low for t in ["memory", "retrieval", "rag", "cache", "long-horizon"]):
+            for t in ["retrieval", "index", "write policy", "long-term memory"]:
+                add(t)
+        if any(t in title_low for t in ["multi-agent", "coordination", "debate", "collaboration", "swarm"]):
+            for t in ["roles", "communication", "debate", "aggregation", "stability"]:
+                add(t)
+        if any(t in title_low for t in ["train", "alignment", "preference", "rl", "reinforcement", "self-improvement", "reflection"]):
+            for t in ["preference", "reward", "feedback", "self-improvement"]:
+                add(t)
+        if any(t in title_low for t in ["evaluation", "benchmark", "suite", "deploy", "deployment"]):
+            for t in ["benchmarks", "metrics", "reproducibility", "contamination"]:
+                add(t)
+        if any(t in title_low for t in ["safety", "security", "attack", "guardrail", "defense", "vulnerab"]):
+            for t in ["threat model", "prompt/tool injection", "monitoring", "guardrails"]:
+                add(t)
+
+    # Add lightweight terms from axes.
+    for a in axes[:5]:
+        low = str(a or "").lower()
+        if "benchmark" in low or "metric" in low or "dataset" in low:
+            add("benchmarks/metrics")
+        if "compute" in low or "efficien" in low or "cost" in low:
+            add("compute")
+        if "threat" in low or "security" in low or "attack" in low:
+            add("threat model")
+
+    return terms[:6]
+
+
+def _contrast_hook(*, sub_title: str, axes: list[str], goal: str) -> str:
+    """Return a short hook label for transitions (NO NEW FACTS)."""
+
+    title_low = (sub_title or "").lower()
+    goal_low = (goal or "").lower()
+    axes_low = " ".join([str(a or "").lower() for a in axes])
+
+    if any(k in goal_low for k in ["agent", "agents"]) or "agent" in title_low:
+        if any(t in title_low for t in ["plan", "planning", "reason", "reasoning", "deliberation", "search", "thought"]):
+            return "planning/control loop"
+        if any(t in title_low for t in ["tool", "orchestration", "mcp", "api", "function", "protocol"]):
+            return "tool interfaces"
+        if any(t in title_low for t in ["memory", "retrieval", "rag", "cache"]):
+            return "memory/retrieval"
+        if any(t in title_low for t in ["multi-agent", "coordination", "debate", "collaboration", "swarm"]):
+            return "coordination"
+        if any(t in title_low for t in ["train", "alignment", "preference", "rl", "self-improvement", "reflection"]):
+            return "learning/feedback"
+        if any(t in title_low for t in ["evaluation", "benchmark", "suite", "deploy", "deployment"]):
+            return "evaluation"
+        if any(t in title_low for t in ["safety", "security", "attack", "guardrail", "defense", "vulnerab"]):
+            return "security"
+
+    if any(t in axes_low for t in ["benchmark", "metric", "dataset", "evaluation"]):
+        return "evaluation"
+    if any(t in axes_low for t in ["compute", "efficien", "cost"]):
+        return "compute"
+    if any(t in axes_low for t in ["failure", "limit"]):
+        return "limitations"
+
+    # Fallback: first axis phrase.
+    return (axes[0] if axes else "").strip()[:48]
+
+
+def _required_evidence_fields(*, sub_title: str, axes: list[str], goal: str) -> list[str]:
+    """Return a short checklist of evidence fields this subsection should eventually support."""
+
+    joined = " ".join([str(a or "").lower() for a in axes] + [(sub_title or "").lower(), (goal or "").lower()])
+
+    out: list[str] = []
+
+    def add(x: str) -> None:
+        x = re.sub(r"\s+", " ", (x or "").strip())
+        if x and x not in out:
+            out.append(x)
+
+    # Defaults for survey-quality comparisons.
+    add("benchmarks/datasets")
+    add("metrics / human-eval protocol")
+
+    if any(t in joined for t in ["compute", "efficien", "cost", "latency", "speed"]):
+        add("compute / cost (train/infer)")
+    if any(t in joined for t in ["data", "training", "supervision", "sft", "rl", "preference"]):
+        add("training signal / supervision")
+    if any(t in joined for t in ["failure", "limit", "robust", "error"]):
+        add("failure modes / limitations")
+    if any(t in joined for t in ["security", "attack", "threat", "guardrail", "sandbox", "injection"]):
+        add("threat model")
+        add("defense surface")
+
+    return out[:8]
 
 
 def _paper_tags(p: PaperRef) -> set[str]:

@@ -24,6 +24,7 @@
 - `taxonomy-builder`：核心集合 → `outline/taxonomy.yml`（≥2 层、可映射）
 - `outline-builder`：taxonomy → `outline/outline.yml`（bullets-only）
 - `section-mapper`：core set → `outline/mapping.tsv`（小节覆盖率）
+- `outline-refiner`：planner pass 诊断（覆盖率/复用热点/轴是否泛化）→ `outline/coverage_report.md` + `outline/outline_state.jsonl`
 - `concept-graph`：教程概念依赖图 → `outline/concept_graph.yml`
 - `module-planner`：概念图 → `outline/module_plan.yml`
 - `exercise-builder`：为模块补齐可验证练习（更新 module plan）
@@ -31,7 +32,7 @@
 ### Stage 3 — Evidence（C3）[NO PROSE]
 
 - `pdf-text-extractor`（Network: fulltext 可选）：下载/抽取全文 → `papers/fulltext_index.jsonl` + `papers/fulltext/*.txt`
-- `paper-notes`：结构化论文笔记 → `papers/paper_notes.jsonl`
+- `paper-notes`：结构化论文笔记 + 证据库 → `papers/paper_notes.jsonl` + `papers/evidence_bank.jsonl`
 - `subsection-briefs`：为每个 H3 生成写作意图卡（scope_rule/rq/axes/clusters/paragraph_plan）→ `outline/subsection_briefs.jsonl`
 - `claims-extractor`：从单篇论文/稿件提取 claims → `output/CLAIMS.md`
 - `evidence-auditor`：审稿：证据缺口审计 → `output/MISSING_EVIDENCE.md`
@@ -40,6 +41,7 @@
 ### Stage 4 — Citations / Visuals（C4）[NO PROSE]
 
 - `citation-verifier`（Network: verify 可选）：生成 BibTeX + verification 记录 → `citations/ref.bib` + `citations/verified.jsonl`
+- `evidence-binder`：把 subsection→evidence_id 绑定成“证据计划”（writer 只能按 ID 取证据）→ `outline/evidence_bindings.jsonl` + `outline/evidence_binding_report.md`
 - `evidence-draft`：把 notes→“可写证据包”（逐小节 claim candidates / concrete comparisons / eval / limitations）→ `outline/evidence_drafts.jsonl`
 - `claim-matrix-rewriter`：从 evidence packs 重写“claim→evidence 索引”（避免模板 claim）→ `outline/claim_evidence_matrix.md`
 - `table-schema`：先定义表格 schema（问题/列/证据字段）→ `outline/table_schema.md`
@@ -49,9 +51,17 @@
 ### Stage 5 — Writing（C5）[PROSE after approvals]
 
 - `transition-weaver`：生成 H2/H3 过渡句映射（不新增事实/引用）→ `outline/transitions.md`
+- `grad-paragraph`：研究生段落 micro-skill（张力→对比→评测锚点→限制），用于写出“像综述”的正文段落（通常嵌入 `sections/S*.md` 的写作流程）
+- `subsection-writer`：按 H2/H3 拆分写作到 `sections/`（可独立 QA）→ `sections/sections_manifest.jsonl` + `sections/S*.md`
+- `subsection-polisher`：局部小节润色（pre-merge；结构化段落 + 去模板；不改 citation keys）
+- `section-merger`：把 `sections/` + `outline/*visuals*` 按 `outline/outline.yml` 合并 → `output/DRAFT.md` + `output/MERGE_REPORT.md`
 - `prose-writer`：从已批准的 outline+evidence 写 `output/DRAFT.md`（仅用已验证 citation keys）
 - `draft-polisher`：对 `output/DRAFT.md` 做去套话 + 连贯性润色（不改变 citation keys 与语义）
+- `terminology-normalizer`：全局术语一致性（canonical terms + synonym policy；不改 citations）
+- `redundancy-pruner`：全局去重复/去套话（集中证据声明、去重复模板段落；不改 citations）
+- `citation-anchoring`：引用锚定回归（防润色把引用挪到别的小节导致 claim→evidence 错位）
 - `global-reviewer`：全局一致性回看（术语/章节呼应/结论回扣 RQ），输出 `output/GLOBAL_REVIEW.md`
+- `pipeline-auditor`：回归审计（PASS/FAIL）：ellipsis/模板句/引用健康/证据绑定 → `output/AUDIT_REPORT.md`
 - `tutorial-spec`：教程规格说明 → `output/TUTORIAL_SPEC.md`（C1）
 - `tutorial-module-writer`：模块化教程内容 → `output/TUTORIAL.md`（C3）
 - `protocol-writer`：系统综述协议 → `output/PROTOCOL.md`（C1）
@@ -73,16 +83,26 @@
 - “taxonomy / 分类 / 主题树 / 综述结构” → `taxonomy-builder`
 - “outline / 大纲 / bullets-only” → `outline-builder`
 - “mapping / 映射 / coverage / 覆盖率” → `section-mapper`
+- “planner pass / coverage report / 大纲诊断 / 复用热点 / axes 泛化” → `outline-refiner`
 - “pdf / fulltext / 下载 / 抽取全文” → `pdf-text-extractor`
 - “paper notes / 论文笔记 / 结构化阅读” → `paper-notes`
 - “claim matrix / 证据矩阵 / claim-evidence matrix” → `claim-matrix-rewriter`（survey 默认）, `claim-evidence-matrix`（legacy）
 - “subsection briefs / 写作意图卡 / 小节卡片” → `subsection-briefs`
 - “bibtex / citation / 引用 / 参考文献” → `citation-verifier`
 - “evidence pack / evidence draft / 证据草稿 / 对比维度” → `evidence-draft`
+- “evidence binding / evidence ids / 证据绑定 / subsection→证据计划” → `evidence-binder`
 - “tables / 表格 / schema-first tables / 表格填充” → `table-schema`, `table-filler`
 - “timeline / figures / 可视化” → `survey-visuals`
 - “写综述 / 写 draft / prose” → `prose-writer`
+- “研究生段落 / 论证段 / 段落结构（对比+限制+评测锚点）” → `grad-paragraph`
+- “分小节写 / per-section / per-subsection / sections/” → `subsection-writer`
+- “小节润色 / pre-merge polish / per-subsection polish” → `subsection-polisher`
+- “合并草稿 / merge sections / section merger / 拼接草稿” → `section-merger`
 - “润色 / 去套话 / coherence / polish draft” → `draft-polisher`, `global-reviewer`
+- “术语统一 / glossary / terminology” → `terminology-normalizer`
+- “去重复 / boilerplate removal / redundancy” → `redundancy-pruner`
+- “引用锚定 / 引用漂移 / citation anchoring” → `citation-anchoring`
+- “audit / regression / 质量回归 / 证据绑定检查” → `pipeline-auditor`
 - “过渡句 / transitions / 章节承接” → `transition-weaver`
 - “LaTeX / PDF / 编译” → `latex-scaffold`, `latex-compile-qa`
 - “系统综述 / PRISMA / protocol” → `protocol-writer`, `screening-manager`, `extraction-form`, `bias-assessor`, `synthesis-writer`
@@ -99,11 +119,16 @@
 - `outline/outline.yml` → `section-mapper`, `table-schema`, `transition-weaver`, `prose-writer`
 - `outline/mapping.tsv` → `pdf-text-extractor`, `paper-notes`
 - `papers/paper_notes.jsonl` → `citation-verifier`
+- `papers/evidence_bank.jsonl` → `evidence-binder`, `evidence-draft`（可选增强）
 - `outline/subsection_briefs.jsonl` → `evidence-draft`, `table-schema`, `transition-weaver`, `prose-writer`
+- `outline/evidence_bindings.jsonl` → `evidence-draft`, `pipeline-auditor`
 - `outline/evidence_drafts.jsonl` → `claim-matrix-rewriter`, `table-filler`, `prose-writer`
 - `outline/table_schema.md` → `table-filler`
 - `outline/transitions.md` → `prose-writer`
+- `outline/transitions.md` → `section-merger`（自动插入过渡句）
+- `sections/sections_manifest.jsonl` → `section-merger`
 - `output/DRAFT.md` → `draft-polisher`, `global-reviewer`
+- `output/citation_anchors.prepolish.jsonl` → `draft-polisher`（baseline）, `citation-anchoring`
 
 ## 输出文件 → Skill
 
@@ -115,7 +140,10 @@
 - `outline/mapping.tsv` → `section-mapper`
 - `papers/fulltext_index.jsonl` → `pdf-text-extractor`
 - `papers/paper_notes.jsonl` → `paper-notes`
+- `papers/evidence_bank.jsonl` → `paper-notes`
 - `outline/subsection_briefs.jsonl` → `subsection-briefs`
+- `outline/coverage_report.md`, `outline/outline_state.jsonl` → `outline-refiner`
+- `outline/evidence_bindings.jsonl`, `outline/evidence_binding_report.md` → `evidence-binder`
 - `outline/evidence_drafts.jsonl` → `evidence-draft`
 - `outline/claim_evidence_matrix.md` → `claim-matrix-rewriter`
 - `citations/ref.bib`, `citations/verified.jsonl` → `citation-verifier`
@@ -124,7 +152,10 @@
 - `outline/timeline.md`, `outline/figures.md` → `survey-visuals`
 - `outline/transitions.md` → `transition-weaver`
 - `output/DRAFT.md` → `prose-writer`, `draft-polisher`
+- `output/citation_anchors.prepolish.jsonl` → `draft-polisher`（baseline）, `citation-anchoring`
 - `output/GLOBAL_REVIEW.md` → `global-reviewer`
+- `output/AUDIT_REPORT.md` → `pipeline-auditor`
+- `output/MERGE_REPORT.md` → `section-merger`
 - `latex/main.tex`, `latex/main.pdf` → `latex-scaffold`, `latex-compile-qa`
 
 ## 常见失败场景（症状 → 处理）

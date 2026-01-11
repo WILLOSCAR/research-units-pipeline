@@ -275,8 +275,7 @@ def _render_timeline(*, notes_by_id: dict[str, dict[str, Any]], bibkey_by_pid: d
         if not bibkey:
             continue
         title = str(note.get("title") or "").strip()
-        phrase = _milestone_phrase(title)
-        bullets.append(f"- {y}: {title} (`{pid}`) — {phrase} [@{bibkey}]")
+        bullets.append(f"- {y}: {title} (`{pid}`) [@{bibkey}]")
         if len(bullets) >= 10:
             break
 
@@ -290,8 +289,7 @@ def _render_timeline(*, notes_by_id: dict[str, dict[str, Any]], bibkey_by_pid: d
             if not bibkey:
                 continue
             title = str(note.get("title") or "").strip()
-            phrase = _milestone_phrase(title)
-            line = f"- {y}: {title} (`{pid}`) — {phrase} [@{bibkey}]"
+            line = f"- {y}: {title} (`{pid}`) [@{bibkey}]"
             if line not in bullets:
                 bullets.append(line)
 
