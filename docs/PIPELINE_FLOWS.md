@@ -49,8 +49,8 @@ flowchart LR
   end
 
   subgraph "C5 - Writing [PROSE after C2]"
-    TW[transition-weaver]
     SW[subsection-writer]
+    TW[transition-weaver]
     MG[section-merger]
     DP[draft-polisher]
     GR[global-reviewer]
@@ -59,7 +59,7 @@ flowchart LR
     LCQ[latex-compile-qa]:::optional
   end
 
-  WS --> LE --> DR --> TB --> OB --> SM --> OR --> C2A --> PT --> PN --> SB --> CV --> EB --> ED --> CMR --> TS --> TF --> SV --> TW --> SW --> MG --> DP --> GR --> PA
+  WS --> LE --> DR --> TB --> OB --> SM --> OR --> C2A --> PT --> PN --> SB --> CV --> EB --> ED --> CMR --> TS --> TF --> SV --> SW --> TW --> MG --> DP --> GR --> PA
   KX -.-> LE
   SSH -.-> TB
   PA -.-> LS -.-> LCQ
@@ -108,8 +108,8 @@ flowchart LR
   end
 
   subgraph "C5 - Writing + PDF [PROSE after C2]"
-    TW[transition-weaver]
     SW[subsection-writer]
+    TW[transition-weaver]
     MG[section-merger]
     DP[draft-polisher]
     GR[global-reviewer]
@@ -118,7 +118,7 @@ flowchart LR
     LCQ[latex-compile-qa]
   end
 
-  WS --> LE --> DR --> TB --> OB --> SM --> OR --> C2A --> PT --> PN --> SB --> CV --> EB --> ED --> CMR --> TS --> TF --> SV --> TW --> SW --> MG --> DP --> GR --> PA --> LS --> LCQ
+  WS --> LE --> DR --> TB --> OB --> SM --> OR --> C2A --> PT --> PN --> SB --> CV --> EB --> ED --> CMR --> TS --> TF --> SV --> SW --> TW --> MG --> DP --> GR --> PA --> LS --> LCQ
   KX -.-> LE
   SSH -.-> TB
 ```

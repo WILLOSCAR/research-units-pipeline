@@ -217,6 +217,8 @@ def main() -> int:
             cite_keys=cite_keys,
             has_fulltext=(fulltext_n > 0),
         )
+        if len([c for c in claim_candidates if isinstance(c, dict) and str(c.get('claim') or '').strip()]) < 3:
+            blocking_missing.append('too few snippet-derived claim candidates (need >=3); enrich paper notes/evidence bank for this subsection')
 
         concrete_comparisons = _comparisons(
             axes=axes,
@@ -383,10 +385,10 @@ def _evidence_snippets(*, workspace: Path, pids: list[str], notes_by_pid: dict[s
             sents = _split_sentences(abstract)
             chosen = ""
             for s in sents:
-                if re.search(r"\d+(?:\.\d+)?%?", s):
+                if re.search(r"\b\d+(?:\.\d+)?%?\b", s):
                     chosen = s
                     break
-                if re.search(r"(?i)(success|accuracy|score|outperform|benchmark|dataset|evaluation|human|tasks?)", s):
+                if re.search(r"(?i)\b(success|accuracy|score|outperform|benchmark|dataset|evaluation|human|tasks?)\b", s):
                     chosen = s
                     break
             text = (chosen or " ".join(sents[:2]) or abstract[:240]).strip()
@@ -477,19 +479,27 @@ def _claim_candidates(
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
 
-    # Prefer snippet-derived claim candidates (less templated; traceable).
-    for snip in evidence_snippets[:4]:
+    # Non-negotiable: claim candidates must be snippet-derived (traceable), even in abstract-only mode.
+    for snip in evidence_snippets[:8]:
         if not isinstance(snip, dict):
             continue
         text = str(snip.get("text") or "").strip()
         if not text:
             continue
-        # Keep the first sentence as a claim candidate.
-        sent = _split_sentences(text)
-        claim = sent[0] if sent else text
+        low = text.lower()
+        if low.startswith("abstract-level evidence") or low.startswith("title-only evidence"):
+            continue
+        if low.startswith("this work is mapped to:") or low.startswith("mapped to outline subsections:"):
+            continue
+
+        sents = _split_sentences(text)
+        claim = (sents[0] if sents else text).strip()
         claim = re.sub(r"\s+", " ", claim).strip()
-        if len(claim) > 220:
-            claim = claim[:220].rstrip()
+        if len(claim) < 24:
+            continue
+        if len(claim) > 240:
+            claim = claim[:240].rstrip()
+
         out.append(
             {
                 "claim": claim,
@@ -497,23 +507,10 @@ def _claim_candidates(
                 "citations": snip.get("citations") if isinstance(snip.get("citations"), list) else cite_keys[:2],
             }
         )
-        if len(out) >= 3:
-            break
-
-    # Fill remaining slots with axis-driven hypotheses (evidence-aware language).
-    lead = "Claim" if has_fulltext else "Hypothesis"
-    for ax in [a for a in axes if a][:5]:
         if len(out) >= 5:
             break
-        out.append(
-            {
-                "claim": f"{lead}: In '{title}', compare mapped works along '{ax}' and state when each choice is preferred, citing the most relevant evidence.",
-                "evidence_field": ax,
-                "citations": cite_keys[:3],
-            }
-        )
 
-    return out[:5]
+    return out
 
 
 def _comparisons(*, axes: list[str], clusters: Any, cite_keys: list[str]) -> list[dict[str, Any]]:
@@ -626,6 +623,8 @@ def _limitations_from_notes(pids: list[str], *, notes_by_pid: dict[str, dict[str
             if low.startswith("evidence level"):
                 continue
             if low.startswith("abstract-level evidence"):
+                continue
+            if low.startswith("this work is mapped to:") or low.startswith("mapped to outline subsections:"):
                 continue
             out.append(
                 {

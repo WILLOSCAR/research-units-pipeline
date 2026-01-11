@@ -91,7 +91,6 @@ def main() -> int:
 
     draft_path = workspace / draft_rel
     report_path = workspace / report_rel
-    ensure_dir(draft_path.parent)
     ensure_dir(report_path.parent)
 
     outline_rel = "outline/outline.yml"
@@ -104,122 +103,54 @@ def main() -> int:
     outline = load_yaml(workspace / outline_rel) if (workspace / outline_rel).exists() else []
     outline_sections = _iter_outline(outline)
 
-    sections_dir = workspace / "sections"
-
-    goal = _read_text(workspace / "GOAL.md").strip().splitlines()
-    title = "Survey"
-    for ln in goal:
-        ln = ln.strip()
-        if not ln or ln.startswith("#"):
-            continue
-        title = ln
-        break
-
-    transitions_text = _read_text(workspace / "outline" / "transitions.md")
-    h3_trans, h2_trans = _parse_transitions(transitions_text)
-
     missing: list[str] = []
 
-    def _load_required(relpath: str) -> str:
+    def _require(relpath: str) -> str:
         p = workspace / relpath
         if not p.exists() or p.stat().st_size <= 0:
             missing.append(relpath)
             return ""
         return _read_text(p).strip() + "\n"
 
-    out_lines: list[str] = [f"# {title}", ""]
+    # Required global sections.
+    required_global = [
+        "sections/abstract.md",
+        "sections/open_problems.md",
+        "sections/conclusion.md",
+    ]
 
-    # Global front matter.
-    out_lines.append(_load_required("sections/abstract.md").strip())
-    out_lines.append("")
+    # Required visuals (evidence-first).
+    required_visuals = [
+        "outline/timeline.md",
+        "outline/tables.md",
+        "outline/figures.md",
+    ]
 
-    note = _read_text(workspace / "sections" / "evidence_note.md").strip()
-    if note:
-        out_lines.append(note)
-        out_lines.append("")
+    # Required transitions map.
+    required_transitions = [
+        "outline/transitions.md",
+    ]
 
-    # Outline-driven sections (H2 + H3).
-    for idx, sec in enumerate(outline_sections):
-        sec_title = sec["title"]
-        out_lines.append(f"## {sec_title}")
-        out_lines.append("")
-
+    # Required per-outline unit files.
+    unit_files: list[str] = []
+    for sec in outline_sections:
         subs = sec.get("subsections") or []
         if subs:
-            for j, sub in enumerate(subs):
-                sid = sub["id"]
-                stitle = sub["title"]
-                out_lines.append(f"### {stitle}")
-                out_lines.append("")
-                body_rel = f"sections/{_slug_unit_id(sid)}.md"
-                body = _load_required(body_rel).strip()
-                if not body:
-                    out_lines.append(f"TODO: MISSING `{body_rel}`")
-                else:
-                    out_lines.append(body)
-                out_lines.append("")
-
-                # Insert within-section transition if available.
-                if j + 1 < len(subs):
-                    nxt = subs[j + 1]["id"]
-                    t = h3_trans.get((sid, nxt), "").strip()
-                    if t:
-                        out_lines.append(t)
-                        out_lines.append("")
+            for sub in subs:
+                sid = str(sub.get("id") or "").strip()
+                if sid:
+                    unit_files.append(f"sections/{_slug_unit_id(sid)}.md")
         else:
-            body_rel = f"sections/{_slug_unit_id(sec['id'])}.md"
-            body = _load_required(body_rel).strip()
-            if not body:
-                out_lines.append(f"TODO: MISSING `{body_rel}`")
-            else:
-                out_lines.append(body)
-            out_lines.append("")
+            sid = str(sec.get("id") or "").strip()
+            if sid:
+                unit_files.append(f"sections/{_slug_unit_id(sid)}.md")
 
-        # Insert between-section transition if available.
-        if idx + 1 < len(outline_sections):
-            nxt_title = outline_sections[idx + 1]["title"]
-            t = h2_trans.get((sec_title, nxt_title), "").strip()
-            if t:
-                out_lines.append(t)
-                out_lines.append("")
-
-    # Evidence-first visuals.
-    timeline = _read_text(workspace / "outline" / "timeline.md").strip()
-    if timeline:
-        out_lines.append("## Timeline / Evolution")
-        out_lines.append("")
-        out_lines.append(timeline)
-        out_lines.append("")
-    else:
-        missing.append("outline/timeline.md")
-
-    tables = _read_text(workspace / "outline" / "tables.md").strip()
-    if tables:
-        out_lines.append("## Evidence-First Tables")
-        out_lines.append("")
-        out_lines.append(tables)
-        out_lines.append("")
-    else:
-        missing.append("outline/tables.md")
-
-    figures = _read_text(workspace / "outline" / "figures.md").strip()
-    if figures:
-        out_lines.append("## Figure Specs (for the final PDF)")
-        out_lines.append("")
-        out_lines.append(figures)
-        out_lines.append("")
-    else:
-        missing.append("outline/figures.md")
-
-    # Back matter.
-    out_lines.append(_load_required("sections/open_problems.md").strip())
-    out_lines.append("")
-    out_lines.append(_load_required("sections/conclusion.md").strip())
-    out_lines.append("")
-
-    atomic_write_text(draft_path, "\n".join([ln for ln in out_lines if ln is not None]).rstrip() + "\n")
+    # Probe all required inputs. We do NOT write a partial draft with TODO markers.
+    for rel in required_global + unit_files + required_visuals + required_transitions:
+        _require(rel)
 
     status = "PASS" if not missing else "FAIL"
+
     rep_lines = [
         "# Merge report",
         "",
@@ -235,6 +166,96 @@ def main() -> int:
         rep_lines.append("")
 
     atomic_write_text(report_path, "\n".join(rep_lines).rstrip() + "\n")
+
+    if missing:
+        # Block: do not generate a partial draft.
+        return 2
+
+    ensure_dir(draft_path.parent)
+
+    goal = _read_text(workspace / "GOAL.md").strip().splitlines()
+    title = "Survey"
+    for ln in goal:
+        ln = ln.strip()
+        if not ln or ln.startswith("#"):
+            continue
+        title = ln
+        break
+
+    transitions_text = _read_text(workspace / "outline" / "transitions.md")
+    h3_trans, h2_trans = _parse_transitions(transitions_text)
+
+    out_lines: list[str] = [f"# {title}", ""]
+
+    out_lines.append(_require("sections/abstract.md").strip())
+    out_lines.append("")
+
+    note = _read_text(workspace / "sections" / "evidence_note.md").strip()
+    if note:
+        out_lines.append(note)
+        out_lines.append("")
+
+    for idx, sec in enumerate(outline_sections):
+        sec_title = sec["title"]
+        out_lines.append(f"## {sec_title}")
+        out_lines.append("")
+
+        subs = sec.get("subsections") or []
+        if subs:
+            for j, sub in enumerate(subs):
+                sid = sub["id"]
+                stitle = sub["title"]
+                out_lines.append(f"### {stitle}")
+                out_lines.append("")
+                body_rel = f"sections/{_slug_unit_id(sid)}.md"
+                out_lines.append(_read_text(workspace / body_rel).strip())
+                out_lines.append("")
+
+                if j + 1 < len(subs):
+                    nxt = subs[j + 1]["id"]
+                    t = h3_trans.get((sid, nxt), "").strip()
+                    if t:
+                        out_lines.append(t)
+                        out_lines.append("")
+        else:
+            body_rel = f"sections/{_slug_unit_id(sec['id'])}.md"
+            out_lines.append(_read_text(workspace / body_rel).strip())
+            out_lines.append("")
+
+        if idx + 1 < len(outline_sections):
+            nxt_title = outline_sections[idx + 1]["title"]
+            t = h2_trans.get((sec_title, nxt_title), "").strip()
+            if t:
+                out_lines.append(t)
+                out_lines.append("")
+
+    timeline = _read_text(workspace / "outline" / "timeline.md").strip()
+    if timeline:
+        out_lines.append("## Timeline / Evolution")
+        out_lines.append("")
+        out_lines.append(timeline)
+        out_lines.append("")
+
+    tables = _read_text(workspace / "outline" / "tables.md").strip()
+    if tables:
+        out_lines.append("## Evidence-First Tables")
+        out_lines.append("")
+        out_lines.append(tables)
+        out_lines.append("")
+
+    figures = _read_text(workspace / "outline" / "figures.md").strip()
+    if figures:
+        out_lines.append("## Figure Specs (for the final PDF)")
+        out_lines.append("")
+        out_lines.append(figures)
+        out_lines.append("")
+
+    out_lines.append(_require("sections/open_problems.md").strip())
+    out_lines.append("")
+    out_lines.append(_require("sections/conclusion.md").strip())
+    out_lines.append("")
+
+    atomic_write_text(draft_path, "\n".join([ln for ln in out_lines if ln is not None]).rstrip() + "\n")
     return 0
 
 

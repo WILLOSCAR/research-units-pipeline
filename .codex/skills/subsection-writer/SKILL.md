@@ -51,6 +51,7 @@ For `sections/S2_1.md` (H3 body files):
 
 For each H3 subsection, extract from evidence packs:
 - 1 subsection thesis (subsection-specific)
+- 3 snippet-derived insight candidates (pick from `claim_candidates` / `evidence_snippets`; each should name at least one concrete artifact like a benchmark/dataset/tool)
 - 2 contrasts (A vs B) grounded in mapped citations
 - 1 evaluation anchor sentence
 - 1 limitation / verification sentence
@@ -63,6 +64,8 @@ Write 2–3 paragraphs that realize the plan:
 - paragraph 1: tension/RQ + first contrast
 - paragraph 2: second contrast + evaluation anchor
 - paragraph 3 (optional): limitation + bridge to next subsection
+
+Do not reuse framing across subsections (ban phrases like “a useful way to compare…”, “taken together…”, “dominant trade-offs…”); your sentences must be anchored in the subsection’s specific evidence snippets.
 
 Use `grad-paragraph` as a micro-skill for each paragraph.
 

@@ -18,7 +18,7 @@ def _is_placeholder(text: str) -> bool:
     # Treat unicode ellipsis as placeholder leakage.
     if "…" in (text or ""):
         return True
-    if re.search(r"(?i)(?:todo|tbd|fixme)", low):
+    if re.search(r"(?i)\b(?:todo|tbd|fixme)\b", low):
         return True
     # Treat three-or-more dots as truncation / scaffold leakage in tables.
     if re.search(r"(?m)\.\.+", text or ""):

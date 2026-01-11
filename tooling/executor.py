@@ -10,6 +10,7 @@ from tooling.common import (
     decisions_has_approval,
     now_iso_seconds,
     parse_semicolon_list,
+    set_decisions_approval,
     update_status_field,
     update_status_log,
 )
@@ -22,7 +23,13 @@ class RunResult:
     message: str
 
 
-def run_one_unit(*, workspace: Path, repo_root: Path, strict: bool = False) -> RunResult:
+def run_one_unit(
+    *,
+    workspace: Path,
+    repo_root: Path,
+    strict: bool = False,
+    auto_approve: set[str] | None = None,
+) -> RunResult:
     units_path = workspace / "UNITS.csv"
     status_path = workspace / "STATUS.md"
     if not units_path.exists():
@@ -42,6 +49,8 @@ def run_one_unit(*, workspace: Path, repo_root: Path, strict: bool = False) -> R
     table.save(units_path)
     update_status_log(status_path, f"{now_iso_seconds()} {unit_id} DOING {skill}")
 
+    auto_approve_set = {str(x or "").strip().upper() for x in (auto_approve or set()) if str(x or "").strip()}
+
     if owner == "HUMAN":
         checkpoint = row.get("checkpoint", "").strip()
         if checkpoint and decisions_has_approval(workspace / "DECISIONS.md", checkpoint):
@@ -50,6 +59,14 @@ def run_one_unit(*, workspace: Path, repo_root: Path, strict: bool = False) -> R
             update_status_log(status_path, f"{now_iso_seconds()} {unit_id} DONE (HUMAN approved {checkpoint})")
             _refresh_status_checkpoint(status_path, table)
             return RunResult(unit_id=unit_id, status="DONE", message=f"HUMAN approved {checkpoint}")
+
+        if checkpoint and checkpoint.upper() in auto_approve_set:
+            set_decisions_approval(workspace / "DECISIONS.md", checkpoint, approved=True)
+            row["status"] = "DONE"
+            table.save(units_path)
+            update_status_log(status_path, f"{now_iso_seconds()} {unit_id} DONE (AUTO approved {checkpoint})")
+            _refresh_status_checkpoint(status_path, table)
+            return RunResult(unit_id=unit_id, status="DONE", message=f"AUTO approved {checkpoint}")
 
         row["status"] = "BLOCKED"
         table.save(units_path)

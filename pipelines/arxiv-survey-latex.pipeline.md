@@ -147,7 +147,7 @@ Notes:
   - draft per H3 → de-template/cohere → global review → (if gaps) go back to C3/C4 to strengthen evidence packs → regenerate draft.
 - PDF compile should run early/often to catch LaTeX failures, but compile success is not narrative quality.
 - Recommended skills (toolkit, not a rigid one-shot chain):
-  - Modular drafting: `subsection-writer` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor` → `latex-*`.
+  - Modular drafting: `subsection-writer` → `transition-weaver` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor` → `latex-*`.
   - Legacy one-shot drafting: `prose-writer` (kept for quick experiments; less debuggable).
 - `queries.md` can set `evidence_mode: "abstract"|"fulltext"` (default template uses `abstract`).
 - If `evidence_mode: "fulltext"`, `pdf-text-extractor` can be tuned via `fulltext_max_papers`, `fulltext_max_pages`, `fulltext_min_chars`, and `--local-pdfs-only`.

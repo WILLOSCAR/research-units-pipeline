@@ -486,7 +486,7 @@ def seed_queries_from_topic(queries_path: Path, topic: str) -> None:
             stripped = raw.strip()
             if not stripped.startswith(f"- {token}:"):
                 continue
-            value = stripped.split(":", 1)[1].strip().strip('"').strip("'")
+            value = stripped.split(":", 1)[1].split("#", 1)[0].strip().strip('"').strip("'")
             return bool(value)
         return False
 
@@ -580,7 +580,8 @@ def seed_queries_from_topic(queries_path: Path, topic: str) -> None:
 
     max_results_suggestion = 800 if (is_agent or is_generative) else 300
     time_from_suggestion = "2022" if (is_agent and ("llm" in tlow or "language model" in tlow)) else ("2020" if is_generative else "")
-    core_size_suggestion = "150" if profile == "arxiv-survey" else ""
+    # For arXiv-survey runs, a larger core set makes evidence binding and cite coverage more robust.
+    core_size_suggestion = "220" if profile == "arxiv-survey" else ""
 
     out: list[str] = []
     i = 0

@@ -104,13 +104,13 @@ def main() -> int:
         if priority == "high":
             summary_bullets = _high_priority_bullets(title=row["title"], abstract=abstract, mapped_sections=mapped_sections)
             method = _infer_method(title=row["title"], abstract=abstract, bullets=summary_bullets)
-            key_results = _infer_key_results(abstract=abstract)
+            key_results = _infer_key_results(abstract=abstract, max_items=2)
             limitations = _infer_limitations(evidence_level=evidence_level, mapped_sections=mapped_sections, abstract=abstract)
         else:
             summary_bullets = _abstract_to_bullets(abstract)
             # Keep normal-priority notes lightweight, but still extract method/results so the evidence bank is usable.
             method = _infer_method(title=row["title"], abstract=abstract, bullets=summary_bullets)
-            key_results = _infer_key_results(abstract=abstract)
+            key_results = _infer_key_results(abstract=abstract, max_items=2)
             limitations = _infer_limitations(evidence_level=evidence_level, mapped_sections=mapped_sections, abstract=abstract)
 
         notes.append(
@@ -300,7 +300,7 @@ def _high_priority_bullets(*, title: str, abstract: str, mapped_sections: list[s
     title = (title or "").strip()
     abstract = (abstract or "").strip()
 
-    bullets = _abstract_to_bullets(abstract)
+    bullets = _abstract_to_bullets(abstract, max_items=5)
     if len([b for b in bullets if str(b).strip()]) >= 3:
         return bullets
 
@@ -344,46 +344,105 @@ def _infer_method(*, title: str, abstract: str, bullets: list[str]) -> str:
     return "Method summary unavailable from metadata; verify the full paper for implementation details."
 
 
-def _infer_key_results(*, abstract: str) -> list[str]:
+def _infer_key_results(*, abstract: str, max_items: int = 1) -> list[str]:
     abstract = (abstract or "").strip()
-    if abstract:
-        sent = _pick_sentence(
-            abstract,
-            patterns=[r"\b(achieve|outperform|state[- ]of[- ]the[- ]art|sota|improv|results?)\b", r"\b\d+(?:\.\d+)?\b"],
-        )
-        if sent:
-            return [sent]
-        # Fall back to the last sentence as a coarse "result" proxy.
-        last = _last_sentence(abstract)
-        if last:
-            return [last]
-    return ["Key quantitative results are not fully stated in available metadata; verify benchmarks/metrics in the full text before citing numbers."]
+
+    try:
+        max_n = int(max_items)
+    except Exception:
+        max_n = 1
+    max_n = max(1, min(3, max_n))
+
+    if not abstract:
+        return [
+            "Key quantitative results are not fully stated in available metadata; verify benchmarks/metrics in the full text before citing numbers."
+        ]
+
+    sents = _split_sentences(abstract)
+    scored: list[tuple[float, int, str]] = []
+
+    for idx, s in enumerate(sents):
+        s = re.sub(r"\s+", " ", (s or "").strip())
+        if len(s) < 16:
+            continue
+        low = s.lower()
+        if low.startswith("project site") or "code:" in low:
+            continue
+
+        score = 0.0
+        if re.search(r"\b\d+(?:\.\d+)?%?\b", s):
+            score += 3.0
+        if re.search(
+            r"(?i)\b(benchmark|benchmarks|dataset|datasets|metric|metrics|evaluation|human|accuracy|success(?: rate)?|f1|bleu|rouge|mmlu|gsm8k|hotpotqa|fever|alfworld|webshop)\b",
+            s,
+        ):
+            score += 2.0
+        if re.search(r"(?i)\b(outperform|improv|achiev|state[- ]of[- ]the[- ]art|sota|gain|increase|decrease)\b", s):
+            score += 1.0
+
+        if score > 0:
+            scored.append((score, idx, s))
+
+    if scored:
+        scored.sort(key=lambda t: (-t[0], t[1]))
+        out: list[str] = []
+        seen: set[str] = set()
+        for _, _, s in scored:
+            if s in seen:
+                continue
+            seen.add(s)
+            out.append(s)
+            if len(out) >= max_n:
+                break
+        if out:
+            return out
+
+    # Fall back to the last sentence as a coarse "result" proxy.
+    last = _last_sentence(abstract)
+    if last:
+        return [re.sub(r"\s+", " ", last).strip()]
+
+    return [abstract[:240].strip()]
 
 
 def _infer_limitations(*, evidence_level: str, mapped_sections: list[str], abstract: str) -> list[str]:
     evidence_level = (evidence_level or "").strip().lower() or "abstract"
-    sec_str = ", ".join(mapped_sections[:4])
+    abstract = (abstract or "").strip()
 
     lims: list[str] = []
     if evidence_level == "fulltext":
-        lims.append("Even with extracted text, evaluation details may be incomplete; verify the official PDF for exact settings and ablations.")
+        lims.append(
+            "Even with extracted text, evaluation details may be incomplete; verify the official PDF for exact settings and ablations."
+        )
     elif evidence_level == "abstract":
-        lims.append("Abstract-level evidence only: validate assumptions, evaluation protocol, and failure cases in the full paper before relying on this as key evidence.")
+        lims.append(
+            "Abstract-level evidence only: validate assumptions, evaluation protocol, and failure cases in the full paper before relying on this as key evidence."
+        )
     else:
-        lims.append("Title-only evidence: do not infer methods/results beyond what the title states; fetch abstract/full text before using this as key evidence.")
+        lims.append(
+            "Title-only evidence: do not infer methods/results beyond what the title states; fetch abstract/full text before using this as key evidence."
+        )
 
-    if sec_str:
-        lims.append(f"This work is mapped to: {sec_str}; confirm it is not over-used across unrelated subsections.")
+    # Try to capture an explicit limitation cue from the abstract (best-effort, still conservative).
+    if abstract:
+        sent = _pick_sentence(
+            abstract,
+            patterns=[
+                r"(?i)\b(limitations?|future work|open problems?|remains (?:an )?open|we (?:leave|defer)|we do not|does not)\b",
+            ],
+        )
+        if sent:
+            sent = re.sub(r"\s+", " ", sent).strip()
+            low = sent.lower()
+            if sent and not low.startswith("project site") and sent not in lims:
+                lims.append(sent)
 
-    # Add a light, non-repeated caveat if abstract is missing.
-    if not (abstract or "").strip():
+    if not abstract:
         lims.append("Abstract missing in metadata; treat all details as provisional until verified.")
 
     return lims[:3]
-
-
 _ABBREV_RX = re.compile(
-    r"(?:e\.g\.|i\.e\.|etc\.|cf\.|vs\.|et al\.|fig\.|figs\.|eq\.|eqs\.|sec\.|secs\.|no\.|dr\.|mr\.|ms\.|prof\.)",
+    r"\b(?:e\.g\.|i\.e\.|etc\.|cf\.|vs\.|et al\.|fig\.|figs\.|eq\.|eqs\.|sec\.|secs\.|no\.|dr\.|mr\.|ms\.|prof\.)",
     flags=re.IGNORECASE,
 )
 
@@ -477,10 +536,16 @@ def _salient_terms(title: str) -> list[str]:
     return out
 
 
-def _abstract_to_bullets(abstract: str) -> list[str]:
+def _abstract_to_bullets(abstract: str, *, max_items: int = 3) -> list[str]:
     abstract = (abstract or "").strip()
     if not abstract:
         return []
+
+    try:
+        max_n = int(max_items)
+    except Exception:
+        max_n = 3
+    max_n = max(1, min(8, max_n))
 
     # Deterministic scaffold: use first few sentences as bullets (LLM should refine for priority papers).
     parts = _split_sentences(abstract)
@@ -490,13 +555,11 @@ def _abstract_to_bullets(abstract: str) -> list[str]:
         if not p:
             continue
         bullets.append(p)
-        if len(bullets) >= 3:
+        if len(bullets) >= max_n:
             break
     if not bullets:
         bullets = [abstract[:240].strip()]
     return bullets
-
-
 def _backfill_note(
     existing: dict[str, Any],
     *,
@@ -557,7 +620,7 @@ def _backfill_note(
 
         key_results = note.get("key_results")
         if not isinstance(key_results, list) or not key_results:
-            note["key_results"] = _infer_key_results(abstract=abstract)
+            note["key_results"] = _infer_key_results(abstract=abstract, max_items=2)
 
         lims = note.get("limitations")
         if (not isinstance(lims, list)) or (not lims) or (len(lims) == 1 and str(lims[0]).lower().startswith("evidence level:")):
@@ -568,7 +631,7 @@ def _backfill_note(
     # For normal-priority notes, still ensure method/results exist so downstream evidence binding is usable.
     bullets = note.get("summary_bullets")
     if not isinstance(bullets, list) or len([b for b in bullets if str(b).strip()]) < 1:
-        bullets = _abstract_to_bullets(abstract)
+        bullets = _abstract_to_bullets(abstract, max_items=5)
         note["summary_bullets"] = bullets
 
     method = str(note.get("method") or "").strip()
@@ -625,6 +688,8 @@ def _build_evidence_bank(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
             or low.startswith('abstract-level evidence only')
             or low.startswith('title-only evidence')
             or low.startswith('even with extracted text')
+            or low.startswith('this work is mapped to:')
+            or low.startswith('mapped to outline subsections:')
         )
 
     def evidence_id(pid: str, kind: str, snippet: str) -> str:

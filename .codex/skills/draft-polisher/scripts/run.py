@@ -53,6 +53,14 @@ def _h3_citation_sets(md: str) -> dict[str, set[str]]:
     return out
 
 
+def _merge_is_pass(workspace: Path) -> bool:
+    report_path = workspace / "output" / "MERGE_REPORT.md"
+    if not report_path.exists() or report_path.stat().st_size <= 0:
+        return False
+    text = report_path.read_text(encoding="utf-8", errors="ignore")
+    return "- Status: PASS" in text
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", required=True)
@@ -76,30 +84,32 @@ def main() -> int:
 
     draft_path = workspace / out_rel
 
-    # Citation anchoring baseline: record per-H3 cite sets before editing.
+    # Citation anchoring baseline: capture *only* after merge is complete.
+    # This prevents freezing an incomplete draft (e.g., `TODO: MISSING ...`) as the baseline.
     baseline_rel = "output/citation_anchors.prepolish.jsonl"
     baseline_path = workspace / baseline_rel
     if draft_path.exists() and draft_path.stat().st_size > 0 and not baseline_path.exists():
-        ensure_dir(baseline_path.parent)
         draft = draft_path.read_text(encoding="utf-8", errors="ignore")
-        sets = _h3_citation_sets(draft)
-        records = []
-        for title, keys in sorted(sets.items(), key=lambda kv: kv[0].lower()):
-            records.append(
-                {
-                    "kind": "h3",
-                    "title": title,
-                    "cite_keys": sorted(keys),
-                }
-            )
-        header = {
-            "kind": "meta",
-            "draft_rel": out_rel,
-            "draft_sha1": _sha1(draft),
-            "h3_count": len(sets),
-        }
-        lines = [json.dumps(header, ensure_ascii=False)] + [json.dumps(r, ensure_ascii=False) for r in records]
-        atomic_write_text(baseline_path, "\n".join(lines).rstrip() + "\n")
+        if _merge_is_pass(workspace) and not re.search(r"(?m)^TODO:\s+MISSING\s+`", draft):
+            ensure_dir(baseline_path.parent)
+            sets = _h3_citation_sets(draft)
+            records = []
+            for title, keys in sorted(sets.items(), key=lambda kv: kv[0].lower()):
+                records.append(
+                    {
+                        "kind": "h3",
+                        "title": title,
+                        "cite_keys": sorted(keys),
+                    }
+                )
+            header = {
+                "kind": "meta",
+                "draft_rel": out_rel,
+                "draft_sha1": _sha1(draft),
+                "h3_count": len(sets),
+            }
+            lines = [json.dumps(header, ensure_ascii=False)] + [json.dumps(r, ensure_ascii=False) for r in records]
+            atomic_write_text(baseline_path, "\n".join(lines).rstrip() + "\n")
 
     issues = check_unit_outputs(skill="draft-polisher", workspace=workspace, outputs=[out_rel])
     if issues:

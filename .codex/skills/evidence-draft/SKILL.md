@@ -20,15 +20,21 @@ Key design: every pack should contain **evidence snippets** (1–2 sentences) wi
 - NO PROSE: packs are bullets-only evidence, not narrative paragraphs.
 - No fabrication: do not invent datasets/metrics/numbers.
 - Citation hygiene: every cite key must exist in `citations/ref.bib`.
+- Claim candidates must be snippet-derived (no axis-driven “Hypothesis: …” items); put questions into `verify_fields` instead.
 - Evidence-aware language:
   - fulltext-backed → can summarize comparisons
   - abstract-only/title-only → must be provisional + list verify-fields (no strong “dominant trade-offs” language)
 
 ## Inputs
 
+Required:
 - `outline/subsection_briefs.jsonl`
 - `papers/paper_notes.jsonl`
 - `citations/ref.bib`
+
+Optional (recommended for addressable evidence):
+- `papers/evidence_bank.jsonl`
+- `outline/evidence_bindings.jsonl`
 
 ## Outputs
 
@@ -42,6 +48,7 @@ Optional (human-readable):
 JSONL (one JSON object per line). Required fields per record:
 
 - `sub_id`, `title`
+- `evidence_ids` (list[str]; if `outline/evidence_bindings.jsonl` exists, this should match the binding for the subsection)
 - `evidence_level_summary` (counts: `fulltext|abstract|title`)
 - `evidence_snippets` (list; each has `text`, `paper_id`, `citations`, `provenance`)
 - `definitions_setup` (list of cited bullets)
@@ -80,6 +87,7 @@ Allowed `source`: `fulltext|abstract|paper_notes|title`.
 
 - [ ] Every subsection has >=3 concrete comparisons.
 - [ ] `evidence_snippets` is non-empty and includes provenance.
+- [ ] `claim_candidates` has >=3 snippet-derived items (no axis-driven hypotheses).
 - [ ] `blocking_missing` is empty.
 - [ ] No `TODO` / `(placeholder)` / `<!-- SCAFFOLD -->` / unicode ellipsis (`…`) remains.
 

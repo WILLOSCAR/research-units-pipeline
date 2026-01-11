@@ -138,7 +138,7 @@ Notes:
   - Writer pass: write that section using only those citation IDs; avoid dumping the whole notes set into context.
 - Treat this stage as an iteration loop: draft per H3 → de-template/cohere → global review → (if gaps) back to C3/C4 → regenerate.
 - Recommended skills (toolkit, not a rigid one-shot chain):
-  - Modular drafting: `subsection-writer` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor`.
+  - Modular drafting: `subsection-writer` → `transition-weaver` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor`.
   - Legacy one-shot drafting: `prose-writer` (kept for quick experiments; less debuggable).
 - Add `pipeline-auditor` after `global-reviewer` as a regression test (blocks on ellipsis, repeated boilerplate, and citation hygiene).
 - If you also need a PDF deliverable, use `latex-scaffold` + `latex-compile-qa` (see `arxiv-survey-latex`).

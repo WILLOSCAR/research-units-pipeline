@@ -18,7 +18,7 @@ def _is_placeholder(text: str) -> bool:
         return True
     if '…' in text:
         return True
-    if re.search(r'(?i)(?:todo|tbd|fixme)', low):
+    if re.search(r'(?i)\b(?:todo|tbd|fixme)\b', low):
         return True
     return False
 

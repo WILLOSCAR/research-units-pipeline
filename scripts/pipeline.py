@@ -36,15 +36,33 @@ def main() -> int:
         action="store_true",
         help="Enable quality-gate mode (block when outputs look like scaffolding stubs; writes output/QUALITY_GATE.md)",
     )
+    kickoff_p.add_argument(
+        "--auto-approve",
+        action="append",
+        default=[],
+        help="Auto-tick approvals in DECISIONS.md (repeatable, e.g., --auto-approve C2).",
+    )
 
     run_one_p = sub.add_parser("run-one", help="Execute exactly one runnable unit from UNITS.csv")
     run_one_p.add_argument("--workspace", required=True, help="Workspace directory")
     run_one_p.add_argument("--strict", action="store_true", help="Enable quality-gate mode (see kickoff --strict)")
+    run_one_p.add_argument(
+        "--auto-approve",
+        action="append",
+        default=[],
+        help="Auto-tick approvals in DECISIONS.md (repeatable, e.g., --auto-approve C2).",
+    )
 
     run_p = sub.add_parser("run", help="Run units until blocked or complete")
     run_p.add_argument("--workspace", required=True, help="Workspace directory")
     run_p.add_argument("--max-steps", type=int, default=999, help="Maximum units to attempt")
     run_p.add_argument("--strict", action="store_true", help="Enable quality-gate mode (see kickoff --strict)")
+    run_p.add_argument(
+        "--auto-approve",
+        action="append",
+        default=[],
+        help="Auto-tick approvals in DECISIONS.md (repeatable, e.g., --auto-approve C2).",
+    )
 
     approve_p = sub.add_parser("approve", help="Tick an approval checkbox in DECISIONS.md (e.g., Approve C2)")
     approve_p.add_argument("--workspace", required=True, help="Workspace directory")
@@ -148,7 +166,12 @@ def main() -> int:
         print(f"Workspace ready: {workspace}")
         if args.run:
             for _ in range(int(args.max_steps)):
-                result = run_one_unit(workspace=workspace, repo_root=repo_root, strict=bool(args.strict))
+                result = run_one_unit(
+                    workspace=workspace,
+                    repo_root=repo_root,
+                    strict=bool(args.strict),
+                    auto_approve=set(args.auto_approve or []),
+                )
                 print(f"{result.status}: {result.unit_id or '-'} {result.message}")
                 if result.status != "DONE":
                     break
@@ -159,14 +182,24 @@ def main() -> int:
 
     if args.cmd == "run-one":
         workspace = Path(args.workspace).resolve()
-        result = run_one_unit(workspace=workspace, repo_root=repo_root, strict=bool(args.strict))
+        result = run_one_unit(
+            workspace=workspace,
+            repo_root=repo_root,
+            strict=bool(args.strict),
+            auto_approve=set(args.auto_approve or []),
+        )
         print(f"{result.status}: {result.unit_id or '-'} {result.message}")
         return 0 if result.status in {"DONE", "IDLE"} else 2
 
     if args.cmd == "run":
         workspace = Path(args.workspace).resolve()
         for _ in range(int(args.max_steps)):
-            result = run_one_unit(workspace=workspace, repo_root=repo_root, strict=bool(args.strict))
+            result = run_one_unit(
+                workspace=workspace,
+                repo_root=repo_root,
+                strict=bool(args.strict),
+                auto_approve=set(args.auto_approve or []),
+            )
             print(f"{result.status}: {result.unit_id or '-'} {result.message}")
             if result.status != "DONE":
                 break
