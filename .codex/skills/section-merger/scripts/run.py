@@ -129,6 +129,11 @@ def main() -> int:
     for sec in outline_sections:
         subs = sec.get("subsections") or []
         if subs:
+            # H2 lead paragraph block (no headings) for chapter coherence.
+            sec_id = str(sec.get("id") or "").strip()
+            if sec_id:
+                unit_files.append(f"sections/{_slug_unit_id(sec_id)}_lead.md")
+
             for sub in subs:
                 sid = str(sub.get("id") or "").strip()
                 if sid:
@@ -190,6 +195,10 @@ def main() -> int:
 
         subs = sec.get("subsections") or []
         if subs:
+            lead_rel = f"sections/{_slug_unit_id(sec['id'])}_lead.md"
+            out_lines.append(_read_text(workspace / lead_rel).strip())
+            out_lines.append("")
+
             for j, sub in enumerate(subs):
                 sid = sub["id"]
                 stitle = sub["title"]

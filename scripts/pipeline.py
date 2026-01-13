@@ -97,7 +97,11 @@ def main() -> int:
         units_src = repo_root / spec.units_template
         units_dst = workspace / "UNITS.csv"
         if units_dst.exists() and not args.overwrite_units:
-            raise SystemExit(f"UNITS.csv already exists at {units_dst} (use --overwrite-units)")
+            # The workspace template ships with a stub UNITS.csv (U001 only). Treat it as safe to overwrite.
+            template_units = (template_dir / "UNITS.csv").read_text(encoding="utf-8", errors="ignore").strip()
+            existing_units = units_dst.read_text(encoding="utf-8", errors="ignore").strip()
+            if existing_units != template_units:
+                raise SystemExit(f"UNITS.csv already exists at {units_dst} (use --overwrite-units)")
         atomic_write_text(units_dst, units_src.read_text(encoding="utf-8"))
 
         first_checkpoint = spec.default_checkpoints[0] if spec.default_checkpoints else "C0"
@@ -139,7 +143,11 @@ def main() -> int:
         units_src = repo_root / spec.units_template
         units_dst = workspace / "UNITS.csv"
         if units_dst.exists() and not args.overwrite_units:
-            raise SystemExit(f"UNITS.csv already exists at {units_dst} (use --overwrite-units)")
+            # The workspace template ships with a stub UNITS.csv (U001 only). Treat it as safe to overwrite.
+            template_units = (template_dir / "UNITS.csv").read_text(encoding="utf-8", errors="ignore").strip()
+            existing_units = units_dst.read_text(encoding="utf-8", errors="ignore").strip()
+            if existing_units != template_units:
+                raise SystemExit(f"UNITS.csv already exists at {units_dst} (use --overwrite-units)")
         atomic_write_text(units_dst, units_src.read_text(encoding="utf-8"))
 
         first_checkpoint = spec.default_checkpoints[0] if spec.default_checkpoints else "C0"

@@ -38,12 +38,14 @@ flowchart LR
     PT[pdf-text-extractor]
     PN[paper-notes]
     SB[subsection-briefs]
+    CB[chapter-briefs]
   end
 
   subgraph "C4 - Citations + visuals [NO PROSE]"
     CV[citation-verifier]
     EB[evidence-binder]
     ED[evidence-draft]
+    AS[anchor-sheet]
     CMR[claim-matrix-rewriter]
     TS[table-schema]
     TF[table-filler]
@@ -61,7 +63,7 @@ flowchart LR
     LCQ[latex-compile-qa]:::optional
   end
 
-  WS --> PR0 --> LE --> DR --> TB --> OB --> SM --> OR --> PR2 --> C2A --> PT --> PN --> SB --> CV --> EB --> ED --> CMR --> TS --> TF --> SV --> SW --> TW --> MG --> DP --> GR --> PA
+  WS --> PR0 --> LE --> DR --> TB --> OB --> SM --> OR --> PR2 --> C2A --> PT --> PN --> SB --> CB --> CV --> EB --> ED --> AS --> CMR --> TS --> TF --> SV --> SW --> TW --> MG --> DP --> GR --> PA
   KX -.-> LE
   SSH -.-> TB
   PA -.-> LS -.-> LCQ
@@ -99,12 +101,14 @@ flowchart LR
     PT[pdf-text-extractor]
     PN[paper-notes]
     SB[subsection-briefs]
+    CB[chapter-briefs]
   end
 
   subgraph "C4 - Citations + visuals [NO PROSE]"
     CV[citation-verifier]
     EB[evidence-binder]
     ED[evidence-draft]
+    AS[anchor-sheet]
     CMR[claim-matrix-rewriter]
     TS[table-schema]
     TF[table-filler]
@@ -122,7 +126,7 @@ flowchart LR
     LCQ[latex-compile-qa]
   end
 
-  WS --> PR0 --> LE --> DR --> TB --> OB --> SM --> OR --> PR2 --> C2A --> PT --> PN --> SB --> CV --> EB --> ED --> CMR --> TS --> TF --> SV --> SW --> TW --> MG --> DP --> GR --> PA --> LS --> LCQ
+  WS --> PR0 --> LE --> DR --> TB --> OB --> SM --> OR --> PR2 --> C2A --> PT --> PN --> SB --> CB --> CV --> EB --> ED --> AS --> CMR --> TS --> TF --> SV --> SW --> TW --> MG --> DP --> GR --> PA --> LS --> LCQ
   KX -.-> LE
   SSH -.-> TB
 ```

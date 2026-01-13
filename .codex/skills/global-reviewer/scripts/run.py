@@ -90,6 +90,49 @@ def _outline_subsection_count(outline: Any) -> int:
     return n
 
 
+def _detect_evidence_mode(workspace: Path) -> str:
+    """Best-effort evidence-mode detection.
+
+    Prefer `queries.md` (source of truth). Fall back to whether `papers/fulltext_index.jsonl`
+    contains any successful extraction records.
+    """
+
+    queries_path = workspace / "queries.md"
+    if queries_path.exists():
+        for raw in queries_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = raw.strip()
+            if not line.startswith("- evidence_mode:"):
+                continue
+            value = line.split(":", 1)[1].split("#", 1)[0].strip().strip('"').strip("'").strip().lower()
+            if value in {"abstract", "fulltext"}:
+                return value
+            break
+
+    idx_path = workspace / "papers" / "fulltext_index.jsonl"
+    if not idx_path.exists() or idx_path.stat().st_size == 0:
+        return "abstract"
+
+    try:
+        import json
+
+        for i, raw in enumerate(idx_path.read_text(encoding="utf-8", errors="ignore").splitlines()):
+            if i >= 200:
+                break
+            raw = raw.strip()
+            if not raw:
+                continue
+            rec = json.loads(raw)
+            if not isinstance(rec, dict):
+                continue
+            status = str(rec.get("status") or "").strip().lower()
+            if status.startswith("ok"):
+                return "fulltext"
+    except Exception:
+        return "abstract"
+
+    return "abstract"
+
+
 def _global_review_report(*, workspace: Path) -> str:
     draft_path = workspace / "output" / "DRAFT.md"
     draft = draft_path.read_text(encoding="utf-8", errors="ignore") if draft_path.exists() else ""
@@ -147,7 +190,7 @@ def _global_review_report(*, workspace: Path) -> str:
     lines.append("")
     lines.append("## A. Input integrity / placeholder leakage")
     lines.append("- Draft exists: " + ("yes" if bool(draft.strip()) else "no"))
-    lines.append("- Evidence mode: " + ("fulltext" if (workspace / "papers" / "fulltext_index.jsonl").exists() else "abstract"))
+    lines.append("- Evidence mode: " + _detect_evidence_mode(workspace))
     lines.append("- Visual artifacts present: tables/timeline/figures = " + f"{tables_n}/{timeline_n}/{('yes' if figures_has else 'no')}")
 
     lines.append("")

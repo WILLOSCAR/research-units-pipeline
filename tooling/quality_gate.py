@@ -185,10 +185,14 @@ def check_unit_outputs(*, skill: str, workspace: Path, outputs: list[str]) -> li
         return _check_tables_md(workspace, outputs)
     if skill == "subsection-briefs":
         return _check_subsection_briefs(workspace, outputs)
+    if skill == "chapter-briefs":
+        return _check_chapter_briefs(workspace, outputs)
     if skill == "evidence-binder":
         return _check_evidence_bindings(workspace, outputs)
     if skill == "evidence-draft":
         return _check_evidence_drafts(workspace, outputs)
+    if skill == "anchor-sheet":
+        return _check_anchor_sheet(workspace, outputs)
     if skill == "survey-visuals":
         return _check_survey_visuals(workspace, outputs)
     if skill == "transition-weaver":
@@ -367,6 +371,7 @@ def _next_action_lines(*, skill: str, unit_id: str) -> list[str]:
             "  - `sections/S<sub_id>.md` for each H3 (body only; no headings).",
             "- Each H3 file should have >=3 unique citations and avoid ellipsis/TODO/template boilerplate.",
             "- Keep H3 citations subsection-scoped: cite only keys mapped in `outline/evidence_bindings.jsonl` for that H3 (or fix mapping/bindings).",
+            "- If blocked, run `writer-selfloop`: read `output/QUALITY_GATE.md`, fix only the failing `sections/*.md`, then rerun the `subsection-writer` script until it passes.",
         ],
         "section-merger": [
             "- Ensure all required `sections/*.md` exist (see `output/MERGE_REPORT.md` for missing paths), then rerun merge.",
@@ -1484,6 +1489,109 @@ def _check_subsection_briefs(workspace: Path, outputs: list[str]) -> list[Qualit
     return issues
 
 
+def _check_chapter_briefs(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    from tooling.common import load_yaml, read_jsonl
+
+    out_rel = outputs[0] if outputs else "outline/chapter_briefs.jsonl"
+    path = workspace / out_rel
+    if not path.exists():
+        return [QualityIssue(code="missing_chapter_briefs", message=f"`{out_rel}` does not exist.")]
+    raw = path.read_text(encoding="utf-8", errors="ignore")
+    if not raw.strip():
+        return [QualityIssue(code="empty_chapter_briefs", message=f"`{out_rel}` is empty.")]
+    if _check_placeholder_markers(raw) or "…" in raw:
+        return [
+            QualityIssue(
+                code="chapter_briefs_placeholders",
+                message="Chapter briefs contain placeholder markers/ellipsis; refine throughline/key contrasts/lead plan before writing.",
+            )
+        ]
+
+    records = read_jsonl(path)
+    briefs = [r for r in records if isinstance(r, dict)]
+    if not briefs:
+        return [QualityIssue(code="invalid_chapter_briefs", message=f"`{out_rel}` has no JSON objects.")]
+
+    outline_path = workspace / "outline" / "outline.yml"
+    expected: set[str] = set()
+    if outline_path.exists():
+        try:
+            outline = load_yaml(outline_path) or []
+            if isinstance(outline, list):
+                for sec in outline:
+                    if not isinstance(sec, dict):
+                        continue
+                    sec_id = str(sec.get("id") or "").strip()
+                    subs = sec.get("subsections") or []
+                    if sec_id and isinstance(subs, list) and subs:
+                        expected.add(sec_id)
+        except Exception:
+            expected = set()
+
+    by_id: dict[str, dict] = {}
+    dupes = 0
+    for rec in briefs:
+        sid = str(rec.get("section_id") or "").strip()
+        if not sid:
+            continue
+        if sid in by_id:
+            dupes += 1
+        by_id[sid] = rec
+
+    issues: list[QualityIssue] = []
+    if dupes:
+        issues.append(
+            QualityIssue(
+                code="chapter_briefs_duplicate_ids",
+                message=f"`{out_rel}` has duplicate `section_id` entries ({dupes}).",
+            )
+        )
+
+    if expected:
+        missing = sorted([sid for sid in expected if sid not in by_id])
+        if missing:
+            sample = ", ".join(missing[:6])
+            suffix = "..." if len(missing) > 6 else ""
+            issues.append(
+                QualityIssue(
+                    code="chapter_briefs_missing_sections",
+                    message=f"Chapter briefs missing some H2 sections with subsections (e.g., {sample}{suffix}).",
+                )
+            )
+
+    bad = 0
+    for sid, rec in by_id.items():
+        if not str(rec.get("section_title") or "").strip():
+            bad += 1
+            continue
+        subs = rec.get("subsections")
+        if not isinstance(subs, list) or not subs:
+            bad += 1
+            continue
+        throughline = rec.get("throughline")
+        if not isinstance(throughline, list) or len([t for t in throughline if str(t).strip()]) < 2:
+            bad += 1
+            continue
+        lead_plan = rec.get("lead_paragraph_plan")
+        if not isinstance(lead_plan, list) or len([t for t in lead_plan if str(t).strip()]) < 2:
+            bad += 1
+            continue
+        bridge = rec.get("bridge_terms")
+        if not isinstance(bridge, list) or len([t for t in bridge if str(t).strip()]) < 3:
+            bad += 1
+            continue
+
+    if bad:
+        issues.append(
+            QualityIssue(
+                code="chapter_briefs_incomplete",
+                message=f"`{out_rel}` has {bad} chapter brief(s) missing required fields (subsections/throughline/lead plan/bridge terms).",
+            )
+        )
+
+    return issues
+
+
 def _check_coverage_report(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
     from tooling.common import read_jsonl
 
@@ -1668,6 +1776,75 @@ def _check_evidence_drafts(workspace: Path, outputs: list[str]) -> list[QualityI
             QualityIssue(
                 code="evidence_drafts_incomplete",
                 message=f"`{out_rel}` has {bad} invalid pack(s) (missing required blocks or missing sub_id/title).",
+            )
+        )
+    return issues
+
+
+def _check_anchor_sheet(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    from tooling.common import read_jsonl
+
+    out_rel = outputs[0] if outputs else "outline/anchor_sheet.jsonl"
+    path = workspace / out_rel
+    if not path.exists():
+        return [QualityIssue(code="missing_anchor_sheet", message=f"`{out_rel}` does not exist.")]
+    raw = path.read_text(encoding="utf-8", errors="ignore")
+    if not raw.strip():
+        return [QualityIssue(code="empty_anchor_sheet", message=f"`{out_rel}` is empty.")]
+    if _check_placeholder_markers(raw) or "(placeholder)" in raw.lower():
+        return [
+            QualityIssue(
+                code="anchor_sheet_placeholders",
+                message=f"`{out_rel}` contains placeholder markers; regenerate anchors from evidence packs.",
+            )
+        ]
+
+    records = read_jsonl(path)
+    items = [r for r in records if isinstance(r, dict)]
+    if not items:
+        return [QualityIssue(code="invalid_anchor_sheet", message=f"`{out_rel}` has no JSON objects.")]
+
+    bad = 0
+    empty_anchors = 0
+    for rec in items:
+        sub_id = str(rec.get("sub_id") or "").strip()
+        title = str(rec.get("title") or "").strip()
+        anchors = rec.get("anchors")
+        if not sub_id or not title:
+            bad += 1
+            continue
+        if not isinstance(anchors, list):
+            bad += 1
+            continue
+        if not anchors:
+            empty_anchors += 1
+            continue
+        ok = 0
+        for a in anchors[:6]:
+            if not isinstance(a, dict):
+                continue
+            if not str(a.get("text") or "").strip():
+                continue
+            cites = a.get("citations") or []
+            if not isinstance(cites, list) or not any(str(c).strip().startswith("@") for c in cites):
+                continue
+            ok += 1
+        if ok < 1:
+            bad += 1
+
+    issues: list[QualityIssue] = []
+    if empty_anchors:
+        issues.append(
+            QualityIssue(
+                code="anchor_sheet_empty_anchors",
+                message=f"`{out_rel}` has {empty_anchors} record(s) with empty anchors; evidence packs may be too thin or anchor extraction failed.",
+            )
+        )
+    if bad:
+        issues.append(
+            QualityIssue(
+                code="anchor_sheet_invalid",
+                message=f"`{out_rel}` has {bad} invalid record(s) (missing sub_id/title or missing citation-backed anchors).",
             )
         )
     return issues
@@ -1972,6 +2149,7 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
     outline = load_yaml(outline_path) if outline_path.exists() else []
 
     expected_units: list[dict[str, str]] = []
+    expected_leads: list[dict[str, str]] = []
     if isinstance(outline, list):
         for sec in outline:
             if not isinstance(sec, dict):
@@ -1980,6 +2158,10 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
             sec_title = str(sec.get("title") or "").strip()
             subs = sec.get("subsections") or []
             if subs and isinstance(subs, list):
+                # Require a short H2 lead paragraph block for each chapter with H3 subsections.
+                # This increases coherence without inflating the ToC (no new headings).
+                if sec_id and sec_title:
+                    expected_leads.append({"kind": "h2_lead", "id": sec_id, "title": sec_title})
                 for sub in subs:
                     if not isinstance(sub, dict):
                         continue
@@ -1997,15 +2179,16 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
         ("open_problems", "Open Problems", base_dir / "open_problems.md"),
         ("conclusion", "Conclusion", base_dir / "conclusion.md"),
     ]
-    optional_globals = [
-        ("evidence_note", "Evidence note", base_dir / "evidence_note.md"),
-    ]
+    optional_globals: list[tuple[str, str, Path]] = []
 
     expected_files: list[tuple[str, str, str]] = []
     for gid, title, rel in required_globals:
         expected_files.append(("global", gid, rel.as_posix()))
     for gid, title, rel in optional_globals:
         expected_files.append(("global_optional", gid, rel.as_posix()))
+    for u in expected_leads:
+        rel = (base_dir / f"{_slug_unit_id(u['id'])}_lead.md").as_posix()
+        expected_files.append((u["kind"], u["id"], rel))
     for u in expected_units:
         rel = (base_dir / f"{_slug_unit_id(u['id'])}.md").as_posix()
         expected_files.append((u["kind"], u["id"], rel))
@@ -2065,6 +2248,38 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                     keys.add(k)
         return keys
 
+    # Evidence-aware numeric anchors: if the evidence pack contains quantitative snippets for a subsection,
+    # require the prose to include at least one cited numeric anchor (prevents “generic prose” drift).
+    numeric_available: set[str] = set()
+    packs_path = workspace / "outline" / "evidence_drafts.jsonl"
+    if packs_path.exists() and packs_path.stat().st_size > 0:
+        try:
+            for rec in read_jsonl(packs_path):
+                if not isinstance(rec, dict):
+                    continue
+                sid = str(rec.get("sub_id") or "").strip()
+                if not sid:
+                    continue
+                blob_parts: list[str] = []
+                for sn in rec.get("evidence_snippets") or []:
+                    if isinstance(sn, dict):
+                        blob_parts.append(str(sn.get("text") or ""))
+                for comp in rec.get("concrete_comparisons") or []:
+                    if not isinstance(comp, dict):
+                        continue
+                    for hl in comp.get("A_highlights") or []:
+                        if isinstance(hl, dict):
+                            blob_parts.append(str(hl.get("excerpt") or ""))
+                    for hl in comp.get("B_highlights") or []:
+                        if isinstance(hl, dict):
+                            blob_parts.append(str(hl.get("excerpt") or ""))
+                blob = " ".join([p for p in blob_parts if p]).strip()
+                if blob and re.search(r"\\d", blob):
+                    numeric_available.add(sid)
+        except Exception:
+            # Non-fatal: skip this check if evidence packs are unreadable.
+            numeric_available = set()
+
     # Content checks per file.
     for kind, uid, rel in expected_files:
         p = workspace / rel
@@ -2122,7 +2337,7 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
 
                 content = re.sub(r"\[@[^\]]+\]", "", text)
                 content = re.sub(r"\s+", " ", content).strip()
-                if len(content) < 4000:
+                if len(content) < 5000:
                     issues.append(
                         QualityIssue(
                             code="sections_h3_too_short",
@@ -2141,6 +2356,19 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                             message=f"`{rel}` has no paragraph with >=2 citations; add at least one cross-paper synthesis paragraph (contrast A vs B with multiple cites).",
                         )
                     )
+
+                if uid in numeric_available:
+                    has_cited_numeric = any(re.search(r"\\d", p) and "[@" in p for p in paragraphs)
+                    if not has_cited_numeric:
+                        issues.append(
+                            QualityIssue(
+                                code="sections_h3_missing_cited_numeric",
+                                message=(
+                                    f"`{rel}` has no cited numeric anchor (no digit in the same paragraph as a citation). "
+                                    "Evidence packs for this subsection contain quantitative snippets; include at least one concrete number/result with citations."
+                                ),
+                            )
+                        )
 
                 # “Grad paragraph” micro-structure signals: contrast + evaluation anchor + limitation.
                 contrast_re = r"(?i)\b(?:whereas|however|in\s+contrast|by\s+contrast|versus|vs\.)\b|相比|不同于|相较|对比|反之"
@@ -2191,6 +2419,26 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                             message=f"`{rel}` cites keys not mapped to subsection {uid} (e.g., {sample}{suffix}); keep citations subsection-scoped (or fix mapping/bindings).",
                         )
                     )
+        elif kind == "h2_lead":
+            # H2 lead blocks should be body-only and citation-grounded.
+            for ln in text.splitlines():
+                if ln.strip().startswith("#"):
+                    issues.append(
+                        QualityIssue(
+                            code="sections_h2_lead_has_headings",
+                            message=f"`{rel}` should be body-only (no headings); it is injected under the chapter H2 heading by `section-merger`.",
+                        )
+                    )
+                    break
+            cite_keys = _extract_keys(text)
+            if _pipeline_profile(workspace) == "arxiv-survey" and len(cite_keys) < 2:
+                issues.append(
+                    QualityIssue(
+                        code="sections_h2_lead_sparse_citations",
+                        message=f"`{rel}` has too few citations ({len(cite_keys)}); chapter leads should be grounded (>=2) to avoid generic glue text.",
+                    )
+                )
+
         elif kind == "global":
             # Minimal heading sanity for required global sections.
             if uid == "abstract" and not re.search(r"(?im)^##\s+(abstract|摘要)\b", text):

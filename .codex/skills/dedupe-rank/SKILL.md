@@ -27,7 +27,7 @@ This is a deterministic “curation” step: it should be stable and repeatable.
 ## Workflow (high level)
 
 1. Dedupe by normalized `(title, year)` and keep the richest metadata per duplicate cluster.
-2. Rank by relevance/recency signals (and optionally pin known classics for certain topics).
+2. Rank by relevance/recency signals (and optionally pin known classics for certain topics). For LLM-agent topics, also ensure a small quota of prior surveys/reviews is present to support a paper-like Related Work section.
 3. Write `papers/core_set.csv` with stable `paper_id` values and useful metadata columns (`arxiv_id`, `pdf_url`, categories).
 
 ## Quality checklist
@@ -54,6 +54,7 @@ This is a deterministic “curation” step: it should be stable and repeatable.
 
 ### Notes
 
+- This step may annotate `papers/core_set.csv:reason` with tags such as `pinned_classic` and `prior_survey` (deterministic, topic-aware guards for survey writing).
 - This step is deterministic; reruns should be stable for the same inputs.
 
 ## Troubleshooting

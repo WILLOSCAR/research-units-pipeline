@@ -1,6 +1,6 @@
 ---
 name: arxiv-survey-latex
-version: 1.6
+version: 1.7
 target_artifacts:
   - papers/retrieval_report.md
   - outline/taxonomy.yml
@@ -9,6 +9,7 @@ target_artifacts:
   - outline/coverage_report.md
   - outline/outline_state.jsonl
   - outline/subsection_briefs.jsonl
+  - outline/chapter_briefs.jsonl
   - outline/transitions.md
   - papers/fulltext_index.jsonl
   - papers/paper_notes.jsonl
@@ -21,6 +22,7 @@ target_artifacts:
   - outline/timeline.md
   - outline/figures.md
   - outline/evidence_drafts.jsonl
+  - outline/anchor_sheet.jsonl
   - citations/ref.bib
   - citations/verified.jsonl
   - sections/sections_manifest.jsonl
@@ -97,11 +99,13 @@ required_skills:
 - pdf-text-extractor
 - paper-notes
 - subsection-briefs
+- chapter-briefs
 produces:
 - papers/fulltext_index.jsonl
 - papers/paper_notes.jsonl
 - papers/evidence_bank.jsonl
 - outline/subsection_briefs.jsonl
+- outline/chapter_briefs.jsonl
 
 Notes:
 - `subsection-briefs` converts each H3 into a verifiable writing card (scope_rule/rq/axes/clusters/paragraph_plan) so later drafting is section-specific and evidence-first.
@@ -111,6 +115,7 @@ required_skills:
 - citation-verifier
 - evidence-binder
 - evidence-draft
+- anchor-sheet
 - claim-matrix-rewriter
 - table-schema
 - table-filler
@@ -121,6 +126,7 @@ produces:
 - outline/evidence_bindings.jsonl
 - outline/evidence_binding_report.md
 - outline/evidence_drafts.jsonl
+- outline/anchor_sheet.jsonl
 - outline/claim_evidence_matrix.md
 - outline/table_schema.md
 - outline/tables.md
@@ -169,6 +175,7 @@ Notes:
 - Treat this stage as an iteration loop:
   - draft per H3 → de-template/cohere → global review → (if gaps) go back to C3/C4 to strengthen evidence packs → regenerate draft.
 - Depth target (survey-quality): each H3 should be **6–10 paragraphs** (~800–1400 words) with >=2 concrete contrasts + an evaluation anchor + a cross-paper synthesis paragraph + an explicit limitation (quality gates should block short stubs).
+- Coherence target (paper-like): for every H2 chapter with H3 subsections, write a short **chapter lead** block (`sections/S<sec_id>_lead.md`) that previews the comparison axes and how the H3s connect (no new headings; avoid generic glue).
 - PDF compile should run early/often to catch LaTeX failures, but compile success is not narrative quality.
 - `section-merger` produces a paper-like `output/DRAFT.md` by merging `sections/*.md` plus `outline/transitions.md`. Evidence-first visuals (`outline/tables.md`, `outline/timeline.md`, `outline/figures.md`) are **intermediate artifacts** by default and should be woven into prose intentionally (or kept out of the main draft) to avoid inflating the PDF ToC with short, reader-facing-empty sections.
 - Recommended skills (toolkit, not a rigid one-shot chain):

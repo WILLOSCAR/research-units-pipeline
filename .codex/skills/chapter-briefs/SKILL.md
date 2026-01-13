@@ -1,0 +1,85 @@
+---
+name: chapter-briefs
+description: |
+  Build per-chapter (H2) writing briefs (NO PROSE) so the final survey reads like a paper (chapter leads + cross-H3 coherence) without inflating the ToC.
+  **Trigger**: chapter briefs, H2 briefs, chapter lead plan, section intent, 章节意图, 章节导读, H2 卡片.
+  **Use when**: `outline/outline.yml` + `outline/subsection_briefs.jsonl` exist and you want thicker chapters (fewer headings, more logic).
+  **Skip if**: the outline is still changing heavily (fix outline/mapping first).
+  **Network**: none.
+  **Guardrail**: NO PROSE; do not invent papers; only reference subsection ids and already-mapped papers.
+---
+
+# Chapter Briefs (H2 writing cards) [NO PROSE]
+
+Purpose: turn each **H2 chapter that contains H3 subsections** into a chapter-level writing card so the writer can:
+- add a chapter lead paragraph block (coherence)
+- keep a consistent comparison axis across the chapter
+- avoid “8 small islands” where every H3 restarts from scratch
+
+This artifact is **internal intent**, not reader-facing prose.
+
+## Inputs
+
+- `outline/outline.yml`
+- `outline/subsection_briefs.jsonl`
+- Optional: `GOAL.md`
+
+## Outputs
+
+- `outline/chapter_briefs.jsonl`
+
+## Output format (`outline/chapter_briefs.jsonl`)
+
+JSONL (one object per H2 chapter that has H3 subsections).
+
+Required fields:
+- `section_id`, `section_title`
+- `subsections` (list of `{sub_id,title}` in outline order)
+- `throughline` (3–6 bullets)
+- `key_contrasts` (2–6 bullets; pull from each H3 `contrast_hook` when available)
+- `lead_paragraph_plan` (2–3 bullets; plan only, not prose)
+- `bridge_terms` (5–12 tokens; union of H3 bridge terms)
+
+## Workflow
+
+0. (Optional) Read `GOAL.md` to pin scope/audience, and inject that constraint into the chapter throughline.
+1. Read `outline/outline.yml` and list H2 chapters that have H3 subsections.
+2. Read `outline/subsection_briefs.jsonl` and group briefs by `section_id`.
+3. For each chapter, produce:
+   - a **throughline**: what the whole chapter is trying to compare/explain
+   - **key contrasts**: 2–6 contrasts that span multiple H3s
+   - a **lead paragraph plan**: 2–3 paragraph objectives (what the chapter lead must do)
+   - a **bridge_terms** set to keep terminology stable across H3s
+4. Write `outline/chapter_briefs.jsonl`.
+
+## Quality checklist
+
+- [ ] One record per H2-with-H3 chapter.
+- [ ] No placeholders (`TODO`/`…`/`(placeholder)`/template instructions).
+- [ ] `throughline` and `key_contrasts` are chapter-specific (not copy/paste generic).
+
+## Script
+
+### Quick Start
+
+- `python .codex/skills/chapter-briefs/scripts/run.py --help`
+- `python .codex/skills/chapter-briefs/scripts/run.py --workspace workspaces/<ws>`
+
+### All Options
+
+- `--workspace <dir>`
+- `--unit-id <U###>`
+- `--inputs <semicolon-separated>`
+- `--outputs <semicolon-separated>`
+- `--checkpoint <C#>`
+
+### Examples
+
+- Default IO:
+  - `python .codex/skills/chapter-briefs/scripts/run.py --workspace workspaces/<ws>`
+- Explicit IO:
+  - `python .codex/skills/chapter-briefs/scripts/run.py --workspace workspaces/<ws> --inputs "outline/outline.yml;outline/subsection_briefs.jsonl;GOAL.md" --outputs "outline/chapter_briefs.jsonl"`
+
+Notes:
+- This helper is a bootstrap; refine manually if needed.
+- Freeze policy: create `outline/chapter_briefs.refined.ok` to prevent regeneration.

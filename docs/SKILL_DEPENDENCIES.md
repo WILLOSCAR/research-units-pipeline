@@ -9,6 +9,13 @@ flowchart LR
   classDef skill fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1;
   classDef file fill:#f1f8e9,stroke:#7cb342,color:#1b5e20;
 
+  S_anchor_sheet["`anchor-sheet`"]:::skill
+  F_citations_ref_bib["`citations/ref.bib`"]:::file
+  F_citations_ref_bib --> S_anchor_sheet
+  F_outline_evidence_drafts_jsonl["`outline/evidence_drafts.jsonl`"]:::file
+  F_outline_evidence_drafts_jsonl --> S_anchor_sheet
+  F_outline_anchor_sheet_jsonl["`outline/anchor_sheet.jsonl`"]:::file
+  S_anchor_sheet --> F_outline_anchor_sheet_jsonl
   S_arxiv_search["`arxiv-search`"]:::skill
   F_queries_md["`queries.md`"]:::file
   F_queries_md --> S_arxiv_search
@@ -20,27 +27,32 @@ flowchart LR
   F_papers_extraction_table_csv["`papers/extraction_table.csv`"]:::file
   F_papers_extraction_table_csv --> S_bias_assessor
   S_bias_assessor --> F_papers_extraction_table_csv
+  S_chapter_briefs["`chapter-briefs`"]:::skill
+  F_GOAL_md["`GOAL.md`"]:::file
+  F_GOAL_md --> S_chapter_briefs
+  F_outline_outline_yml["`outline/outline.yml`"]:::file
+  F_outline_outline_yml --> S_chapter_briefs
+  F_outline_subsection_briefs_jsonl["`outline/subsection_briefs.jsonl`"]:::file
+  F_outline_subsection_briefs_jsonl --> S_chapter_briefs
+  F_outline_chapter_briefs_jsonl["`outline/chapter_briefs.jsonl`"]:::file
+  S_chapter_briefs --> F_outline_chapter_briefs_jsonl
   S_citation_anchoring["`citation-anchoring`"]:::skill
   S_citation_verifier["`citation-verifier`"]:::skill
   F_papers_paper_notes_jsonl["`papers/paper_notes.jsonl`"]:::file
   F_papers_paper_notes_jsonl --> S_citation_verifier
-  F_citations_ref_bib["`citations/ref.bib`"]:::file
   S_citation_verifier --> F_citations_ref_bib
   F_citations_verified_jsonl["`citations/verified.jsonl`"]:::file
   S_citation_verifier --> F_citations_verified_jsonl
   S_claim_evidence_matrix["`claim-evidence-matrix`"]:::skill
   F_outline_mapping_tsv["`outline/mapping.tsv`"]:::file
   F_outline_mapping_tsv --> S_claim_evidence_matrix
-  F_outline_outline_yml["`outline/outline.yml`"]:::file
   F_outline_outline_yml --> S_claim_evidence_matrix
   F_papers_paper_notes_jsonl --> S_claim_evidence_matrix
   F_outline_claim_evidence_matrix_md["`outline/claim_evidence_matrix.md`"]:::file
   S_claim_evidence_matrix --> F_outline_claim_evidence_matrix_md
   S_claim_matrix_rewriter["`claim-matrix-rewriter`"]:::skill
   F_citations_ref_bib --> S_claim_matrix_rewriter
-  F_outline_evidence_drafts_jsonl["`outline/evidence_drafts.jsonl`"]:::file
   F_outline_evidence_drafts_jsonl --> S_claim_matrix_rewriter
-  F_outline_subsection_briefs_jsonl["`outline/subsection_briefs.jsonl`"]:::file
   F_outline_subsection_briefs_jsonl --> S_claim_matrix_rewriter
   S_claim_matrix_rewriter --> F_outline_claim_evidence_matrix_md
   S_claims_extractor["`claims-extractor`"]:::skill
@@ -158,7 +170,6 @@ flowchart LR
   F_outline_taxonomy_yml --> S_outline_builder
   S_outline_builder --> F_outline_outline_yml
   S_outline_refiner["`outline-refiner`"]:::skill
-  F_GOAL_md["`GOAL.md`"]:::file
   F_GOAL_md --> S_outline_refiner
   F_outline_mapping_tsv --> S_outline_refiner
   F_outline_outline_yml --> S_outline_refiner
@@ -251,13 +262,8 @@ flowchart LR
   S_section_mapper --> F_outline_mapping_report_md
   S_section_merger["`section-merger`"]:::skill
   F_GOAL_md --> S_section_merger
-  F_outline_figures_md --> S_section_merger
   F_outline_outline_yml --> S_section_merger
-  F_outline_tables_md --> S_section_merger
-  F_outline_timeline_md --> S_section_merger
   F_outline_transitions_md --> S_section_merger
-  F_sections_md["`sections/*.md`"]:::file
-  F_sections_md --> S_section_merger
   F_sections_sections_manifest_jsonl["`sections/sections_manifest.jsonl`"]:::file
   F_sections_sections_manifest_jsonl --> S_section_merger
   S_section_merger --> F_output_DRAFT_md
@@ -274,18 +280,22 @@ flowchart LR
   S_subsection_writer["`subsection-writer`"]:::skill
   F_DECISIONS_md --> S_subsection_writer
   F_citations_ref_bib --> S_subsection_writer
+  F_outline_anchor_sheet_jsonl --> S_subsection_writer
+  F_outline_chapter_briefs_jsonl --> S_subsection_writer
   F_outline_evidence_bindings_jsonl --> S_subsection_writer
   F_outline_evidence_drafts_jsonl --> S_subsection_writer
   F_outline_outline_yml --> S_subsection_writer
   F_outline_subsection_briefs_jsonl --> S_subsection_writer
   F_sections["`sections/`"]:::file
   S_subsection_writer --> F_sections
+  F_sections_S_sec_id__lead_md["`sections/S<sec_id>_lead.md`"]:::file
+  S_subsection_writer --> F_sections_S_sec_id__lead_md
+  F_sections_S_sub_id_md["`sections/S<sub_id>.md`"]:::file
+  S_subsection_writer --> F_sections_S_sub_id_md
   F_sections_abstract_md["`sections/abstract.md`"]:::file
   S_subsection_writer --> F_sections_abstract_md
   F_sections_conclusion_md["`sections/conclusion.md`"]:::file
   S_subsection_writer --> F_sections_conclusion_md
-  F_sections_evidence_note_md["`sections/evidence_note.md`"]:::file
-  S_subsection_writer --> F_sections_evidence_note_md
   F_sections_open_problems_md["`sections/open_problems.md`"]:::file
   S_subsection_writer --> F_sections_open_problems_md
   S_subsection_writer --> F_sections_sections_manifest_jsonl
@@ -368,6 +378,23 @@ flowchart LR
   F_papers["`papers/`"]:::file
   S_workspace_init --> F_papers
   S_workspace_init --> F_queries_md
+  S_writer_selfloop["`writer-selfloop`"]:::skill
+  F_citations_ref_bib --> S_writer_selfloop
+  F_outline_anchor_sheet_jsonl --> S_writer_selfloop
+  F_outline_chapter_briefs_jsonl --> S_writer_selfloop
+  F_outline_evidence_bindings_jsonl --> S_writer_selfloop
+  F_outline_evidence_drafts_jsonl --> S_writer_selfloop
+  F_outline_subsection_briefs_jsonl --> S_writer_selfloop
+  F_output_QUALITY_GATE_md["`output/QUALITY_GATE.md`"]:::file
+  F_output_QUALITY_GATE_md --> S_writer_selfloop
+  F_sections --> S_writer_selfloop
+  F_sections_md["`sections/*.md`"]:::file
+  F_sections_md --> S_writer_selfloop
+  F_sections_sections_manifest_jsonl --> S_writer_selfloop
+  F_output_WRITER_SELFLOOP_TODO_md["`output/WRITER_SELFLOOP_TODO.md`"]:::file
+  S_writer_selfloop --> F_output_WRITER_SELFLOOP_TODO_md
+  S_writer_selfloop --> F_sections_S_sec_id__lead_md
+  S_writer_selfloop --> F_sections_S_sub_id_md
 ```
 
 ## Pipeline execution graphs (from templates/UNITS.*.csv)
@@ -403,12 +430,14 @@ flowchart LR
     U_U058["`U058`\n`pdf-text-extractor`"]:::unit
     U_U060["`U060`\n`paper-notes`"]:::unit
     U_U075["`U075`\n`subsection-briefs`"]:::unit
+    U_U076["`U076`\n`chapter-briefs`"]:::unit
   end
 
   subgraph "C4 - Citations + visuals"
     U_U090["`U090`\n`citation-verifier`"]:::unit
     U_U091["`U091`\n`evidence-binder`"]:::unit
     U_U092["`U092`\n`evidence-draft`"]:::unit
+    U_U093["`U093`\n`anchor-sheet`"]:::unit
     U_U094["`U094`\n`claim-matrix-rewriter`"]:::unit
     U_U096["`U096`\n`table-schema`"]:::unit
     U_U097["`U097`\n`table-filler`"]:::unit
@@ -438,17 +467,20 @@ flowchart LR
   U_U055 --> U_U058
   U_U058 --> U_U060
   U_U060 --> U_U075
+  U_U075 --> U_U076
   U_U060 --> U_U090
   U_U090 --> U_U091
   U_U075 --> U_U091
   U_U060 --> U_U091
   U_U091 --> U_U092
+  U_U092 --> U_U093
   U_U092 --> U_U094
   U_U092 --> U_U096
   U_U096 --> U_U097
   U_U092 --> U_U097
   U_U094 --> U_U095
-  U_U092 --> U_U100
+  U_U093 --> U_U100
+  U_U076 --> U_U100
   U_U100 --> U_U098
   U_U100 --> U_U101
   U_U097 --> U_U101
@@ -492,12 +524,14 @@ flowchart LR
     U_U058["`U058`\n`pdf-text-extractor`"]:::unit
     U_U060["`U060`\n`paper-notes`"]:::unit
     U_U075["`U075`\n`subsection-briefs`"]:::unit
+    U_U076["`U076`\n`chapter-briefs`"]:::unit
   end
 
   subgraph "C4 - Citations + visuals"
     U_U090["`U090`\n`citation-verifier`"]:::unit
     U_U091["`U091`\n`evidence-binder`"]:::unit
     U_U092["`U092`\n`evidence-draft`"]:::unit
+    U_U093["`U093`\n`anchor-sheet`"]:::unit
     U_U094["`U094`\n`claim-matrix-rewriter`"]:::unit
     U_U096["`U096`\n`table-schema`"]:::unit
     U_U097["`U097`\n`table-filler`"]:::unit
@@ -525,17 +559,20 @@ flowchart LR
   U_U055 --> U_U058
   U_U058 --> U_U060
   U_U060 --> U_U075
+  U_U075 --> U_U076
   U_U060 --> U_U090
   U_U090 --> U_U091
   U_U075 --> U_U091
   U_U060 --> U_U091
   U_U091 --> U_U092
+  U_U092 --> U_U093
   U_U092 --> U_U094
   U_U092 --> U_U096
   U_U096 --> U_U097
   U_U092 --> U_U097
   U_U094 --> U_U095
-  U_U092 --> U_U100
+  U_U093 --> U_U100
+  U_U076 --> U_U100
   U_U100 --> U_U098
   U_U100 --> U_U101
   U_U097 --> U_U101

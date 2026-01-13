@@ -66,6 +66,11 @@ This skill is intentionally **evidence-first**: if you can't reach the target si
 - Offline inputs (merged if present): `papers/import.(csv|json|jsonl|bib)`, `papers/arxiv_export.(csv|json|jsonl|bib)`, `papers/imports/*.(csv|json|jsonl|bib)`.
 - Optional offline snowball inputs: `papers/snowball/*.(csv|json|jsonl|bib)`.
 - Online expansion requires network: use `--online` and/or `--snowball`.
+- Online retrieval is best-effort: arXiv API can be flaky in some environments; the script will also attempt a Semantic Scholar route when needed.
+- For LLM-agent topics, the script also performs a best-effort **pinned arXiv id_list fetch** (canonical classics like ReAct/Toolformer/Reflexion/Voyager/Tree-of-Thoughts + a small prior-survey seed set) so `ref.bib` can include must-cite anchors even when keyword search misses them.
+- If HTTPS/TLS to external domains is unstable, the Semantic Scholar route is fetched via the `r.jina.ai` proxy so the pipeline can still self-boot without manual exports.
+- When an online run returns `0` records due to transient network errors, a simple rerun is often sufficient (the pipeline should not fabricate).
+
 
 ### Examples
 

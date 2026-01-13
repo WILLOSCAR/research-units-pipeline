@@ -34,6 +34,7 @@
 - `pdf-text-extractor`（Network: fulltext 可选）：下载/抽取全文 → `papers/fulltext_index.jsonl` + `papers/fulltext/*.txt`
 - `paper-notes`：结构化论文笔记 + 证据库 → `papers/paper_notes.jsonl` + `papers/evidence_bank.jsonl`
 - `subsection-briefs`：为每个 H3 生成写作意图卡（scope_rule/rq/axes/clusters/paragraph_plan）→ `outline/subsection_briefs.jsonl`
+- `chapter-briefs`：为每个含 H3 的 H2 生成“章节导读卡”（throughline/key_contrasts/lead plan；NO PROSE）→ `outline/chapter_briefs.jsonl`
 - `claims-extractor`：从单篇论文/稿件提取 claims → `output/CLAIMS.md`
 - `evidence-auditor`：审稿：证据缺口审计 → `output/MISSING_EVIDENCE.md`
 - `novelty-matrix`：审稿：新颖性矩阵 → `output/NOVELTY_MATRIX.md`
@@ -43,6 +44,7 @@
 - `citation-verifier`（Network: verify 可选）：生成 BibTeX + verification 记录 → `citations/ref.bib` + `citations/verified.jsonl`
 - `evidence-binder`：把 subsection→evidence_id 绑定成“证据计划”（writer 只能按 ID 取证据）→ `outline/evidence_bindings.jsonl` + `outline/evidence_binding_report.md`
 - `evidence-draft`：把 notes→“可写证据包”（逐小节 claim candidates / concrete comparisons / eval / limitations）→ `outline/evidence_drafts.jsonl`
+- `anchor-sheet`：从 evidence packs 提取“可写锚点”（数字/benchmark/limitation；NO PROSE）→ `outline/anchor_sheet.jsonl`
 - `claim-matrix-rewriter`：从 evidence packs 重写“claim→evidence 索引”（避免模板 claim）→ `outline/claim_evidence_matrix.md`
 - `table-schema`：先定义表格 schema（问题/列/证据字段）→ `outline/table_schema.md`
 - `table-filler`：用 evidence packs 填表（填不出就显式 missing）→ `outline/tables.md`
@@ -53,8 +55,9 @@
 - `transition-weaver`：生成 H2/H3 过渡句映射（不新增事实/引用）→ `outline/transitions.md`
 - `grad-paragraph`：研究生段落 micro-skill（张力→对比→评测锚点→限制），用于写出“像综述”的正文段落（通常嵌入 `sections/S*.md` 的写作流程）
 - `subsection-writer`：按 H2/H3 拆分写作到 `sections/`（可独立 QA）→ `sections/sections_manifest.jsonl` + `sections/S*.md`
+- `writer-selfloop`：写作自循环（读 `output/QUALITY_GATE.md`，只改失败小节直到 PASS）→ 更新 `sections/*.md`
 - `subsection-polisher`：局部小节润色（pre-merge；结构化段落 + 去模板；不改 citation keys）
-- `section-merger`：把 `sections/` + `outline/*visuals*` 按 `outline/outline.yml` 合并 → `output/DRAFT.md` + `output/MERGE_REPORT.md`
+- `section-merger`：把 `sections/` + `outline/transitions.md` 按 `outline/outline.yml` 合并 → `output/DRAFT.md` + `output/MERGE_REPORT.md`
 - `prose-writer`：从已批准的 outline+evidence 写 `output/DRAFT.md`（仅用已验证 citation keys）
 - `draft-polisher`：对 `output/DRAFT.md` 做去套话 + 连贯性润色（不改变 citation keys 与语义）
 - `terminology-normalizer`：全局术语一致性（canonical terms + synonym policy；不改 citations）
@@ -96,6 +99,7 @@
 - “写综述 / 写 draft / prose” → `prose-writer`
 - “研究生段落 / 论证段 / 段落结构（对比+限制+评测锚点）” → `grad-paragraph`
 - “分小节写 / per-section / per-subsection / sections/” → `subsection-writer`
+- “自循环 / quality gate loop / 改到 PASS / rewrite failing sections” → `writer-selfloop`
 - “小节润色 / pre-merge polish / per-subsection polish” → `subsection-polisher`
 - “合并草稿 / merge sections / section merger / 拼接草稿” → `section-merger`
 - “润色 / 去套话 / coherence / polish draft” → `draft-polisher`, `global-reviewer`
@@ -121,8 +125,10 @@
 - `papers/paper_notes.jsonl` → `citation-verifier`
 - `papers/evidence_bank.jsonl` → `evidence-binder`, `evidence-draft`（可选增强）
 - `outline/subsection_briefs.jsonl` → `evidence-draft`, `table-schema`, `transition-weaver`, `prose-writer`
+- `outline/chapter_briefs.jsonl` → `subsection-writer`（写 H2 lead 用）
 - `outline/evidence_bindings.jsonl` → `evidence-draft`, `pipeline-auditor`
 - `outline/evidence_drafts.jsonl` → `claim-matrix-rewriter`, `table-filler`, `prose-writer`
+- `outline/anchor_sheet.jsonl` → `subsection-writer`（写作锚点）
 - `outline/table_schema.md` → `table-filler`
 - `outline/transitions.md` → `prose-writer`
 - `outline/transitions.md` → `section-merger`（自动插入过渡句）
@@ -145,6 +151,7 @@
 - `outline/coverage_report.md`, `outline/outline_state.jsonl` → `outline-refiner`
 - `outline/evidence_bindings.jsonl`, `outline/evidence_binding_report.md` → `evidence-binder`
 - `outline/evidence_drafts.jsonl` → `evidence-draft`
+- `outline/anchor_sheet.jsonl` → `anchor-sheet`
 - `outline/claim_evidence_matrix.md` → `claim-matrix-rewriter`
 - `citations/ref.bib`, `citations/verified.jsonl` → `citation-verifier`
 - `outline/table_schema.md` → `table-schema`

@@ -1,6 +1,6 @@
 ---
 name: arxiv-survey
-version: 1.6
+version: 1.7
 target_artifacts:
   - papers/retrieval_report.md
   - outline/taxonomy.yml
@@ -9,6 +9,7 @@ target_artifacts:
   - outline/coverage_report.md
   - outline/outline_state.jsonl
   - outline/subsection_briefs.jsonl
+  - outline/chapter_briefs.jsonl
   - outline/transitions.md
   - papers/fulltext_index.jsonl
   - papers/paper_notes.jsonl
@@ -21,6 +22,7 @@ target_artifacts:
   - outline/timeline.md
   - outline/figures.md
   - outline/evidence_drafts.jsonl
+  - outline/anchor_sheet.jsonl
   - citations/ref.bib
   - citations/verified.jsonl
   - sections/sections_manifest.jsonl
@@ -91,11 +93,13 @@ required_skills:
 - pdf-text-extractor
 - paper-notes
 - subsection-briefs
+- chapter-briefs
 produces:
 - papers/fulltext_index.jsonl
 - papers/paper_notes.jsonl
 - papers/evidence_bank.jsonl
 - outline/subsection_briefs.jsonl
+- outline/chapter_briefs.jsonl
 
 Notes:
 - `queries.md` can set `evidence_mode: "abstract"|"fulltext"` (default template uses `abstract`).
@@ -107,6 +111,7 @@ required_skills:
 - citation-verifier
 - evidence-binder
 - evidence-draft
+- anchor-sheet
 - claim-matrix-rewriter
 - table-schema
 - table-filler
@@ -117,6 +122,7 @@ produces:
 - outline/evidence_bindings.jsonl
 - outline/evidence_binding_report.md
 - outline/evidence_drafts.jsonl
+- outline/anchor_sheet.jsonl
 - outline/claim_evidence_matrix.md
 - outline/table_schema.md
 - outline/tables.md
@@ -160,6 +166,7 @@ Notes:
   - Writer pass: write that section using only those citation IDs; avoid dumping the whole notes set into context.
 - Treat this stage as an iteration loop: draft per H3 → de-template/cohere → global review → (if gaps) back to C3/C4 → regenerate.
 - Depth target (survey-quality): each H3 should be **6–10 paragraphs** (~800–1400 words) with >=2 concrete contrasts + an evaluation anchor + a cross-paper synthesis paragraph + an explicit limitation (quality gates should block short stubs).
+- Coherence target (paper-like): for every H2 chapter with H3 subsections, write a short **chapter lead** block (`sections/S<sec_id>_lead.md`) that previews the comparison axes and how the H3s connect (no new headings; avoid generic glue).
 - Recommended skills (toolkit, not a rigid one-shot chain):
   - Modular drafting: `subsection-writer` → `transition-weaver` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor`.
   - Legacy one-shot drafting: `prose-writer` (kept for quick experiments; less debuggable).

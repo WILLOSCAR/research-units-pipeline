@@ -26,7 +26,8 @@
 
 - Meta / orchestration: `pipeline-router`, `workspace-init`, `unit-planner`, `unit-executor`
 - End-to-end runner: `research-pipeline-runner`
-- Survey flow: `literature-engineer`, `arxiv-search`, `keyword-expansion`, `survey-seed-harvest`, `dedupe-rank`, `taxonomy-builder`, `outline-builder`, `section-mapper`, `pdf-text-extractor`, `paper-notes`, `subsection-briefs`, `citation-verifier`, `evidence-draft`, `claim-matrix-rewriter`, `table-schema`, `table-filler`, `survey-visuals`, `transition-weaver`, `prose-writer`, `draft-polisher`, `global-reviewer`, `latex-scaffold`, `latex-compile-qa`
+- Survey flow: `literature-engineer`, `arxiv-search`, `keyword-expansion`, `survey-seed-harvest`, `dedupe-rank`, `taxonomy-builder`, `outline-builder`, `section-mapper`, `outline-refiner`, `pdf-text-extractor`, `paper-notes`, `subsection-briefs`, `chapter-briefs`, `citation-verifier`, `evidence-binder`, `evidence-draft`, `anchor-sheet`, `claim-matrix-rewriter`, `table-schema`, `table-filler`, `survey-visuals`, `subsection-writer`, `transition-weaver`, `section-merger`, `draft-polisher`, `global-reviewer`, `pipeline-auditor`, `latex-scaffold`, `latex-compile-qa` (可选：`prose-writer`, `subsection-polisher`, `redundancy-pruner`, `terminology-normalizer`)
+- Writer self-loop: `writer-selfloop`（当 `subsection-writer` 被 `output/QUALITY_GATE.md` 卡住时，用它只修失败小节直到 PASS）
 - Tutorial flow: `tutorial-spec`, `concept-graph`, `module-planner`, `exercise-builder`, `tutorial-module-writer`
 - Systematic review flow: `protocol-writer`, `screening-manager`, `extraction-form`, `bias-assessor`, `synthesis-writer`
 - Peer review flow: `claims-extractor`, `evidence-auditor`, `novelty-matrix`, `rubric-writer`

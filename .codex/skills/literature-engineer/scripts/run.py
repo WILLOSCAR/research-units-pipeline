@@ -7,6 +7,7 @@ import re
 import sys
 import time
 import urllib.parse
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -63,7 +64,8 @@ def main() -> int:
 
     records: list[dict[str, Any]] = []
     route_to_source_paths: dict[str, set[str]] = {}
-    online_error: str = ""
+    online_status: str = "SKIPPED"
+    online_errors: list[str] = []
 
     offline_inputs = [str(Path(p).resolve()) for p in (args.input or []) if str(p).strip()]
     if not offline_inputs and not args.online:
@@ -116,6 +118,33 @@ def main() -> int:
                 )
                 records.append(norm)
 
+
+    # Pinned classics/surveys (agent topics): ensure key anchor works are present even if keyword
+    # search/ranking misses them. Best-effort (non-fatal on network errors).
+    pinned_ids = _pinned_arxiv_ids(workspace=workspace, keywords=keywords)
+    if pinned_ids:
+        try:
+            pinned = _fetch_arxiv_id_list(ids=pinned_ids, excludes=excludes, year_from=year_from, year_to=year_to)
+        except KeyboardInterrupt:
+            raise
+        except BaseException as exc:
+            online_errors.append(f"Pinned arXiv ids: {type(exc).__name__}: {exc}")
+        else:
+            for rec in pinned:
+                norm = _normalize_record(rec)
+                aid = str(norm.get('arxiv_id') or '').strip()
+                route = f"pinned_arxiv_id:{aid}" if aid else "pinned_arxiv_id"
+                _attach_provenance(
+                    norm,
+                    prov=RouteProvenance(
+                        route=route,
+                        source="arxiv",
+                        source_path="http://export.arxiv.org/api/query?id_list=...",
+                        imported_at=imported_at,
+                    ),
+                )
+                records.append(norm)
+
     # Online retrieval policy:
     # - If explicitly requested via --online: always try.
     # - Otherwise, when the current pool is smaller than a reasonable minimum,
@@ -141,15 +170,17 @@ def main() -> int:
     should_try_online = bool(args.online) or (_estimate_unique_count(records) < desired_min)
 
     if should_try_online:
+        online_status = "FAILED"
         if not keywords:
-            online_error = (
+            online_errors.append(
                 "No keywords found in queries.md. "
                 "Add keywords (recommended) or provide larger offline exports under papers/imports/."
             )
         else:
+            arxiv_error = ""
             try:
                 online = _search_arxiv_paged(
-                    queries=keywords,
+                    queries=_pick_online_queries(keywords, cap=4),
                     excludes=excludes,
                     max_results=max_results or 200,
                     year_from=year_from,
@@ -159,7 +190,7 @@ def main() -> int:
                 raise
             except BaseException as exc:
                 online = []
-                online_error = f"{type(exc).__name__}: {exc}"
+                arxiv_error = f"{type(exc).__name__}: {exc}"
             for rec in online:
                 norm = _normalize_record(rec)
                 query = str(rec.get("_query") or "").strip()
@@ -175,6 +206,45 @@ def main() -> int:
                 )
                 records.append(norm)
 
+            s2_error = ""
+            # If arXiv fails (common in restricted environments) or yields too little, fallback to Semantic Scholar.
+            if arxiv_error or _estimate_unique_count(records) < desired_min:
+                try:
+                    s2_online = _search_semantic_scholar_paged(
+                        queries=_pick_online_queries(keywords, cap=4),
+                        excludes=excludes,
+                        max_results=max_results or 200,
+                        year_from=year_from,
+                        year_to=year_to,
+                    )
+                except KeyboardInterrupt:
+                    raise
+                except BaseException as exc:
+                    s2_online = []
+                    s2_error = f"{type(exc).__name__}: {exc}"
+                for rec in s2_online:
+                    norm = _normalize_record(rec)
+                    query = str(rec.get("_query") or "").strip()
+                    route = f"s2_query:{query}" if query else "s2_query"
+                    _attach_provenance(
+                        norm,
+                        prov=RouteProvenance(
+                            route=route,
+                            source="semantic_scholar",
+                            source_path="https://api.semanticscholar.org/graph/v1/paper/search",
+                            imported_at=imported_at,
+                        ),
+                    )
+                    records.append(norm)
+
+            if arxiv_error:
+                online_errors.append(f"arXiv: {arxiv_error}")
+            if s2_error:
+                online_errors.append(f"Semantic Scholar: {s2_error}")
+
+            if _estimate_unique_count(records) > 0:
+                online_status = "OK"
+
     # Basic filters.
     if year_from or year_to:
         records = [r for r in records if _within_year_window(r.get("year"), year_from=year_from, year_to=year_to)]
@@ -182,7 +252,11 @@ def main() -> int:
     deduped = _dedupe_merge(records)
 
     if max_results and len(deduped) > max_results:
-        deduped = deduped[:max_results]
+        pinned_for_cap = _pinned_arxiv_ids(workspace=workspace, keywords=keywords)
+        if pinned_for_cap:
+            deduped = _cap_keep_pinned_arxiv(deduped, max_results=max_results, pinned_arxiv_ids=pinned_for_cap)
+        else:
+            deduped = deduped[:max_results]
 
     # Write outputs.
     write_jsonl(out_jsonl, deduped)
@@ -200,7 +274,8 @@ def main() -> int:
             year_to=year_to,
             offline_inputs=offline_inputs,
             snowball_inputs=_detect_snowball_exports(workspace) if args.snowball else [],
-            online_error=online_error,
+            online_status=online_status,
+            online_error="; ".join([e for e in online_errors if str(e).strip()]),
             total_in=len(records),
             total_out=len(deduped),
             records=deduped,
@@ -707,6 +782,7 @@ def _render_report(
     year_to: int | None,
     offline_inputs: list[str],
     snowball_inputs: list[str],
+    online_status: str,
     online_error: str = "",
     total_in: int,
     total_out: int,
@@ -760,7 +836,7 @@ def _render_report(
         f"- Keywords: `{len(keywords)}`",
         f"- Excludes: `{len(excludes)}`",
         f"- Time window: `{year_from or ''}`..`{year_to or ''}`",
-        f"- Online retrieval (best-effort): `{('OK' if not online_error else 'FAILED')}`",
+        f"- Online retrieval (best-effort): `{online_status}`",
         "",
         f"## Summary",
         "",
@@ -802,6 +878,268 @@ def _render_report(
         ]
     )
     return "\n".join(lines).rstrip() + "\n"
+
+
+
+def _pick_online_queries(keywords: list[str], *, cap: int = 4) -> list[str]:
+    uniq: list[str] = []
+    seen: set[str] = set()
+    for q in keywords or []:
+        q = str(q or "").strip()
+        if not q:
+            continue
+        ql = q.lower()
+        if ql in seen:
+            continue
+        seen.add(ql)
+        uniq.append(q)
+
+    def _score(q: str) -> float:
+        ql = q.lower()
+        score = 0.0
+        if any(tok in ql for tok in ("survey", "review", "综述", "调研")):
+            score += 5.0
+        if "agent" in ql:
+            score += 3.0
+        if "llm" in ql or "language model" in ql:
+            score += 2.0
+        if any(tok in ql for tok in ("tool", "function calling", "tool-use", "tool use")):
+            score += 1.0
+        # Prefer shorter, reusable queries.
+        score -= min(2.0, len(q) / 200.0)
+        return score
+
+    uniq.sort(key=_score, reverse=True)
+    return uniq[: max(1, int(cap))]
+
+
+def _is_excluded_text(text: str, excludes: list[str]) -> bool:
+    if not excludes:
+        return False
+    blob = (text or "").lower()
+    for ex in excludes:
+        ex = str(ex or "").strip().lower()
+        if not ex:
+            continue
+        if ex in blob:
+            return True
+    return False
+
+
+def _semantic_scholar_request_json(url: str, *, timeout: int = 30, max_retries: int = 8) -> dict[str, Any]:
+    """Fetch Semantic Scholar JSON via the r.jina.ai proxy.
+
+    Rationale: some environments intermittently fail TLS handshakes to external domains;
+    r.jina.ai provides a stable, cache-friendly fetch path.
+
+    Note: r.jina.ai has changed formats over time:
+    - Legacy: plain text wrapper with `Markdown Content:` then raw JSON.
+    - Current: JSON envelope with `data.content` containing the upstream body as a string.
+    This helper supports both to keep retrieval robust.
+    """
+    headers = {
+        "User-Agent": "research-units-pipeline-skills/1.0 (+https://github.com/anthropics/skills)",
+        "Accept": "application/json",
+    }
+    proxy_url = "https://r.jina.ai/" + url
+    req = urllib.request.Request(proxy_url, headers=headers, method="GET")
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read()
+            text = raw.decode("utf-8", errors="ignore")
+
+            payload = text
+
+            # r.jina.ai wraps the upstream response body; extract it.
+            marker = "Markdown Content:"
+            if marker in text:
+                payload = text.split(marker, 1)[1].lstrip()
+            else:
+                # New: JSON envelope with `data.content` as a string.
+                try:
+                    outer = json.loads(text)
+                except Exception:
+                    outer = None
+                if isinstance(outer, dict):
+                    try:
+                        code = int(outer.get("code") or 0)
+                    except Exception:
+                        code = 0
+                    if code in {429, 500, 502, 503, 504}:
+                        time.sleep(min(90.0, 2.0 * (2**attempt)))
+                        continue
+                    data = outer.get("data")
+                    if isinstance(data, dict):
+                        content = data.get("content")
+                        if isinstance(content, str) and content.strip():
+                            payload = content.strip()
+
+            try:
+                obj = json.loads(payload or "{}")
+            except Exception as exc:
+                # Common rate limit / upstream errors are rendered as plain text.
+                if "returned error 429" in text or "Too Many Requests" in text or "HTTP Error 429" in text:
+                    time.sleep(min(90.0, 2.0 * (2**attempt)))
+                    continue
+                last_exc = exc
+                time.sleep(min(30.0, 1.5 * (2**attempt)))
+                continue
+
+            if not isinstance(obj, dict):
+                return {}
+
+            # Semantic Scholar may return structured error JSON (no `data`).
+            if obj.get("error") or obj.get("message"):
+                msg = str(obj.get("error") or obj.get("message") or "").lower()
+                if "too many requests" in msg or "rate limit" in msg or "429" in msg:
+                    time.sleep(min(90.0, 2.0 * (2**attempt)))
+                    continue
+                raise SystemExit(f"Semantic Scholar error: {obj.get('error') or obj.get('message')}")
+
+            return obj
+        except urllib.error.HTTPError as exc:
+            last_exc = exc
+            if int(getattr(exc, "code", 0)) in {429, 500, 502, 503, 504}:
+                time.sleep(min(90.0, 2.0 * (2**attempt)))
+                continue
+            raise
+        except Exception as exc:
+            last_exc = exc
+            time.sleep(min(30.0, 1.5 * (2**attempt)))
+            continue
+    raise SystemExit(f"Semantic Scholar request failed after {max_retries} retries: {last_exc}")
+
+
+def _search_semantic_scholar_paged(
+    *,
+    queries: list[str],
+    excludes: list[str],
+    max_results: int,
+    year_from: int | None,
+    year_to: int | None,
+) -> list[dict[str, Any]]:
+    picked = _pick_online_queries(queries, cap=4)
+    if not picked:
+        return []
+
+    target = max(1, int(max_results))
+    page_size = min(100, target)
+    out: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+
+    fields = ",".join(["title", "authors", "year", "abstract", "url", "externalIds", "venue"])
+
+    for q in picked:
+        offset = 0
+        # Per-query cap: avoid spending the entire budget on one weak query.
+        per_query_cap = max(50, target // max(1, len(picked)))
+        while len(out) < target and offset < 5000 and offset < per_query_cap:
+            url = "https://api.semanticscholar.org/graph/v1/paper/search?" + urllib.parse.urlencode(
+                {
+                    "query": q,
+                    "limit": page_size,
+                    "offset": offset,
+                    "fields": fields,
+                }
+            )
+            payload = _semantic_scholar_request_json(url)
+            data = payload.get("data") or []
+            if not isinstance(data, list) or not data:
+                break
+
+            for paper in data:
+                if not isinstance(paper, dict):
+                    continue
+                rec = _semantic_scholar_to_record(paper, query=q)
+                if not rec:
+                    continue
+
+                # Stable-id only: downstream gates assume arxiv_id/doi coverage.
+                aid = _strip_arxiv_version(str(rec.get("arxiv_id") or "").strip())
+                doi = str(rec.get("doi") or "").strip().lower()
+                if not aid and not doi:
+                    continue
+
+                blob = f"{rec.get('title','')}\n{rec.get('abstract','')}"
+                if _is_excluded_text(blob, excludes):
+                    continue
+                if year_from or year_to:
+                    if not _within_year_window(rec.get("year"), year_from=year_from, year_to=year_to):
+                        continue
+
+                key = f"arxiv:{aid}" if aid else f"doi:{doi}"
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                out.append(rec)
+
+                if len(out) >= target:
+                    break
+
+            offset += len(data)
+            if len(data) < page_size:
+                break
+            time.sleep(1.0)
+        time.sleep(0.5)
+        if len(out) >= target:
+            break
+
+    return out[:target]
+
+
+def _semantic_scholar_to_record(paper: dict[str, Any], *, query: str) -> dict[str, Any] | None:
+    title = str(paper.get("title") or "").strip()
+    if not title:
+        return None
+
+    ext = paper.get("externalIds") or {}
+    if not isinstance(ext, dict):
+        ext = {}
+
+    arxiv_id = str(ext.get("ArXiv") or ext.get("arxiv") or ext.get("arxivId") or "").strip()
+    doi = _normalize_doi(str(ext.get("DOI") or ext.get("doi") or "").strip())
+
+    url = str(paper.get("url") or "").strip()
+    if arxiv_id:
+        url = f"https://arxiv.org/abs/{arxiv_id}"
+    elif doi:
+        url = _doi_url(doi)
+
+    authors = paper.get("authors") or []
+    author_names: list[str] = []
+    if isinstance(authors, list):
+        for a in authors:
+            if isinstance(a, dict):
+                name = str(a.get("name") or "").strip()
+                if name:
+                    author_names.append(name)
+
+    year = paper.get("year")
+    try:
+        year = int(year) if year is not None and str(year).strip() else ""
+    except ValueError:
+        year = ""
+
+    abstract = str(paper.get("abstract") or "").strip()
+    venue = str(paper.get("venue") or "").strip()
+
+    pdf_url = _default_pdf_url(arxiv_id) if arxiv_id else ""
+
+    return {
+        "title": title,
+        "authors": author_names,
+        "year": year,
+        "url": url,
+        "abstract": abstract,
+        "source": "semantic_scholar",
+        "arxiv_id": arxiv_id,
+        "pdf_url": pdf_url,
+        "doi": doi,
+        "venue": venue,
+        "_query": query,
+    }
 
 
 def _parse_queries_md(path: Path) -> tuple[list[str], list[str], int | None, int | None, int | None]:
@@ -852,6 +1190,51 @@ def _parse_queries_md(path: Path) -> tuple[list[str], list[str], int | None, int
     return (keywords, excludes, max_results, year_from, year_to)
 
 
+
+def _pinned_arxiv_ids(*, workspace: Path, keywords: list[str]) -> list[str]:
+    """Return a stable arXiv-id pin list for topics that need canonical anchors.
+
+    Rationale: keyword retrieval can miss “must-cite” classics; downstream writing then becomes
+    either generic or forced to delete those anchors due to missing BibTeX keys.
+    """
+
+    text = "\n".join([str(k or "") for k in (keywords or [])])
+    goal_path = workspace / "GOAL.md"
+    if goal_path.exists():
+        text += "\n" + goal_path.read_text(encoding="utf-8", errors="ignore")
+
+    low = text.lower()
+    llm_agent = ("agent" in low or "agents" in low) and ("llm" in low or "language model" in low or "gpt" in low)
+    has_triggers = any(t in low for t in ["react", "toolformer", "reflexion", "voyager", "tree of thoughts"])
+    if not (llm_agent or has_triggers):
+        return []
+
+    # Canonical LLM-agent classics (also referenced by `dedupe-rank` pinning).
+    classics = [
+        "2210.03629",  # ReAct
+        "2302.04761",  # Toolformer
+        "2303.11366",  # Reflexion
+        "2305.10601",  # Tree of Thoughts
+        "2305.16291",  # Voyager
+    ]
+
+    # A small survey/review seed set for Related Work positioning.
+    surveys = [
+        "2308.11432",  # A Survey on Large Language Model based Autonomous Agents
+        "2503.21460",  # Large Language Model Agent: A Survey on Methodology, Applications and Challenges
+        "2503.23037",  # Agentic Large Language Models, a survey
+        "2411.18279",  # Large Language Model-Brained GUI Agents: A Survey
+    ]
+
+    # Preserve order and de-dupe.
+    out: list[str] = []
+    for aid in classics + surveys:
+        if aid not in out:
+            out.append(aid)
+    return out
+
+
+
 def _parse_year(value: str) -> int | None:
     value = (value or "").strip()
     if not value:
@@ -881,6 +1264,34 @@ def _strip_arxiv_version(arxiv_id: str) -> str:
     arxiv_id = (arxiv_id or "").strip()
     return re.sub(r"v\d+$", "", arxiv_id)
 
+
+
+
+def _cap_keep_pinned_arxiv(records: list[dict[str, Any]], *, max_results: int, pinned_arxiv_ids: list[str]) -> list[dict[str, Any]]:
+    """Cap a sorted record list while keeping pinned arXiv IDs.
+
+    Rationale: we often cap `papers_raw` (e.g., max_results=800) but the pool is sorted by recency;
+    without this, must-cite classics (older) can be truncated out before `dedupe-rank` pinning runs.
+    """
+
+    cap = max(1, int(max_results))
+    pins = [_strip_arxiv_version(str(a).strip()) for a in (pinned_arxiv_ids or []) if str(a).strip()]
+    pin_set = set([p for p in pins if p])
+    if not pin_set:
+        return records[:cap]
+
+    pinned_map: dict[str, dict[str, Any]] = {}
+    rest: list[dict[str, Any]] = []
+    for rec in records:
+        aid = _strip_arxiv_version(str(rec.get("arxiv_id") or "").strip())
+        if aid and aid in pin_set and aid not in pinned_map:
+            pinned_map[aid] = rec
+            continue
+        rest.append(rec)
+
+    pinned_list = [pinned_map[aid] for aid in pins if aid in pinned_map]
+    out = pinned_list + rest
+    return out[:cap]
 
 def _extract_arxiv_id(url_abs: str) -> str:
     url_abs = (url_abs or "").strip()
@@ -933,6 +1344,44 @@ def _canonical_url(url: str) -> str:
 
 
 # --- Online arXiv API retrieval (best-effort) ---
+
+
+
+def _fetch_arxiv_id_list(
+    *,
+    ids: list[str],
+    excludes: list[str],
+    year_from: int | None,
+    year_to: int | None,
+) -> list[dict[str, Any]]:
+    ids = [str(i).strip() for i in (ids or []) if str(i).strip()]
+    if not ids:
+        return []
+
+    def chunked(xs: list[str], n: int) -> list[list[str]]:
+        out: list[list[str]] = []
+        for i in range(0, len(xs), n):
+            out.append(xs[i : i + n])
+        return out
+
+    all_records: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+
+    for chunk in chunked(ids, 24):
+        url = "http://export.arxiv.org/api/query?" + urllib.parse.urlencode({"id_list": ",".join(chunk)})
+        batch, raw_count = _search_arxiv_once(url=url, query=f"id_list:{','.join(chunk)}", excludes=excludes, year_from=year_from, year_to=year_to)
+        if raw_count <= 0:
+            continue
+        for rec in batch:
+            rec_url = str(rec.get("url") or "").strip()
+            if rec_url and rec_url in seen_urls:
+                continue
+            if rec_url:
+                seen_urls.add(rec_url)
+            all_records.append(rec)
+        time.sleep(3.0)
+
+    return all_records
 
 def _search_arxiv_paged(
     *,

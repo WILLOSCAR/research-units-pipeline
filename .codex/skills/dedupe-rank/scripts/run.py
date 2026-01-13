@@ -136,6 +136,28 @@ def main() -> int:
             record["_rank_reason"] = "pinned_classic"
             picked.append(record)
 
+        # Ensure some agent survey/review papers are included (for paper-like Related Work positioning).
+        min_surveys = 0
+        if _looks_like_llm_agent_topic(workspace):
+            min_surveys = min(8, max(4, core_size // 40))
+        surveys_picked = 0
+        if min_surveys:
+            for score, _, _, record in scored:
+                if surveys_picked >= min_surveys or len(picked) >= core_size:
+                    break
+                if not _is_agent_survey_record(record):
+                    continue
+                key = str(record.get("dedup_key") or "")
+                if key and key in picked_keys:
+                    continue
+                picked_keys.add(key)
+                record = dict(record)
+                record["_rank_score"] = score
+                record["_rank_reason"] = "prior_survey"
+                picked.append(record)
+                surveys_picked += 1
+
+
         for score, _, _, record in scored:
             if len(picked) >= core_size:
                 break
@@ -369,13 +391,34 @@ def _pinned_records(workspace: Path, deduped: list[dict[str, Any]]) -> list[dict
 
 
 
+def _is_agent_survey_record(record: dict[str, Any]) -> bool:
+    title = str(record.get("title") or "").strip().lower()
+    if not title:
+        return False
+    if "survey" not in title and "review" not in title:
+        return False
+    if any(tok in title for tok in ("agent", "agents", "agentic", "multi-agent", "multi agent")):
+        return True
+    abstract = str(record.get("abstract") or "").strip().lower()
+    if "agent" not in abstract:
+        return False
+    return ("llm" in abstract) or ("language model" in abstract)
+
+
 def _relevance_score(record: dict[str, Any], *, query_tokens: set[str]) -> int:
     from tooling.common import tokenize
 
     title = str(record.get("title") or "").strip()
     abstract = str(record.get("abstract") or "").strip()
     tokens = set(tokenize(f"{title} {abstract}"))
-    return sum(1 for t in query_tokens if t in tokens)
+
+    base = sum(1 for t in query_tokens if t in tokens)
+    title_low = title.lower()
+    if "survey" in title_low or "review" in title_low:
+        base += 2
+        if any(tok in title_low for tok in ("agent", "agents", "agentic")):
+            base += 1
+    return base
 
 
 if __name__ == "__main__":
