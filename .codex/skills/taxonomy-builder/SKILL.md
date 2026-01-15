@@ -40,7 +40,10 @@ Uses: `papers/papers_dedup.jsonl`, `DECISIONS.md`.
 
 1. Skim the core set and cluster by **reader-relevant axes**, not by surface keywords.
    - For LLM agents, common axes: control loop/architecture, tool use, planning & reasoning, memory/RAG, multi-agent coordination, evaluation/benchmarks, safety/security, applications.
-2. Choose ~4–10 top-level nodes that feel like “chapters in a survey”.
+2. Choose top-level nodes that feel like “chapters in a survey”, and keep a **paper-like section budget**:
+   - If you want a paper-like PDF with ~6–8 H2 sections total (see `ref/agent-surveys/STYLE_REPORT.md`), remember the pipeline also adds fixed H2 sections (Introduction / Related Work / Discussion / Conclusion).
+   - In that case, aim for **~3–4 taxonomy-driven chapters** (top-level nodes), not 8–12 tiny buckets.
+   - Deep surveys can go wider (e.g., 5–6 taxonomy chapters), but expect thinner writing unless you also expand evidence and writing budgets.
 3. For each top-level node, create 2–6 subtopics with **clear inclusion cues** (what belongs here, what doesn’t).
 4. Write a short description for every node:
    - define what the bucket covers
@@ -54,12 +57,14 @@ Uses: `papers/papers_dedup.jsonl`, `DECISIONS.md`.
 - [ ] `outline/taxonomy.yml` has ≥2 levels.
 - [ ] Every node has a `description` with concrete meaning (not “Papers and ideas centered on …” boilerplate).
 - [ ] Leaf nodes look mappable (not overly broad like “Misc/Other”).
+- [ ] Top-level nodes feel like chapters (avoid too many tiny buckets if you target a paper-like 6–8 H2 structure).
 
 ## Common failure modes (and fixes)
 
 - **Generic buckets** (“Overview/Benchmarks/Open Problems”) → rename to content-based subtopics.
 - **Keyword clustering** → reframe as design/evaluation questions a reader would ask.
 - **Too much overlap** → tighten inclusion cues; split a bucket by mechanism vs evaluation vs safety.
+- **Too many top-level buckets** → merge into fewer, thicker chapters; push fine-grained points into subsection bullets/axes instead of new H2 sections.
 
 ## Helper script (optional)
 

@@ -133,6 +133,35 @@ For each H3 file `sections/S<sub_id>.md`:
   - >=1 cross-paper synthesis paragraph with >=2 citations in the same paragraph
   - if evidence packs contain quantitative snippets: >=1 **cited numeric anchor** (digit + citation in same paragraph)
 
+#### Citation embedding (avoid “label-style” citations)
+
+Goal: make citations function like evidence, not tags.
+
+WRONG (end-of-sentence dump):
+`... improves robustness. [@A; @B; @C]`
+
+BETTER (name the systems; embed cites where the claim is made):
+`Systems such as X [@A] and Y [@B] report ...; in contrast, Z [@C] ...`
+
+Rules of thumb:
+- Put the citation **inside the sentence** that contains the factual claim.
+- Mention at least one concrete noun per cite (system/method/benchmark), not just abstract “work”.
+- When using multiple cites, prefer `X [@a], Y [@b], and Z [@c]` over a trailing bracket list.
+
+#### Transitions (avoid paragraph islands)
+
+Each H3 should contain at least one explicit transition of each type:
+- Contrast: `However`, `In contrast`, `Whereas`, `Unlike`, `Despite`
+- Causal: `Therefore`, `Thus`, `As a result`
+- Additive: `Moreover`, `Furthermore`, `Building on this`
+- Synthesis: `Collectively`, `Taken together`, `In summary`
+
+If you notice “Para 1/2/3 read as isolated mini-essays”, rewrite the first sentence of each paragraph as a bridge from the previous one.
+
+#### Paragraph drafting micro-skill
+
+If prose is still flat, use `grad-paragraph` as the default building block (tension → contrast → evaluation anchor → limitation), repeated across the paragraph plan.
+
 ### 4) Skeptic pass (delete generic sentences)
 
 Delete or rewrite any sentence that is:

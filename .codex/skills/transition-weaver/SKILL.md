@@ -18,6 +18,10 @@ Transitions should answer:
 - what gap/tension remains
 - why the next subsection follows
 
+Style targets (paper-like, still NO NEW FACTS):
+- Prefer explicit connectors: `Building on this, ...`, `However, ...`, `In contrast, ...`, `As a result, ...`
+- Avoid “Now we discuss / Next we introduce / In this section we ...” template framing.
+
 ## Inputs
 
 - `outline/outline.yml` (ordering + titles)

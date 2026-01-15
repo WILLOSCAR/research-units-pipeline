@@ -28,6 +28,24 @@ This skill is the bridge from “Evidence Bank” → “Writer”: the writer s
 - `outline/evidence_bindings.jsonl` (1 JSONL record per subsection)
 - `outline/evidence_binding_report.md` (summary; bullets + small tables)
 
+## Output format (`outline/evidence_bindings.jsonl`)
+
+JSONL (one object per H3 subsection). Best-effort fields (keep deterministic):
+
+- `sub_id`, `title`
+- `paper_ids` (papers in-scope for this subsection, from `mapping.tsv`)
+- `mapped_bibkeys` (bibkeys mapped to this subsection)
+- `bibkeys` (a selected subset to encourage subsection-first citations)
+- `evidence_ids` (selected evidence items from `papers/evidence_bank.jsonl`)
+- `evidence_counts` (small summary by claim_type / evidence_level)
+
+## Binding policy (how strict to be)
+
+- Subsection-first by default: the writer should primarily cite `bibkeys` and use `evidence_ids` bound to this `sub_id`.
+- Allow limited within-chapter reuse: citations from sibling H3s within the same H2 chapter may be reused for background/evaluation framing, but:
+  - keep >=2 subsection-specific citations per H3 (avoid “free cite drift”)
+  - avoid cross-chapter reuse unless the outline explicitly calls for it
+
 ## Workflow (NO PROSE)
 
 1. Read `outline/subsection_briefs.jsonl` to understand each H3’s scope/rq/axes.

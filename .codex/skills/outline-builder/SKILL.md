@@ -63,6 +63,7 @@ Optional style calibration (recommended for paper-like structure):
 - **Template bullets everywhere** → replace with domain terms + evaluation axes specific to that subsection.
 - **Bullets too vague** (“Discuss limitations”) → name *which* limitations and *how to test* them.
 - **Outline too flat/too deep** → aim for sections a reader can navigate (usually 6–10 sections, 2–5 subsections each).
+- **Too many H3 subsections** → merge adjacent H3s and write fewer, thicker subsections (survey target: <=8–12 H3 total).
 
 ## Helper script (optional)
 

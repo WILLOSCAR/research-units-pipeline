@@ -51,6 +51,15 @@ Required fields:
 - [ ] At least 1 anchor contains digits when the evidence pack contains digits.
 - [ ] No placeholders (`TODO`/`…`/`(placeholder)`).
 
+## Consumption policy (for C5 writers)
+
+Anchors are intended to prevent “long but empty” prose. Treat them as **must-use hooks**, not optional ideas.
+
+Recommended minimums per H3 (adjust for `queries.md:draft_profile`):
+- >=1 evaluation anchor (benchmark/dataset/metric/protocol)
+- >=1 limitation/failure hook (concrete, not generic “future work”)
+- If digits exist in the evidence pack: include >=1 cited numeric anchor (digit + citation in the same paragraph)
+
 ## Script
 
 ### Quick Start

@@ -42,6 +42,16 @@ Required keys:
 - `anchor_facts` (trimmed)
 - `comparison_cards` (trimmed)
 
+## Writer contract (how C5 should use this pack)
+
+Treat each pack as an executable checklist, not optional context:
+
+- **Plan compliance**: follow `paragraph_plan` (don’t skip planned paragraphs; merge only if you keep the same contrasts/anchors).
+- **Anchors are must-use**: include at least one `anchor_facts` item that matches your paragraph’s claim type (eval / numeric / limitation), when present.
+- **Comparisons are must-use**: reuse `comparison_cards` to write explicit A-vs-B contrast sentences (avoid “A then B” separate summaries).
+- **Micro-structure**: if prose starts drifting into flat summaries, apply `grad-paragraph` repeatedly (tension → contrast → evaluation anchor → limitation).
+- **Citation scope**: prefer `allowed_bibkeys_selected`; use `allowed_bibkeys_chapter` only for intra-chapter background, and keep >=2 subsection-specific citations per H3.
+
 ## Script
 
 ### Quick Start

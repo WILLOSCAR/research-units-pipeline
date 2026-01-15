@@ -43,6 +43,16 @@ def _generic_axis(x: str) -> bool:
     return x in generic
 
 
+def _median_int(values: list[int]) -> float:
+    if not values:
+        return 0.0
+    xs = sorted(values)
+    mid = len(xs) // 2
+    if len(xs) % 2 == 1:
+        return float(xs[mid])
+    return (xs[mid - 1] + xs[mid]) / 2.0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('--workspace', required=True)
@@ -107,10 +117,14 @@ def main() -> int:
 
     outline = load_yaml(workspace / outline_rel) if (workspace / outline_rel).exists() else []
     subsections: list[dict[str, str]] = []
+    sections: list[dict[str, Any]] = []
     if isinstance(outline, list):
         for sec in outline:
             if not isinstance(sec, dict):
                 continue
+            sec_id = str(sec.get('id') or '').strip()
+            sec_title = str(sec.get('title') or '').strip()
+            sub_recs = []
             for sub in sec.get('subsections') or []:
                 if not isinstance(sub, dict):
                     continue
@@ -118,6 +132,9 @@ def main() -> int:
                 title = str(sub.get('title') or '').strip()
                 if sid and title:
                     subsections.append({'sub_id': sid, 'title': title})
+                    sub_recs.append({'sub_id': sid, 'title': title})
+            if sec_id and sec_title:
+                sections.append({'section_id': sec_id, 'title': sec_title, 'subsections': sub_recs})
 
     mapping_rows = read_tsv(workspace / mapping_rel) if (workspace / mapping_rel).exists() else []
     pids_by_sub: dict[str, list[str]] = {}
@@ -190,11 +207,22 @@ def main() -> int:
         )
 
     # Render report (bullets + a small table).
+    h2_total = len(sections)
+    h2_with_h3 = sum(1 for s in sections if (s.get('subsections') or []))
+    h3_total = len(subsections)
+    h3_counts = [len(s.get('subsections') or []) for s in sections if (s.get('subsections') or [])]
+    h3_min = min(h3_counts) if h3_counts else 0
+    h3_med = _median_int(h3_counts) if h3_counts else 0.0
+    h3_max = max(h3_counts) if h3_counts else 0
+
     lines: list[str] = [
         '# Coverage report (planner pass)',
         '',
         '- Guardrail: NO PROSE; this is a diagnostic artifact, not survey writing.',
-        f"- Subsections (H3): {len(subsections)}",
+        f"- Sections (H2): {h2_total}",
+        f"- Chapters with subsections (H2 with H3): {h2_with_h3}",
+        f"- Subsections (H3): {h3_total}",
+        f"- H3 per H2 chapter (min/median/max): {h3_min}/{h3_med:.1f}/{h3_max}",
         f"- Mapping rows: {len(mapping_rows)}",
         f"- Unique mapped papers: {len(usage)}",
     ]
@@ -221,8 +249,30 @@ def main() -> int:
             f"| {sub['sub_id']} {sub['title']} | {r.get('mapped_papers', 0)} | {ev_txt} | {axes_txt} | {r.get('reuse_max', 0)} |"
         )
 
+    lines.extend(['', '## Per-chapter sizing (H2)', ''])
+    lines.append('| Chapter | #H3 |')
+    lines.append('|---|---:|')
+    for s in sections:
+        sub_n = len(s.get('subsections') or [])
+        lines.append(f"| {s.get('section_id')} {s.get('title')} | {sub_n} |")
+
     # Flags (bullets only).
     issues: list[str] = []
+    if h2_total > 10:
+        issues.append(
+            f"Outline has many top-level sections (H2={h2_total}); paper-like surveys often stay around 6–8 H2 sections (see `ref/agent-surveys/STYLE_REPORT.md`)."
+        )
+    if h3_total > 12:
+        issues.append(
+            f"Outline has many subsections (H3={h3_total}); consider merging adjacent H3s to write fewer, thicker subsections (survey target: <=12)."
+        )
+
+    if h3_counts:
+        too_many = [s for s in sections if len(s.get('subsections') or []) >= 5]
+        if too_many:
+            sample = ', '.join([str(s.get('section_id') or '') for s in too_many[:6]])
+            issues.append(f"Some chapters have many H3 subsections (>=5): {sample} (risk: thin writing per subsection).")
+
     low_axes = [r for r in rows if int(r.get('axes_total') or 0) and int(r.get('axes_specific') or 0) < 2]
     if low_axes:
         sample = ', '.join([f"{r['sub_id']}" for r in low_axes[:6]])
@@ -253,6 +303,10 @@ def main() -> int:
         'generated_at': now_iso_seconds(),
         'outline_sha1': _sha1_text(_read_text(workspace / outline_rel)),
         'mapping_sha1': _sha1_text(_read_text(workspace / mapping_rel)),
+        'h2_sections': h2_total,
+        'h2_with_h3': h2_with_h3,
+        'h3_subsections': h3_total,
+        'h3_per_h2': {'min': h3_min, 'median': h3_med, 'max': h3_max},
         'subsections': len(subsections),
         'mapping_rows': len(mapping_rows),
         'unique_papers': len(usage),

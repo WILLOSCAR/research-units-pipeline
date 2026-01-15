@@ -15,6 +15,7 @@ Goal: make the outline *auditable* by adding an explicit planner stage that answ
 - Do we have enough mapped evidence per H3?
 - Are the same few papers reused everywhere?
 - Are subsection axes still generic/scaffold-y?
+- Is the outline likely to produce a paper-like structure (section budget: 6–8 H2; fewer, thicker H3s)?
 
 This is a deterministic “planner” unit: it must not write survey prose.
 
@@ -36,7 +37,7 @@ Optional (best-effort diagnosis; may be missing early in the pipeline):
 
 ## Workflow (planner pass, NO PROSE)
 
-1. Parse `outline/outline.yml` to enumerate all H3 subsections.
+1. Parse `outline/outline.yml` to enumerate H2 sections + H3 subsections (section sizing / budget).
 2. Read `outline/mapping.tsv` and compute per-H3 coverage and reuse hotspots.
 3. If `papers/paper_notes.jsonl` exists, summarize evidence levels (fulltext/abstract/title) for mapped papers.
 4. If `outline/subsection_briefs.jsonl` exists, compute axis specificity (generic vs specific axes) per H3.
