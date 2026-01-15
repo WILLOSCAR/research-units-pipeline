@@ -1261,4 +1261,718 @@ language allows more expressive tool composition.
 
 ---
 
+# 第四部分：Workspace 实例锐评
+
+---
+
+## 24) `e2e-agent-survey-skillcontracts-20260114-2332` 锐评
+
+> 本节对 `workspaces/e2e-agent-survey-skillcontracts-20260114-2332` 进行深度分析，对比 citeboost workspace 的产出质量，识别改进效果与残留问题。
+
+### 24.1 基本信息
+
+| 维度 | 数据 |
+|------|------|
+| Pipeline | `arxiv-survey-latex` |
+| 最终状态 | **BLOCKED at U100** (subsection-writer script failed) |
+| 论文收集 | 800 papers raw, 220 paper notes, 2202 BibTeX lines |
+| 大纲结构 | 6 H2 sections, 8 H3 subsections |
+| 已完成章节 | S1.md, S3_1.md, S3_2.md, S4_1.md, abstract.md, discussion.md, conclusion.md |
+| 缺失章节 | S4_2.md, S5_1.md, S5_2.md, S6_1.md, S6_2.md |
+
+### 24.2 写作质量分析（对比 citeboost）
+
+#### 显著进步（契约补强生效）
+
+**1. 引用嵌入方式彻底改进**
+
+citeboost 写法（问题写法）:
+```markdown
+These representations are not cosmetic: they constrain what the agent can
+plan over, what can be validated, and what can be logged for debugging.
+[@Yao2022React; @Kim2025Bridging]
+```
+
+skillcontracts 写法（正确写法）:
+```markdown
+ReAct [@Yao2022React] illustrates the free-form end of the spectrum, where
+reasoning traces and actions are intertwined in text; by contrast, the
+Structured Cognitive Loop explicitly separates phases to make control
+decisions auditable [@Kim2025Bridging].
+```
+
+**分析**: 引用不再是句末堆砌的"标签"，而是与具体系统名绑定的"论据"。读者能清楚知道哪个观点来自哪篇论文。
+
+**2. 对比句式显著增加**
+
+S3_1.md 实例:
+```markdown
+In contrast, structured loops and schema-backed actions constrain the
+agent's output space so that states and transitions are easier to
+attribute to components [@Kim2025Bridging].
+```
+
+S4_1.md 实例:
+```markdown
+In contrast to free-form chain-of-thought, these approaches treat planning
+as a structured policy over states and transitions.
+```
+
+**分析**: "In contrast to..."、"by contrast"、"whereas" 等对比连接词频繁出现，段落不再是"A 一段 B 一段"的平铺罗列。
+
+**3. 评测锚点有具体数字**
+
+S3_1.md:
+```markdown
+AgentSwift reports an average gain of 8.34% across seven benchmarks
+spanning embodied, math, web, tool, and game domains [@Li2025Agentswift].
+```
+
+```markdown
+...collecting 1,170 trajectories for fine-tuning and achieving stronger
+performance than baselines trained with 119k samples...
+```
+
+S4_1.md:
+```markdown
+...a 1.5B parameter model trained with single-turn GRPO is reported to
+outperform larger baselines up to 14B parameters [@Hu2025Training].
+```
+
+```markdown
+...a self-guided reasoning baseline completes only 13.5%, 16.5%, and 75.7%
+of subtasks while requiring 86.2%, 118.7%, and 205.9% more model queries...
+```
+
+**分析**: 数字锚点不再是可有可无的装饰，而是支撑论点的核心证据。`anchor-sheet` 的契约补强明显生效。
+
+**4. 跨论文综合段落**
+
+S3_1.md 结尾:
+```markdown
+Taken together, we can view current work as spanning two clusters:
+(i) **architectural loop design** that makes actions structured and
+optimizable (e.g., Structured Cognitive Loop, AgentSwift, EvoRoute)
+[@Kim2025Bridging; @Li2025Agentswift; @Zhang2026Evoroute], and
+(ii) **environment- and domain-grounded action spaces** that tie actions
+to external systems and their constraints...
+```
+
+**分析**: 不再是逐篇描述，而是提炼共性/差异，形成 cross-paper synthesis。
+
+**5. 局限写法具体化**
+
+S3_1.md:
+```markdown
+First, many comparisons are only weakly controlled: performance changes
+can reflect differences in environment difficulty, tool availability, or
+logging fidelity rather than the action representation itself...
+```
+
+```markdown
+Second, action validity is still a major bottleneck in real-world
+interfaces; even when feasibility is demonstrated, lack of unified APIs
+and ambiguity in requests can make actions unreliable...
+```
+
+**分析**: 局限不再是泛泛的"未来工作"，而是指出具体的失败模式和边界条件。
+
+### 24.3 残留问题
+
+#### 问题 1: Pipeline 在 U100 崩溃
+
+**现象**: STATUS.md 显示 `U100 (subsection-writer): script failed`
+
+**时间线分析**:
+- 00:01:02 - U030 (paper-notes) 完成
+- 00:01:59 - U100 (subsection-writer) 失败
+- 但 S3_1.md 等文件在 00:09-00:14 被创建
+
+**推测**: 可能是手动重试或 selfloop 修复后产出了高质量章节，但 pipeline 状态没有更新。
+
+**改进建议**:
+- U100 的 script 需要更好的错误处理和恢复机制
+- 应该记录具体的失败原因（而非泛泛的"script failed"）
+
+#### 问题 2: 5/8 章节缺失
+
+**缺失文件**: S4_2.md, S5_1.md, S5_2.md, S6_1.md, S6_2.md
+
+**影响**: 只有 37.5% 的 H3 章节被写完，导致最终 draft 无法合并。
+
+**可能原因**:
+1. Pipeline 崩溃后没有继续
+2. writer_context_packs 为这些章节的 completeness 不足
+3. quality gate 在某些检查上 block 了后续章节
+
+**改进建议**:
+- 增加 "partial progress" 保存机制，避免一个章节失败导致全部丢失
+- 为每个 H3 生成独立的 completeness report，提前识别"不可写"的章节
+
+#### 问题 3: 部分段落仍偏"百科式"
+
+S4_1.md 部分写法:
+```markdown
+Memory and retrieval can change what planning loops need to do. MemR$^3$
+frames memory retrieval as an agent system with a router that selects
+among retrieve, reflect, and answer actions...
+```
+
+**问题**: 虽然引用嵌入正确，但这段更像"功能描述"而非"论证分析"。缺少：
+- 与前文的张力连接（为什么提 memory？解决什么问题？）
+- 评价性语句（这个设计的优劣是什么？）
+
+**对比参考论文写法**:
+```
+To address the limitation that planning cannot access historical context,
+MemR³ introduces a router-based memory system. However, this design
+introduces new trade-offs: the router itself becomes a potential failure
+point, and memory access patterns can leak information about the agent's
+reasoning strategy...
+```
+
+**改进建议**:
+- `subsection-writer` 的 paragraph_plan 需要更明确的"intent 类型"标注
+- 每段需要 self-check: "这段的论证目的是什么？是描述还是分析？"
+
+#### 问题 4: 段落之间缺乏逻辑连接（核心问题）
+
+**现象分析**：虽然单个段落质量不错，但段落之间的逻辑关系很弱。
+
+**S3_1.md 段落结构**：
+```
+Para 1: 定义 action（引入）
+Para 2: Axis 1 - granularity and structure
+Para 3: Axis 2 - loop as optimization object  ← 为什么从 Axis 1 跳到这里？
+Para 4: Axis 3 - environment affordances     ← 和 Axis 2 什么关系？
+Para 5: Domain-specific settings             ← 突然换话题
+Para 6: Evaluation                           ← 又换话题
+Para 7: Training signals                     ← 再换话题
+Para 8: Clusters synthesis                   ← 强行总结
+Para 9: Limitations
+Para 10: Transition to next section
+```
+
+**问题**：
+- 每段都在介绍一个"新轴"或"新话题"，但缺乏**为什么这个轴跟在上一个轴后面**的解释
+- 段落之间的连接词很少（缺少 "This naturally leads to..."、"However, this raises..."、"Building on this insight..."）
+- 读起来像"论文清单"而非"论证链"
+
+**对比参考论文写法**：
+```markdown
+[Para 1] Action granularity determines what can be verified...
+
+[Para 2] However, granularity alone does not determine quality—the loop
+itself can be treated as an optimization target. AgentSwift shows that
+searching over loop configurations yields 8.34% gains, suggesting that
+the meta-level design choice matters as much as the action representation.
+
+[Para 3] This optimization perspective naturally raises a question: what
+happens when the environment itself provides structure? ToolGym and
+EnvScaler show that "better loops" can sometimes reflect "better environments"...
+```
+
+**当前写法**：
+```markdown
+[Para 1] One common axis is **granularity and structure**...
+
+[Para 2] A second axis is whether the loop is treated as an **object of
+optimization**...  ← 没有解释为什么引入这个"第二轴"
+
+[Para 3] Optimization choices interact with the **environment's action
+affordances**...  ← "interact" 太弱，没有说清楚什么交互
+```
+
+**根本原因**：
+- `paragraph_plan` 只规定了每段的 topic，没有规定段落之间的 **logical connector**
+- writer 按 topic 列表逐段写，没有思考"这段为什么要跟在上段后面"
+- 缺少 **running example**（好的 survey 会用一个具体例子串联全节）
+
+#### 问题 5: "Clusters synthesis" 模板化
+
+**S3_1.md 结尾**：
+```markdown
+Taken together, we can view current work as spanning two clusters:
+(i) **architectural loop design**... and
+(ii) **environment- and domain-grounded action spaces**...
+```
+
+**S3_2.md 结尾**：
+```markdown
+Taken together, we can contrast two orchestration philosophies.
+One treats orchestration primarily as **efficient tool retrieval**...
+The other treats orchestration as a **safety- and attack-surface problem**...
+```
+
+**S4_1.md 结尾**：
+```markdown
+Taken together, current planning loops can be grouped into three clusters.
+RL-trained planners...
+Hybrid symbolic-control approaches...
+Domain-structured planners...
+```
+
+**问题**：
+- 每节结尾都是 "Taken together, we can view/contrast/group... into N clusters"
+- 这是好的 synthesis 模式，但**每节都用**就变成了模板
+- 更严重的是：clusters 划分感觉是**事后强加**的，而非从论证中自然涌现
+
+**改进建议**：
+- Clusters 应该在节的**开头**作为组织框架预告，而非结尾强行总结
+- 或者：不同的节使用不同的 synthesis 方式（有些用 clusters，有些用 timeline，有些用 trade-off matrix）
+
+#### 问题 6: 章节末尾的保守声明过于模板化
+
+S3_1.md 结尾:
+```markdown
+...security-oriented action spaces make explicit that autonomy must be
+balanced with governance, because the same "expressive" actions that
+enable penetration testing can also enable misuse [@Abdulzada2025Vulnerability].
+```
+
+S4_1.md 结尾:
+```markdown
+Despite progress, evidence remains heterogeneous and often abstract-level,
+so broad claims about general planning superiority should be treated as
+provisional.
+```
+
+**问题**: 每节都有类似的"证据还不够充分，claims 需要谨慎"的声明，形成模板感。
+
+**改进建议**:
+- 保守性声明应该针对该节的具体 claims，而非泛泛的"evidence is heterogeneous"
+- 可以用具体例子说明哪些 claims 有强证据、哪些是 provisional
+
+#### 问题 7: 缺少节内的"论证主线"
+
+**参考论文的写法**（有论证主线）：
+```
+本节论证：action representation 决定了 agent 的 verifiability ceiling
+
+Para 1: 引入问题 - 为什么 action rep 重要
+Para 2: 证据 1 - free-form 的问题（ReAct 的 debugging 困难）
+Para 3: 证据 2 - structured 的优势（SCL 的 attribution）
+Para 4: 反驳/复杂化 - 但 structured 也有代价（flexibility loss）
+Para 5: 综合 - 因此选择取决于 verifiability vs flexibility 的权衡
+```
+
+**当前写法**（无论证主线，只有话题列表）：
+```
+本节介绍：action space design 的各种 axes
+
+Para 1: 引入 - action space 很重要
+Para 2: Axis 1 - granularity
+Para 3: Axis 2 - optimization
+Para 4: Axis 3 - environment
+Para 5: Domain examples（列举）
+Para 6: Evaluation（列举）
+Para 7: Training（列举）
+Para 8: Clusters（强行总结）
+```
+
+**问题**：
+- 没有一个贯穿全节的**thesis**（核心论点）
+- 每段都在"介绍一个方面"，而非"推进一个论证"
+- 缺少 **tension → resolution** 的叙事弧
+
+#### 问题 8: 句子层面的逻辑连接词不足
+
+**统计**：
+
+| 连接词类型 | S3_1.md 出现次数 | 参考论文（同长度）预期 |
+|-----------|------------------|----------------------|
+| However / But | 1 | 5-8 |
+| Therefore / Thus / Hence | 1 | 4-6 |
+| In contrast / Unlike | 3 | 3-5 ✓ |
+| Building on / Following | 0 | 2-4 |
+| This raises / This suggests | 1 | 3-5 |
+
+**问题**：
+- "In contrast" 用得还可以，但 **因果连接词** (Therefore, Thus) 严重不足
+- **承上启下连接词** (Building on, Following, This raises) 几乎没有
+- 导致段落像"孤岛"而非"链条"
+
+### 24.4 是否需要润色遍（Polishing Pass）？
+
+**答案：需要，但需要结构化的润色，而非自由润色**
+
+#### 当前问题：writer 写完即结束
+
+现有流程：
+```
+subsection-writer → sections/*.md → section-merger → DRAFT.md → global-reviewer
+```
+
+问题：
+- `global-reviewer` 只检查 terminology consistency 和 citation hygiene
+- **不检查逻辑连贯性**
+- 写完的章节直接进入 merge，没有"论证润色"步骤
+
+#### 建议增加：Logic Polishing Pass
+
+**新增 skill**: `section-logic-polisher`
+
+**输入**: 单个 `sections/S*.md` + 该节的 `subsection_briefs`
+
+**检查清单**:
+1. **Thesis check**: 该节是否有一个可识别的 central argument？
+2. **Flow check**: 每两段之间是否有 logical connector？
+3. **Evidence-to-claim ratio**: 每个 claim 是否有 ≥1 evidence sentence？
+4. **Tension-resolution**: 是否存在 "problem → solution" 或 "limitation → workaround" 结构？
+
+**输出**: 带标注的 `sections/S*.md.polished` 或 `sections/S*.logic_issues.json`
+
+**执行时机**: 在 `section-merger` 之前，对每个完成的章节运行
+
+#### Polishing 应该做什么
+
+| 阶段 | 当前 | 建议 |
+|------|------|------|
+| 写作后立即 | 无检查 | **Logic scan**: 检测孤立段落、缺少连接词 |
+| Merge 前 | 无检查 | **Coherence pass**: 确保节内有 thesis 和 flow |
+| Global review | 只检查术语 | **增加**: Cross-section flow 检查 |
+
+#### Polishing 不应该做什么
+
+- ❌ 大幅重写段落内容（应在 writer 阶段解决）
+- ❌ 添加新的引用或证据（应在 evidence-draft 阶段解决）
+- ❌ 改变节的 scope 或 clusters 划分（应在 outline 阶段解决）
+
+**核心原则**: Polishing 只做**连接**（加 connectors、调整段落顺序、补 thesis statement），不做**内容**。
+
+### 24.5 问题→Skills/Pipeline 改进映射
+
+> 以下将上述 badcase 抽象为可落地的 skill 合同改进。
+
+#### 映射 1: 段落逻辑连接缺失 → `subsection-briefs` + `subsection-writer` 改进
+
+| Badcase | 根因分析 | Skill 改进 |
+|---------|----------|-----------|
+| 段落之间缺少 "However/Therefore/Building on this" | `paragraph_plan` 只规定 topic，不规定 **inter-paragraph connector** | `subsection-briefs`: 每个 para 增加 `connector_to_prev` 字段（如 "contrast", "consequence", "extension"） |
+| 读起来像"论文清单"而非"论证链" | writer 按列表逐段写，无全局 thesis 意识 | `subsection-writer`: 开头必须写 **thesis statement**（明确该节要论证什么） |
+
+**`subsection-briefs/SKILL.md` 具体修改**:
+```yaml
+# paragraph_plan 新增字段
+- para: 3
+  intent: "Compare optimization-centric vs environment-centric views"
+  connector_to_prev: "consequence"  # 新增：说明这段为什么跟在上段后面
+  connector_phrase: "This optimization perspective naturally raises..."  # 新增：建议连接句
+```
+
+**`subsection-writer/SKILL.md` 具体修改**:
+```markdown
+### Thesis Statement Requirement (新增)
+每节的**第一段最后一句**必须是 thesis statement，格式：
+"This subsection argues/shows/surveys that [central claim]."
+
+示例：
+- "This subsection argues that action representation determines the ceiling of verifiability."
+- "This subsection surveys how tool orchestration creates both efficiency gains and security risks."
+
+Quality gate 检查：第一段是否包含 "argues/shows/surveys that" 句式。
+```
+
+#### 映射 2: Clusters 模板化 → `outline-builder` + `chapter-briefs` 改进
+
+| Badcase | 根因分析 | Skill 改进 |
+|---------|----------|-----------|
+| 每节结尾都是 "Taken together... N clusters" | `chapter-briefs` 没有规定 synthesis 方式的**多样性** | `chapter-briefs`: 为每个 H2 指定 synthesis_mode（clusters / timeline / trade-off matrix / case-study） |
+| Clusters 是事后强加而非自然涌现 | Clusters 在写作阶段才出现，outline 阶段没有预告 | `outline-builder`: H3 级别就预告 "这节属于哪个 cluster"，写作时只需呼应 |
+
+**`chapter-briefs/SKILL.md` 具体修改**:
+```yaml
+# 每个 H2 的 brief 新增字段
+chapter_id: "3"
+synthesis_mode: "clusters"  # 可选: clusters, timeline, trade-off_matrix, case_study, tension_resolution
+synthesis_preview: "Will contrast 'architectural loop design' vs 'domain-grounded action spaces'"
+```
+
+**`outline-builder/SKILL.md` 具体修改**:
+```yaml
+# outline.yml 新增 cluster_tag 字段
+sections:
+  - id: "3.1"
+    title: "Agent loop and action spaces"
+    cluster_tag: "architectural"  # 预告这节属于哪个 cluster
+  - id: "3.2"
+    title: "Tool interfaces and orchestration"
+    cluster_tag: "interface"
+```
+
+#### 映射 3: 节内论证主线缺失 → `subsection-briefs` 改进
+
+| Badcase | 根因分析 | Skill 改进 |
+|---------|----------|-----------|
+| 没有贯穿全节的 thesis | `subsection_briefs` 只有 topic 和 axes，没有 **central_argument** | `subsection-briefs`: 新增 `thesis` 字段，明确该节要论证什么 |
+| 段落是"介绍"而非"论证" | `paragraph_plan.intent` 太宽泛（如 "Compare approaches"） | `subsection-briefs`: `intent` 改为 argument_role（introduce_tension / provide_evidence / counter_argument / synthesize） |
+
+**`subsection-briefs/SKILL.md` 具体修改**:
+```yaml
+# subsection_briefs.jsonl 新增字段
+{
+  "sub_id": "3.1",
+  "title": "Agent loop and action spaces",
+  "thesis": "Action representation determines verifiability ceiling; structured > free-form for debugging but sacrifices flexibility",  # 新增
+  "paragraph_plan": [
+    {
+      "para": 1,
+      "argument_role": "introduce_tension",  # 新增：替代原来的 intent
+      "content_focus": "Why action representation matters for verifiability"
+    },
+    {
+      "para": 2,
+      "argument_role": "provide_evidence",
+      "content_focus": "Free-form (ReAct) creates debugging difficulty"
+    },
+    {
+      "para": 3,
+      "argument_role": "provide_evidence",
+      "content_focus": "Structured (SCL) enables attribution"
+    },
+    {
+      "para": 4,
+      "argument_role": "counter_argument",
+      "content_focus": "But structured loses flexibility"
+    },
+    {
+      "para": 5,
+      "argument_role": "synthesize",
+      "content_focus": "Therefore choice depends on verifiability vs flexibility trade-off"
+    }
+  ]
+}
+```
+
+#### 映射 4: 逻辑连接词不足 → `subsection-writer` + `quality_gate` 改进
+
+| Badcase | 根因分析 | Skill 改进 |
+|---------|----------|-----------|
+| However/Therefore 太少 | writer 没有被要求使用这些词 | `subsection-writer`: 增加 **connector density** 最低要求 |
+| 因果关系隐含而非显式 | 没有检查机制 | `quality_gate`: 新增 `sections_connector_density` 检查 |
+
+**`subsection-writer/SKILL.md` 具体修改**:
+```markdown
+### Logical Connector Requirements (新增)
+
+每节必须包含以下连接词的**最低数量**：
+
+| 连接词类型 | 最低要求 | 示例 |
+|-----------|---------|------|
+| 因果 | ≥3 | Therefore, Thus, Hence, As a result, Consequently |
+| 转折 | ≥2 | However, But, Yet, Nevertheless, In contrast |
+| 递进 | ≥2 | Building on this, Following, Moreover, Furthermore |
+| 提问 | ≥1 | This raises the question, This suggests that |
+
+Self-check: 写完后统计连接词数量，不足则补充。
+```
+
+**`quality_gate.py` 新增检查**:
+```python
+def sections_connector_density(ws: Path) -> list[QualityIssue]:
+    """检查逻辑连接词密度"""
+    issues = []
+
+    CAUSAL = r"\b(therefore|thus|hence|as a result|consequently)\b"
+    CONTRAST = r"\b(however|but|yet|nevertheless|in contrast|unlike)\b"
+    EXTENSION = r"\b(building on|following|moreover|furthermore)\b"
+
+    for section_file in (ws / "sections").glob("S*.md"):
+        text = section_file.read_text().lower()
+
+        causal_count = len(re.findall(CAUSAL, text))
+        contrast_count = len(re.findall(CONTRAST, text))
+        extension_count = len(re.findall(EXTENSION, text))
+
+        if causal_count < 3:
+            issues.append(QualityIssue(
+                f"{section_file.name}: causal connectors={causal_count}, need ≥3",
+                severity="warning"
+            ))
+        if contrast_count < 2:
+            issues.append(QualityIssue(
+                f"{section_file.name}: contrast connectors={contrast_count}, need ≥2",
+                severity="warning"
+            ))
+
+    return issues
+```
+
+#### 映射 5: 润色缺失 → Pipeline 新增 `section-logic-polisher` skill
+
+| Badcase | 根因分析 | Skill 改进 |
+|---------|----------|-----------|
+| 写完即 merge，无逻辑检查 | Pipeline 中没有润色步骤 | 新增 `section-logic-polisher` skill，在 `section-merger` 之前运行 |
+| global-reviewer 只检查术语 | Reviewer 的 scope 太窄 | `global-reviewer`: 增加 cross-section flow 检查 |
+
+**新增 skill: `section-logic-polisher`**
+
+```markdown
+# .codex/skills/section-logic-polisher/SKILL.md
+
+## Purpose
+对已写完的 section 进行逻辑润色（不改内容，只加连接）。
+
+## Input
+- `sections/S*.md`: 待润色的章节
+- `outline/subsection_briefs.jsonl`: 该节的 paragraph_plan
+
+## Output
+- `sections/S*.md`: 润色后的章节（原地更新）
+- `sections/.polish_log/S*.polish.json`: 润色记录
+
+## Workflow
+1. **Thesis check**: 第一段最后一句是否是 thesis statement？
+   - 如果不是，插入 "This subsection argues/shows that [thesis from briefs]."
+2. **Flow check**: 每两段之间是否有 logical connector？
+   - 如果缺少，在段首插入 connector phrase（参考 briefs 的 connector_to_prev）
+3. **Connector density**: 统计连接词数量
+   - 如果不足，在合适位置补充（优先在 claim 句之后）
+
+## Constraints
+- ❌ 不改变段落内容（只加连接句）
+- ❌ 不添加新引用
+- ❌ 不改变 clusters/scope
+- ✅ 可以调整段落顺序（如果 flow 需要）
+- ✅ 可以补充 thesis statement
+- ✅ 可以插入 connector phrase
+```
+
+**Pipeline 修改**:
+```yaml
+# arxiv-survey-latex.pipeline.md Stage C5 修改
+
+## C5 — Draft + PDF
+
+Skills (顺序执行):
+1. subsection-writer      # 写各节
+2. section-logic-polisher # 新增：逻辑润色
+3. transition-weaver      # 生成过渡
+4. section-merger         # 合并
+5. draft-polisher         # 去模板化
+6. global-reviewer        # 全局审查
+```
+
+### 24.6 质量对比矩阵
+
+| 维度 | citeboost | skillcontracts | 改进幅度 | 下一步改进 |
+|------|-----------|----------------|----------|-----------|
+| 引用嵌入 | 句末堆砌 | 系统名+引用 | **显著** | ✅ 已解决 |
+| 对比句式 | 很少 | 每节 2-3 处 | **显著** | ✅ 已解决 |
+| 数字锚点 | 偶尔 | 频繁且具体 | **显著** | ✅ 已解决 |
+| 跨论文综合 | 无 | 每节结尾有 | **显著** | ⚠️ 需去模板化 |
+| 局限具体性 | 泛泛 | 指向具体失败模式 | **中等** | ⚠️ 需去模板化 |
+| **段落逻辑连接** | N/A | **弱** | N/A | 🔴 需改进 briefs + writer |
+| **节内论证主线** | N/A | **缺失** | N/A | 🔴 需增加 thesis 要求 |
+| **连接词密度** | N/A | **不足** | N/A | 🔴 需增加 quality gate |
+| **润色机制** | 无 | 无 | 无变化 | 🔴 需新增 polisher skill |
+| 完成度 | 100% | 37.5% | **退步** | 🔴 需修复 pipeline 稳定性 |
+
+### 24.7 关键发现
+
+**成功验证的契约补强**:
+
+1. `anchor-sheet/SKILL.md` 的"锚点消费最小规则"生效 → 数字锚点使用率大幅提升
+2. `writer-context-pack/SKILL.md` 的"must-use 清单"生效 → 对比和评测锚点不再被忽略
+3. `subsection-writer/SKILL.md` 的"Citation embedding + Transitions"规则生效 → 引用嵌入方式正确
+
+**新发现的写作逻辑问题**:
+
+1. **段落逻辑连接弱**: paragraph_plan 只规定 topic，不规定 inter-paragraph connector
+2. **节内论证主线缺失**: 没有 thesis statement，段落是"介绍"而非"论证"
+3. **连接词密度不足**: However/Therefore 等因果连接词太少
+4. **Synthesis 模板化**: 每节结尾都是 "Taken together... N clusters"
+5. **润色机制缺失**: 写完即 merge，无逻辑检查步骤
+
+**需要进一步加强的契约**:
+
+1. **`subsection-briefs`**: 增加 thesis、argument_role、connector_to_prev 字段
+2. **`subsection-writer`**: 增加 thesis statement 要求、connector density 要求
+3. **`chapter-briefs`**: 增加 synthesis_mode 多样性要求
+4. **`quality_gate`**: 增加 sections_connector_density 检查
+5. **Pipeline**: 新增 `section-logic-polisher` skill
+
+### 24.8 改进优先级更新
+
+基于本次分析，调整优先级：
+
+**P0（写作逻辑问题 - 新增）**:
+- `subsection-briefs`: 增加 `thesis`、`argument_role`、`connector_to_prev` 字段
+- `subsection-writer`: 增加 thesis statement 要求（第一段末尾）
+- `quality_gate`: 新增 `sections_connector_density` 检查
+
+**P0（Pipeline 稳定性）**:
+- Pipeline 错误恢复机制（单个章节失败不应阻断全部）
+- U100 script 错误日志完整化（记录具体失败原因）
+
+**P1（写作质量细节）**:
+- `chapter-briefs`: synthesis_mode 多样性要求
+- 新增 `section-logic-polisher` skill
+- `global-reviewer`: 增加 cross-section flow 检查
+
+**降级为 P2**（已被契约补强解决）:
+- 引用嵌入规则 → 已生效
+- 数字锚点消费 → 已生效
+- 对比句式要求 → 已生效
+
+---
+
+## 25) 总结与下一步
+
+### 25.1 契约补强效果验证
+
+本次 `e2e-agent-survey-skillcontracts` workspace 分析证明：
+- **SKILL.md 的契约补强是有效的**：引用嵌入、数字锚点、对比句式等问题显著改善
+- **写作问题的根因确实在 C2-C4**：当 brief/evidence/anchors 准备充分且有明确消费规则时，C5 的写作质量自然改善
+- **"软约束"问题部分解决**：通过 must-use 清单和 writer contract，LLM 更倾向于遵守约束
+
+### 25.2 新发现：写作逻辑问题
+
+但本次分析也发现了**新的质量瓶颈**：
+
+| 问题类型 | 表现 | 根因 |
+|---------|------|------|
+| 段落逻辑连接弱 | 每段像"孤岛" | paragraph_plan 只规定 topic，不规定 connector |
+| 节内论证主线缺失 | 没有 thesis statement | subsection_briefs 没有 central_argument 字段 |
+| 连接词密度不足 | However/Therefore 太少 | 没有最低数量要求 |
+| Synthesis 模板化 | 每节都是 "Taken together... N clusters" | 没有 synthesis_mode 多样性规定 |
+| 润色机制缺失 | 写完即 merge | Pipeline 没有 logic polishing 步骤 |
+
+**核心洞察**：上一轮契约补强解决了**内容**问题（引用、锚点、对比），但没有解决**逻辑**问题（连接、论证、主线）。
+
+### 25.3 残留风险
+
+1. **Pipeline 稳定性**: 契约补强提高了质量但可能增加了脆性（更多检查 = 更多失败点）
+2. **完成度**: 写得好但写不完，比写完但写不好更糟糕（因为无法交付）
+3. **逻辑润色成本**: 新增 polisher 会增加 pipeline 时间，需要权衡
+
+### 25.4 建议的下一步迭代
+
+**Sprint 目标**: 解决写作逻辑问题，同时保持 Pipeline 稳定性
+
+**具体任务**:
+
+1. **修改 `subsection-briefs/SKILL.md`**:
+   - 新增 `thesis` 字段（每节的核心论点）
+   - `paragraph_plan` 新增 `argument_role`（introduce_tension / provide_evidence / counter_argument / synthesize）
+   - `paragraph_plan` 新增 `connector_to_prev`（contrast / consequence / extension）
+
+2. **修改 `subsection-writer/SKILL.md`**:
+   - 增加 Thesis Statement Requirement（第一段末尾必须是 thesis statement）
+   - 增加 Logical Connector Requirements（因果 ≥3，转折 ≥2，递进 ≥2）
+
+3. **修改 `quality_gate.py`**:
+   - 新增 `sections_connector_density` 检查
+   - 新增 `sections_thesis_statement` 检查
+
+4. **新增 `section-logic-polisher` skill**:
+   - 在 `section-merger` 之前运行
+   - 只做连接（加 connectors、补 thesis），不改内容
+
+5. **修改 `chapter-briefs/SKILL.md`**:
+   - 新增 `synthesis_mode` 字段（clusters / timeline / trade-off_matrix / case_study）
+   - 避免每节都用同一种 synthesis 方式
+
+---
+
 *End of document*
