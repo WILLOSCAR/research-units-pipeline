@@ -35,6 +35,8 @@ JSONL (one object per H2 chapter that has H3 subsections).
 Required fields:
 - `section_id`, `section_title`
 - `subsections` (list of `{sub_id,title}` in outline order)
+- `synthesis_mode` (one of: `clusters`, `timeline`, `tradeoff_matrix`, `case_study`, `tension_resolution`)
+- `synthesis_preview` (1–2 bullets; how the chapter will synthesize across H3 without template-y “Taken together…”)
 - `throughline` (3–6 bullets)
 - `key_contrasts` (2–6 bullets; pull from each H3 `contrast_hook` when available)
 - `lead_paragraph_plan` (2–3 bullets; plan only, not prose)
@@ -48,6 +50,7 @@ Required fields:
 3. For each chapter, produce:
    - a **throughline**: what the whole chapter is trying to compare/explain
    - **key contrasts**: 2–6 contrasts that span multiple H3s
+   - a **synthesis_mode**: enforce synthesis diversity across chapters (avoid repeating the same closing paragraph shape)
    - a **lead paragraph plan**: 2–3 paragraph objectives (what the chapter lead must do)
    - a **bridge_terms** set to keep terminology stable across H3s
 4. Write `outline/chapter_briefs.jsonl`.

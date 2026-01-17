@@ -1,6 +1,6 @@
 # Pipeline Diagnosis & Improvement (skills-first)
 
-Last updated: 2026-01-16
+Last updated: 2026-01-17
 
 目标：把本仓库的 `skills + pipelines + units + quality gates` 做成一个 **Codex 能端到端跑完、过程可见、结果不空洞** 的闭环；并把写作质量尽量拉近 `ref/agent-surveys/` 的"论文感"。
 
@@ -12,13 +12,15 @@ Last updated: 2026-01-16
 
 已验证的"跑通且不空洞"样例（strict + auto-approve C2 的 smoke test）：
 
-- Workspace：`workspaces/e2e-agent-survey-citeboost-20260114-015029`
-  - Draft：`workspaces/e2e-agent-survey-citeboost-20260114-015029/output/DRAFT.md`
-  - PDF：`workspaces/e2e-agent-survey-citeboost-20260114-015029/latex/main.pdf`（43 pages）
-  - Audit：`workspaces/e2e-agent-survey-citeboost-20260114-015029/output/AUDIT_REPORT.md`（PASS；unique citations in draft=105；bib entries=220）
-  - Global review：`workspaces/e2e-agent-survey-citeboost-20260114-015029/output/GLOBAL_REVIEW.md`（PASS；H3 median length ≈ 10705 chars sans cites）
+- Workspace：`workspaces/e2e-agent-survey-skilllogic-20260117-004215`
+  - Draft：`workspaces/e2e-agent-survey-skilllogic-20260117-004215/output/DRAFT.md`
+  - PDF：`workspaces/e2e-agent-survey-skilllogic-20260117-004215/latex/main.pdf`（42 pages）
+  - Audit：`workspaces/e2e-agent-survey-skilllogic-20260117-004215/output/AUDIT_REPORT.md`（PASS；unique citations in draft=114；bib entries=220）
+  - Global review：`workspaces/e2e-agent-survey-skilllogic-20260117-004215/output/GLOBAL_REVIEW.md`（PASS；H3 median length ≈ 10353 chars sans cites）
 
-历史对比与复现命令见：`question.md`（如果本文件缺失，说明工作区发生了误删，需要先 restore）。
+历史对比与复现命令见：`question.md`
+注：repo 已清理旧 workspaces；本文后续若出现已删除的 workspace 名称，视为历史记录，以本节列出的 workspace 为准。
+（如果本文件缺失，说明工作区发生了误删，需要先 restore）。
 
 ---
 
@@ -89,10 +91,10 @@ Pipeline 定义：`pipelines/arxiv-survey-latex.pipeline.md`（Stage C0–C5）
 ### C5 — Draft + PDF（PROSE after C2）
 
 - 目标：按 H3 逐节写厚，合并成 paper-like draft，并通过审计/编译。
-- 关键产物：`sections/*.md`, `output/DRAFT.md`, `output/GLOBAL_REVIEW.md`, `output/AUDIT_REPORT.md`, `latex/main.pdf`
-- 关键 skills：`subsection-writer`, `transition-weaver`, `section-merger`, `draft-polisher`, `global-reviewer`, `pipeline-auditor`, `latex-*`
+- 关键产物：`sections/*.md`, `output/SECTION_LOGIC_REPORT.md`, `output/DRAFT.md`, `output/CITATION_BUDGET_REPORT.md`, `output/GLOBAL_REVIEW.md`, `output/AUDIT_REPORT.md`, `latex/main.pdf`
+- 关键 skills：`subsection-writer`, `section-logic-polisher`, `transition-weaver`, `section-merger`, `citation-diversifier`, `draft-polisher`, `global-reviewer`, `pipeline-auditor`, `latex-*`
 - 推荐工作方式：把 C5 当成"可控自循环"（只改失败节），而不是一次性大稿：
-  - `subsection-writer` 写每个 H3 → quality gate 卡住就用 `writer-selfloop` 生成 per-file TODO → 只改失败文件 → 继续。
+  - `subsection-writer` 写每个 H3 → `section-logic-polisher` 检查 thesis/连接词 → quality gate 卡住就用 `writer-selfloop` 生成 per-file TODO → 只改失败文件 → 继续。
 
 ---
 

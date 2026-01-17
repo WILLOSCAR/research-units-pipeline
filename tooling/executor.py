@@ -7,7 +7,9 @@ from pathlib import Path
 
 from tooling.common import (
     UnitsTable,
+    atomic_write_text,
     decisions_has_approval,
+    ensure_dir,
     now_iso_seconds,
     parse_semicolon_list,
     set_decisions_approval,
@@ -118,8 +120,25 @@ def run_one_unit(
         checkpoint,
     ]
 
+    log_rel = f"output/unit_logs/{unit_id}.{skill}.log"
+    log_path = workspace / log_rel
+
     try:
-        completed = subprocess.run(cmd, check=False)
+        completed = subprocess.run(cmd, check=False, capture_output=True, text=True)
+        if completed.stdout or completed.stderr or completed.returncode != 0:
+            ensure_dir(log_path.parent)
+            body = [
+                f"# Unit log\n",
+                f"- unit_id: {unit_id}\n",
+                f"- skill: {skill}\n",
+                f"- exit: {completed.returncode}\n",
+                f"- cmd: {' '.join(cmd)}\n",
+                "\n## stdout\n\n",
+                (completed.stdout or "(empty)") + "\n",
+                "\n## stderr\n\n",
+                (completed.stderr or "(empty)") + "\n",
+            ]
+            atomic_write_text(log_path, "".join(body))
     except Exception as exc:  # pragma: no cover
         row["status"] = "BLOCKED"
         table.save(units_path)
@@ -168,10 +187,10 @@ def run_one_unit(
     if missing:
         update_status_log(status_path, f"{now_iso_seconds()} {unit_id} BLOCKED (missing outputs: {', '.join(missing)})")
         _refresh_status_checkpoint(status_path, table)
-        return RunResult(unit_id=unit_id, status="BLOCKED", message=f"Missing outputs: {', '.join(missing)}")
+        return RunResult(unit_id=unit_id, status="BLOCKED", message=f"Missing outputs: {', '.join(missing)}" + (f"; see {log_rel}" if log_path.exists() else ""))
     update_status_log(status_path, f"{now_iso_seconds()} {unit_id} BLOCKED (script failed)")
     _refresh_status_checkpoint(status_path, table)
-    return RunResult(unit_id=unit_id, status="BLOCKED", message=f"Skill script failed (exit {completed.returncode})")
+    return RunResult(unit_id=unit_id, status="BLOCKED", message=f"Skill script failed (exit {completed.returncode})" + (f"; see {log_rel}" if log_path.exists() else ""))
 
 
 def _find_first_runnable(table: UnitsTable) -> int | None:

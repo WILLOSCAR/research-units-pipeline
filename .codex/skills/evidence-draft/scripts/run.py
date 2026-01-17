@@ -385,7 +385,7 @@ def _evidence_snippets(*, workspace: Path, pids: list[str], notes_by_pid: dict[s
                 if re.search(r"(?i)\b(success|accuracy|score|outperform|benchmark|dataset|evaluation|human|tasks?)\b", s):
                     chosen = s
                     break
-            text = (chosen or " ".join(sents[:2]) or abstract[:240]).strip()
+            text = (chosen or " ".join(sents[:2]) or abstract[:360]).strip()
             provenance.update({"source": "abstract", "pointer": f"papers/paper_notes.jsonl:paper_id={pid}#abstract"})
         else:
             bullets = note.get("summary_bullets") or []
@@ -491,8 +491,10 @@ def _claim_candidates(
         claim = re.sub(r"\s+", " ", claim).strip()
         if len(claim) < 24:
             continue
-        if len(claim) > 240:
-            claim = claim[:240].rstrip()
+        if len(claim) > 400:
+            claim = claim[:400].rstrip()
+            if " " in claim[-60:]:
+                claim = claim.rsplit(" ", 1)[0].rstrip()
 
         out.append(
             {
@@ -604,8 +606,10 @@ def _comparisons(
             sents = _split_sentences(raw)
             excerpt = (sents[0] if sents else raw).strip()
             excerpt = re.sub(r"\s+", " ", excerpt)
-            if len(excerpt) > 240:
-                excerpt = excerpt[:240].rstrip() + "..."
+            if len(excerpt) > 280:
+                excerpt = excerpt[:280].rstrip()
+                if " " in excerpt[-60:]:
+                    excerpt = excerpt.rsplit(" ", 1)[0].rstrip()
 
             out.append(
                 {

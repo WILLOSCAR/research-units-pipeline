@@ -45,10 +45,23 @@ JSONL (one JSON object per line). Required fields per record:
 - `section_id`, `section_title`
 - `scope_rule` (object with `include`/`exclude`/`notes`)
 - `rq` (1–2 sentences)
+- `thesis` (1 sentence; internal intent, not reader-facing; should be executable as the first paragraph’s last sentence in C5)
 - `axes` (list of 3–5 checkable comparison dimensions; no ellipsis)
 - `clusters` (2–3 clusters; each has `label`, `rationale`, `paper_ids`, and optional `bibkeys`)
-- `paragraph_plan` (6–10 paragraphs; each paragraph is a *unit of comparison* with explicit clusters/evidence needs)
+- `paragraph_plan` (8–10 paragraphs; each item is a *unit of comparison* with explicit role + connector)
 - `evidence_level_summary` (counts by `fulltext|abstract|title`)
+
+### `paragraph_plan` item schema (required)
+
+Each `paragraph_plan` item is an object with:
+
+- `para` (int; 1-based)
+- `argument_role` (string; e.g., `setup_thesis`, `mechanism_cluster_A`, `evaluation_cluster_A`, `contrast_cluster_B`, `cross_paper_synthesis`, `decision_guidance`, `limitations_open_questions`)
+- `connector_to_prev` (string; empty for para 1; e.g., `grounding`, `elaboration`, `evaluation`, `contrast`, `synthesis`, `consequence`)
+- `connector_phrase` (string; suggested paragraph-first-sentence stem; no placeholders)
+- `intent` (string; plan only, not prose)
+- `focus` (list of short checkable focus cues)
+- `use_clusters` (list of cluster labels to cite/compare in that paragraph)
 
 ## Workflow
 
@@ -65,15 +78,15 @@ Optional context (if present): read `GOAL.md` to pin scope and audience, and use
    - Prefer concrete, checkable phrases (e.g., representation, training signal, sampling/solver, compute, evaluation protocol, failure modes).
    - Use the subsection title + mapped-paper tags to specialize axes.
 6. Build 2–3 **clusters** of papers (2–5 papers each) and explain why they cluster (which axis/theme).
-7. Build a 6–10 paragraph **paragraph_plan** (plan paragraphs, not prose):
-   - Para 1: setup + scope boundary + thesis/definitions.
-   - Para 2: approach family / cluster A (mechanism + assumptions).
-   - Para 3: cluster A evaluation/trade-offs (benchmarks/metrics/latency/compute).
-   - Para 4: approach family / cluster B (contrast with A).
-   - Para 5: cluster B evaluation/trade-offs (mirror A for comparability).
-   - Para 6: cross-paper synthesis (explicit compare A vs B; later prose should include >=2 citations in one paragraph).
-   - Para 7: failures/limitations + verification targets + open question (especially under abstract-only evidence).
-   - Para 8–10 (optional): design implication / deployment nuance / bridge terms.
+7. Write a **thesis** (1 sentence; internal intent):
+   - Prefer the form: `This subsection argues/shows/surveys that ...` (no new facts; conservative under abstract-only evidence).
+8. Build an 8–10 paragraph **paragraph_plan** (plan paragraphs, not prose). Each paragraph must include a **connector contract** so the writer doesn’t produce “paragraph islands”:
+   - Para 1 (`setup_thesis`): setup + scope boundary + thesis/definitions.
+   - Para 2–4 (`cluster_A`): mechanism → implementation assumptions → evaluation/trade-offs (explicit eval anchor).
+   - Para 5–7 (`cluster_B`): contrast with A → implementation assumptions → evaluation/trade-offs.
+   - Para 8 (`cross_paper_synthesis`): explicit compare A vs B (later prose: same paragraph >=2 citations).
+   - Para 9 (`decision_guidance`): decision checklist + evaluation signals + engineering constraints.
+   - Para 10 (`limitations_open_questions`): limitations + verification targets + concrete open question.
 8. Write `outline/subsection_briefs.jsonl`.
 
 ## Quality checklist
@@ -81,7 +94,8 @@ Optional context (if present): read `GOAL.md` to pin scope and audience, and use
 - [ ] Every subsection has `rq` and `scope_rule`.
 - [ ] `axes` length is 3–5 and each axis is a concrete noun phrase.
 - [ ] `clusters` length is 2–3; each cluster has 2–5 papers.
-- [ ] `paragraph_plan` length is 6–10; each plan references clusters (not generic filler).
+- [ ] `thesis` is present (1 sentence; no placeholders).
+- [ ] `paragraph_plan` length is 8–10; each item has `argument_role` + `connector_to_prev` + `connector_phrase` (no placeholders).
 - [ ] No placeholder markers appear anywhere.
 
 ## Helper script (bootstrap)

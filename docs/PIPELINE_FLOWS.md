@@ -46,6 +46,7 @@ flowchart LR
     EB[evidence-binder]
     ED[evidence-draft]
     AS[anchor-sheet]
+    WCP[writer-context-pack]
     CMR[claim-matrix-rewriter]
     TS[table-schema]
     TF[table-filler]
@@ -54,8 +55,10 @@ flowchart LR
 
   subgraph "C5 - Writing [PROSE after C2]"
     SW[subsection-writer]
+    SLP[section-logic-polisher]
     TW[transition-weaver]
     MG[section-merger]
+    CD[citation-diversifier]
     DP[draft-polisher]
     GR[global-reviewer]
     PA[pipeline-auditor]
@@ -63,7 +66,7 @@ flowchart LR
     LCQ[latex-compile-qa]:::optional
   end
 
-  WS --> PR0 --> LE --> DR --> TB --> OB --> SM --> OR --> PR2 --> C2A --> PT --> PN --> SB --> CB --> CV --> EB --> ED --> AS --> CMR --> TS --> TF --> SV --> SW --> TW --> MG --> DP --> GR --> PA
+  WS --> PR0 --> LE --> DR --> TB --> OB --> SM --> OR --> PR2 --> C2A --> PT --> PN --> SB --> CB --> CV --> EB --> ED --> AS --> WCP --> CMR --> TS --> TF --> SV --> SW --> SLP --> TW --> MG --> CD --> DP --> GR --> PA
   KX -.-> LE
   SSH -.-> TB
   PA -.-> LS -.-> LCQ
@@ -109,6 +112,7 @@ flowchart LR
     EB[evidence-binder]
     ED[evidence-draft]
     AS[anchor-sheet]
+    WCP[writer-context-pack]
     CMR[claim-matrix-rewriter]
     TS[table-schema]
     TF[table-filler]
@@ -117,8 +121,10 @@ flowchart LR
 
   subgraph "C5 - Writing + PDF [PROSE after C2]"
     SW[subsection-writer]
+    SLP[section-logic-polisher]
     TW[transition-weaver]
     MG[section-merger]
+    CD[citation-diversifier]
     DP[draft-polisher]
     GR[global-reviewer]
     PA[pipeline-auditor]
@@ -126,7 +132,7 @@ flowchart LR
     LCQ[latex-compile-qa]
   end
 
-  WS --> PR0 --> LE --> DR --> TB --> OB --> SM --> OR --> PR2 --> C2A --> PT --> PN --> SB --> CB --> CV --> EB --> ED --> AS --> CMR --> TS --> TF --> SV --> SW --> TW --> MG --> DP --> GR --> PA --> LS --> LCQ
+  WS --> PR0 --> LE --> DR --> TB --> OB --> SM --> OR --> PR2 --> C2A --> PT --> PN --> SB --> CB --> CV --> EB --> ED --> AS --> WCP --> CMR --> TS --> TF --> SV --> SW --> SLP --> TW --> MG --> CD --> DP --> GR --> PA --> LS --> LCQ
   KX -.-> LE
   SSH -.-> TB
 ```

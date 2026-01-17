@@ -37,10 +37,18 @@ JSONL, one object per H3 subsection.
 
 Required keys:
 - `sub_id`, `title`, `section_id`, `section_title`
-- `rq`, `axes`, `paragraph_plan`
+- `rq`, `thesis`, `axes`, `paragraph_plan`
+- `chapter_synthesis_mode` (copied from chapter briefs; helps avoid template-y “Taken together…” repeats)
 - `allowed_bibkeys_{selected,mapped,chapter}`
 - `anchor_facts` (trimmed)
 - `comparison_cards` (trimmed)
+- `must_use` (writer contract; minima derived from pack richness + `draft_profile`)
+- `pack_warnings` (list; why this pack may still draft hollow if not fixed upstream)
+- `pack_stats` (object; raw/kept/dropped counts + trim policy so truncation/drop is not silent)
+
+Trim policy:
+- Packs trim long snippets to preserve concrete details while keeping JSONL readable (see `pack_stats.trim_policy`).
+- Trimming does not add ellipsis markers (to reduce accidental leakage into prose).
 
 ## Writer contract (how C5 should use this pack)
 
@@ -49,6 +57,7 @@ Treat each pack as an executable checklist, not optional context:
 - **Plan compliance**: follow `paragraph_plan` (don’t skip planned paragraphs; merge only if you keep the same contrasts/anchors).
 - **Anchors are must-use**: include at least one `anchor_facts` item that matches your paragraph’s claim type (eval / numeric / limitation), when present.
 - **Comparisons are must-use**: reuse `comparison_cards` to write explicit A-vs-B contrast sentences (avoid “A then B” separate summaries).
+- **Thesis is must-use**: the first paragraph should end with the `thesis` statement (or a faithful paraphrase with the same commitment level).
 - **Micro-structure**: if prose starts drifting into flat summaries, apply `grad-paragraph` repeatedly (tension → contrast → evaluation anchor → limitation).
 - **Citation scope**: prefer `allowed_bibkeys_selected`; use `allowed_bibkeys_chapter` only for intra-chapter background, and keep >=2 subsection-specific citations per H3.
 

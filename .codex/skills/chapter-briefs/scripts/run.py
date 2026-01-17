@@ -8,6 +8,58 @@ from pathlib import Path
 from typing import Any
 
 
+def _choose_synthesis_mode(*, sec_id: str, sec_title: str, axes: list[str]) -> tuple[str, list[str]]:
+    """Pick a synthesis mode to avoid repeating the same chapter-ending template everywhere (NO NEW FACTS)."""
+    title_low = (sec_title or "").lower()
+    axes_low = " ".join([str(a or "").lower() for a in (axes or [])])
+
+    if any(k in title_low for k in ["evaluation", "benchmark", "metrics", "measurement"]) or any(k in axes_low for k in ["evaluation", "benchmark", "metrics"]):
+        return (
+            "tradeoff_matrix",
+            [
+                "Synthesize by comparing approaches along a small trade-off matrix (axes + evaluation protocol), not by listing papers.",
+                "Keep contrasts decision-relevant (reliability/cost/safety) and reuse consistent evaluation anchors across H3s.",
+            ],
+        )
+    if any(k in title_low for k in ["history", "evolution", "timeline", "trend"]):
+        return (
+            "timeline",
+            [
+                "Synthesize via a lightweight evolution story (what changed in assumptions/interfaces/evaluation over time).",
+                "Use the timeline to motivate why later H3s focus on different constraints.",
+            ],
+        )
+    if any(k in title_low for k in ["security", "safety", "attack", "defense", "risk", "robust"]) or any(k in axes_low for k in ["safety", "security", "risk"]):
+        return (
+            "tension_resolution",
+            [
+                "Synthesize as a tension-resolution arc (capability vs safety/reliability) and how approaches resolve or shift that tension.",
+                "Make the failure modes concrete and connect them to evaluation protocols and mitigations.",
+            ],
+        )
+
+    # Deterministic fallback: cycle a couple of modes to increase diversity across chapters.
+    try:
+        idx = int(str(sec_id or "0").strip())
+    except Exception:
+        idx = 0
+    if idx % 3 == 0:
+        return (
+            "case_study",
+            [
+                "Synthesize by anchoring the chapter around 1–2 representative system case studies and using H3s as axes of analysis.",
+                "Ensure the case studies only use papers already mapped to this chapter (no new citations).",
+            ],
+        )
+    return (
+        "clusters",
+        [
+            "Synthesize by contrasting 2–3 clusters of approaches and making the trade-offs explicit (not a per-paper summary).",
+            "Use explicit connectors (however/therefore/building on) to keep paragraphs from becoming islands.",
+        ],
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", required=True)
@@ -115,6 +167,8 @@ def main() -> int:
         if not key_contrasts:
             key_contrasts = ["Pick 2–4 cross-subsection contrasts (A vs B) grounded in mapped papers."]
 
+        synthesis_mode, synthesis_preview = _choose_synthesis_mode(sec_id=sec_id, sec_title=sec_title, axes=axes)
+
         lead_plan = [
             "Para 1: state the chapter’s role and the decision-relevant comparison axes (no new facts).",
             "Para 2: preview the H3 subsections and how they decompose the chapter question.",
@@ -126,6 +180,8 @@ def main() -> int:
                 "section_id": sec_id,
                 "section_title": sec_title,
                 "subsections": sub_list,
+                "synthesis_mode": synthesis_mode,
+                "synthesis_preview": synthesis_preview[:2],
                 "throughline": throughline[:6],
                 "key_contrasts": key_contrasts[:6],
                 "lead_paragraph_plan": lead_plan,

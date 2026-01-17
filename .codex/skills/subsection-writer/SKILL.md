@@ -127,11 +127,25 @@ For each H3 file `sections/S<sub_id>.md`:
 - Citation scope: citations must be allowed by `outline/evidence_bindings.jsonl` for that `sub_id` (or, if needed, within the same H2 chapter’s mapped union); keep >=2 subsection-specific citations.
 - Depth target (depends on `draft_profile`; all sans cites): `lite`>=6 paragraphs & >=~5000 chars; `survey`>=9 & >=~9000; `deep`>=10 & >=~11000.
 - Must include:
-  - >=2 explicit contrasts (whereas / in contrast / 相比 / 不同于)
-  - >=1 evaluation anchor (benchmark/dataset/metric/protocol)
-  - >=1 limitation/provisional sentence (limited/unclear/受限/待验证)
+  - Contrast density (explicit): `lite`>=1, `survey`>=2, `deep`>=3 (whereas / in contrast / 相比 / 不同于)
+  - Evaluation anchors (explicit): `lite`>=1, `survey`>=2, `deep`>=3 (benchmark/dataset/metric/protocol)
+  - Limitations/caveats (explicit): `lite`>=1, `survey`>=1, `deep`>=2 (limited/unclear/受限/待验证)
+  - Anchor density (proxy): `lite`>=1, `survey`>=2, `deep`>=3 paragraphs that contain a citation **and** (a digit OR an eval token OR a limitation token)
   - >=1 cross-paper synthesis paragraph with >=2 citations in the same paragraph
-  - if evidence packs contain quantitative snippets: >=1 **cited numeric anchor** (digit + citation in same paragraph)
+  - If evidence packs contain quantitative snippets: >=1 **cited numeric anchor** (digit + citation in same paragraph)
+  - No citation-only lines (a line that is only `[@...]`) and no trailing citation-dump paragraphs (ending with `[@a; @b; @c]` as the only citations)
+
+#### Thesis statement requirement (paper-like)
+
+Each H3 must have a clear central claim early, otherwise the subsection becomes a “topic list”.
+
+Contract:
+- The **last sentence of paragraph 1** should be a thesis signal.
+- Prefer a stable form (easy to quality-gate and to self-loop):
+  - `This subsection argues/shows/surveys that ...`
+  - `In this subsection, we argue/show that ...`
+- Source of truth: use the brief’s `thesis` (from `outline/subsection_briefs.jsonl` or `outline/writer_context_packs.jsonl`).
+- Under abstract-only evidence, keep commitment conservative (use “suggests / remains unclear / provisional” when needed).
 
 #### Citation embedding (avoid “label-style” citations)
 
@@ -157,6 +171,8 @@ Each H3 should contain at least one explicit transition of each type:
 - Synthesis: `Collectively`, `Taken together`, `In summary`
 
 If you notice “Para 1/2/3 read as isolated mini-essays”, rewrite the first sentence of each paragraph as a bridge from the previous one.
+
+Self-check (before moving on): run `section-logic-polisher` to verify thesis + connector density, then patch only the failing files.
 
 #### Paragraph drafting micro-skill
 

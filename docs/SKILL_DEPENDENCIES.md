@@ -46,6 +46,15 @@ flowchart LR
   F_outline_chapter_briefs_jsonl["`outline/chapter_briefs.jsonl`"]:::file
   S_chapter_briefs --> F_outline_chapter_briefs_jsonl
   S_citation_anchoring["`citation-anchoring`"]:::skill
+  S_citation_diversifier["`citation-diversifier`"]:::skill
+  F_citations_ref_bib --> S_citation_diversifier
+  F_outline_outline_yml --> S_citation_diversifier
+  F_outline_writer_context_packs_jsonl["`outline/writer_context_packs.jsonl`"]:::file
+  F_outline_writer_context_packs_jsonl --> S_citation_diversifier
+  F_output_DRAFT_md["`output/DRAFT.md`"]:::file
+  F_output_DRAFT_md --> S_citation_diversifier
+  F_output_CITATION_BUDGET_REPORT_md["`output/CITATION_BUDGET_REPORT.md`"]:::file
+  S_citation_diversifier --> F_output_CITATION_BUDGET_REPORT_md
   S_citation_verifier["`citation-verifier`"]:::skill
   F_papers_paper_notes_jsonl["`papers/paper_notes.jsonl`"]:::file
   F_papers_paper_notes_jsonl --> S_citation_verifier
@@ -87,7 +96,6 @@ flowchart LR
   F_outline_evidence_drafts_jsonl --> S_draft_polisher
   F_outline_outline_yml --> S_draft_polisher
   F_outline_subsection_briefs_jsonl --> S_draft_polisher
-  F_output_DRAFT_md["`output/DRAFT.md`"]:::file
   F_output_DRAFT_md --> S_draft_polisher
   S_draft_polisher --> F_output_DRAFT_md
   F_output_citation_anchors_prepolish_jsonl["`output/citation_anchors.prepolish.jsonl`"]:::file
@@ -177,6 +185,8 @@ flowchart LR
   S_novelty_matrix --> F_output_NOVELTY_MATRIX_md
   S_outline_builder["`outline-builder`"]:::skill
   F_outline_taxonomy_yml --> S_outline_builder
+  F_ref_agent_surveys_STYLE_REPORT_md --> S_outline_builder
+  F_ref_agent_surveys_text --> S_outline_builder
   S_outline_builder --> F_outline_outline_yml
   S_outline_refiner["`outline-refiner`"]:::skill
   F_GOAL_md --> S_outline_refiner
@@ -263,6 +273,14 @@ flowchart LR
   F_papers_papers_dedup_jsonl --> S_screening_manager
   F_papers_papers_raw_jsonl --> S_screening_manager
   S_screening_manager --> F_papers_screening_log_csv
+  S_section_logic_polisher["`section-logic-polisher`"]:::skill
+  F_outline_subsection_briefs_jsonl --> S_section_logic_polisher
+  F_outline_writer_context_packs_jsonl --> S_section_logic_polisher
+  F_sections["`sections/`"]:::file
+  F_sections --> S_section_logic_polisher
+  F_output_SECTION_LOGIC_REPORT_md["`output/SECTION_LOGIC_REPORT.md`"]:::file
+  S_section_logic_polisher --> F_output_SECTION_LOGIC_REPORT_md
+  S_section_logic_polisher --> F_sections
   S_section_mapper["`section-mapper`"]:::skill
   F_outline_outline_yml --> S_section_mapper
   F_papers_core_set_csv --> S_section_mapper
@@ -295,9 +313,7 @@ flowchart LR
   F_outline_evidence_drafts_jsonl --> S_subsection_writer
   F_outline_outline_yml --> S_subsection_writer
   F_outline_subsection_briefs_jsonl --> S_subsection_writer
-  F_outline_writer_context_packs_jsonl["`outline/writer_context_packs.jsonl`"]:::file
   F_outline_writer_context_packs_jsonl --> S_subsection_writer
-  F_sections["`sections/`"]:::file
   S_subsection_writer --> F_sections
   F_sections_S_sec_id__lead_md["`sections/S<sec_id>_lead.md`"]:::file
   S_subsection_writer --> F_sections_S_sec_id__lead_md
@@ -468,8 +484,10 @@ flowchart LR
 
   subgraph "C5 - Draft + PDF"
     U_U100["`U100`\n`subsection-writer`"]:::unit
+    U_U102["`U102`\n`section-logic-polisher`"]:::unit
     U_U098["`U098`\n`transition-weaver`"]:::unit
     U_U101["`U101`\n`section-merger`"]:::unit
+    U_U104["`U104`\n`citation-diversifier`"]:::unit
     U_U105["`U105`\n`draft-polisher`"]:::unit
     U_U108["`U108`\n`global-reviewer`"]:::unit
     U_U109["`U109`\n`pipeline-auditor`"]:::unit
@@ -505,10 +523,12 @@ flowchart LR
   U_U094 --> U_U095
   U_U099 --> U_U100
   U_U076 --> U_U100
-  U_U100 --> U_U098
+  U_U100 --> U_U102
+  U_U102 --> U_U098
   U_U100 --> U_U101
   U_U098 --> U_U101
-  U_U101 --> U_U105
+  U_U101 --> U_U104
+  U_U104 --> U_U105
   U_U105 --> U_U108
   U_U108 --> U_U109
   U_U109 --> U_U110
@@ -563,8 +583,10 @@ flowchart LR
 
   subgraph "C5 - Draft"
     U_U100["`U100`\n`subsection-writer`"]:::unit
+    U_U102["`U102`\n`section-logic-polisher`"]:::unit
     U_U098["`U098`\n`transition-weaver`"]:::unit
     U_U101["`U101`\n`section-merger`"]:::unit
+    U_U104["`U104`\n`citation-diversifier`"]:::unit
     U_U105["`U105`\n`draft-polisher`"]:::unit
     U_U108["`U108`\n`global-reviewer`"]:::unit
     U_U109["`U109`\n`pipeline-auditor`"]:::unit
@@ -598,10 +620,12 @@ flowchart LR
   U_U094 --> U_U095
   U_U099 --> U_U100
   U_U076 --> U_U100
-  U_U100 --> U_U098
+  U_U100 --> U_U102
+  U_U102 --> U_U098
   U_U100 --> U_U101
   U_U098 --> U_U101
-  U_U101 --> U_U105
+  U_U101 --> U_U104
+  U_U104 --> U_U105
   U_U105 --> U_U108
   U_U108 --> U_U109
 ```

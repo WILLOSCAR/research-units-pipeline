@@ -232,6 +232,8 @@ def check_unit_outputs(*, skill: str, workspace: Path, outputs: list[str]) -> li
         return _check_transitions(workspace, outputs)
     if skill == "subsection-writer":
         return _check_sections_manifest(workspace, outputs)
+    if skill == "section-logic-polisher":
+        return _check_section_logic_polisher(workspace, outputs)
     if skill == "section-merger":
         return _check_merge_report(workspace, outputs)
     if skill == "prose-writer":
@@ -966,6 +968,25 @@ def _check_outline(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
                 if not (has_intent and has_rq and has_evidence and has_expected):
                     missing_meta += 1
 
+        # Paper-like constraint: avoid too many H2 chapters (paper-like target: ~6–8 H2s).
+        sec_total = 0
+        for section in outline:
+            if not isinstance(section, dict):
+                continue
+            if str(section.get("title") or "").strip():
+                sec_total += 1
+        if sec_total > 8:
+            return [
+                QualityIssue(
+                    code="outline_too_many_sections",
+                    message=(
+                        f"Outline has too many top-level sections for paper-like readability ({sec_total}). "
+                        "Prefer <=8 H2 sections (Intro → Related Work → 3–4 core chapters). "
+                        "Merge/simplify the taxonomy so each chapter is thicker and each H3 can sustain deeper evidence-first prose."
+                    ),
+                )
+            ]
+
         # Paper-like constraint: avoid fragmenting the survey into too many tiny H3s.
         if subs_total > 12:
             return [
@@ -1470,9 +1491,21 @@ def _check_subsection_briefs(workspace: Path, outputs: list[str]) -> list[Qualit
 
     profile = _pipeline_profile(workspace)
     # Survey default: paragraph plans must be thick enough to prevent 1–2 paragraph stubs downstream.
-    min_plan_len = 6 if profile == "arxiv-survey" else 2
+    min_plan_len = 8 if profile == "arxiv-survey" else 2
 
-    required_top = {"sub_id", "title", "section_id", "section_title", "scope_rule", "rq", "axes", "clusters", "paragraph_plan", "evidence_level_summary"}
+    required_top = {
+        "sub_id",
+        "title",
+        "section_id",
+        "section_title",
+        "scope_rule",
+        "rq",
+        "thesis",
+        "axes",
+        "clusters",
+        "paragraph_plan",
+        "evidence_level_summary",
+    }
     bad = 0
     for sid, rec in by_id.items():
         missing_top = [k for k in required_top if k not in rec]
@@ -1482,6 +1515,11 @@ def _check_subsection_briefs(workspace: Path, outputs: list[str]) -> list[Qualit
 
         rq = str(rec.get("rq") or "").strip()
         if len(rq) < 12:
+            bad += 1
+            continue
+
+        thesis = str(rec.get("thesis") or "").strip()
+        if len(thesis) < 24 or _check_placeholder_markers(thesis) or "…" in thesis:
             bad += 1
             continue
 
@@ -1521,8 +1559,21 @@ def _check_subsection_briefs(workspace: Path, outputs: list[str]) -> list[Qualit
         for item in sample:
             if not isinstance(item, dict):
                 continue
-            if str(item.get("intent") or "").strip():
-                plan_ok += 1
+            intent = str(item.get("intent") or "").strip()
+            role = str(item.get("argument_role") or "").strip()
+            connector_to_prev = str(item.get("connector_to_prev") or "").strip()
+            connector_phrase = str(item.get("connector_phrase") or "").strip()
+            try:
+                para_no = int(item.get("para") or 0)
+            except Exception:
+                para_no = 0
+
+            if not (intent and role):
+                continue
+            if para_no and para_no > 1:
+                if not (connector_to_prev and connector_phrase):
+                    continue
+            plan_ok += 1
         required_ok = 4 if min_plan_len >= 6 else (3 if min_plan_len >= 4 else 2)
         if plan_ok < required_ok:
             bad += 1
@@ -1614,12 +1665,21 @@ def _check_chapter_briefs(workspace: Path, outputs: list[str]) -> list[QualityIs
             )
 
     bad = 0
+    allowed_modes = {"clusters", "timeline", "tradeoff_matrix", "case_study", "tension_resolution"}
     for sid, rec in by_id.items():
         if not str(rec.get("section_title") or "").strip():
             bad += 1
             continue
         subs = rec.get("subsections")
         if not isinstance(subs, list) or not subs:
+            bad += 1
+            continue
+        mode = str(rec.get("synthesis_mode") or "").strip()
+        preview = rec.get("synthesis_preview") or []
+        if mode not in allowed_modes:
+            bad += 1
+            continue
+        if not isinstance(preview, list) or len([t for t in preview if str(t).strip()]) < 1:
             bad += 1
             continue
         throughline = rec.get("throughline")
@@ -1966,6 +2026,7 @@ def _check_writer_context_packs(workspace: Path, outputs: list[str]) -> list[Qua
     seen: set[str] = set()
     bad = 0
     missing_rq: list[str] = []
+    missing_thesis: list[str] = []
     missing_axes: list[str] = []
     short_plan: list[str] = []
     empty_anchors: list[str] = []
@@ -1974,6 +2035,8 @@ def _check_writer_context_packs(workspace: Path, outputs: list[str]) -> list[Qua
     empty_eval_proto: list[str] = []
     sparse_lim_hooks: list[str] = []
     missing_allowed_bib: list[str] = []
+    missing_synthesis_mode: list[str] = []
+    missing_must_use: list[str] = []
 
     if profile == "arxiv-survey":
         min_comparisons = 4 if draft_profile != "lite" else 3
@@ -2001,10 +2064,13 @@ def _check_writer_context_packs(workspace: Path, outputs: list[str]) -> list[Qua
         seen.add(sub_id)
 
         rq = str(rec.get("rq") or "").strip()
+        thesis = str(rec.get("thesis") or "").strip()
         axes = rec.get("axes") or []
         plan = rec.get("paragraph_plan") or []
         if not rq:
             missing_rq.append(sub_id)
+        if not thesis:
+            missing_thesis.append(sub_id)
         if not isinstance(axes, list) or not any(str(a).strip() for a in axes):
             missing_axes.append(sub_id)
         if not isinstance(plan, list) or len([p for p in plan if str(p).strip()]) < min_plan:
@@ -2029,6 +2095,14 @@ def _check_writer_context_packs(workspace: Path, outputs: list[str]) -> list[Qua
         allowed = rec.get("allowed_bibkeys_mapped") or []
         if not isinstance(allowed, list) or not any(str(k).strip() for k in allowed):
             missing_allowed_bib.append(sub_id)
+
+        mode = str(rec.get("chapter_synthesis_mode") or "").strip()
+        if profile == "arxiv-survey" and not mode:
+            missing_synthesis_mode.append(sub_id)
+
+        mu = rec.get("must_use")
+        if profile == "arxiv-survey" and not isinstance(mu, dict):
+            missing_must_use.append(sub_id)
 
     issues: list[QualityIssue] = []
     if expected and seen != expected:
@@ -2065,6 +2139,17 @@ def _check_writer_context_packs(workspace: Path, outputs: list[str]) -> list[Qua
                 ),
             )
         )
+    if missing_thesis and profile == "arxiv-survey":
+        issues.append(
+            QualityIssue(
+                code="writer_context_packs_missing_thesis",
+                message=(
+                    f"`{out_rel}` has {len(missing_thesis)}/{len(items)} record(s) with empty `thesis` "
+                    f"(e.g., {', '.join(missing_thesis[:10])}{'...' if len(missing_thesis) > 10 else ''}); "
+                    "fix `subsection-briefs` and regenerate so C5 has a central claim per H3."
+                ),
+            )
+        )
     if missing_axes:
         issues.append(
             QualityIssue(
@@ -2084,6 +2169,30 @@ def _check_writer_context_packs(workspace: Path, outputs: list[str]) -> list[Qua
                     f"`{out_rel}` has {len(short_plan)}/{len(items)} record(s) with too-short `paragraph_plan` (<{min_plan}) "
                     f"(e.g., {', '.join(short_plan[:10])}{'...' if len(short_plan) > 10 else ''}); "
                     "fix `subsection-briefs` and regenerate."
+                ),
+            )
+        )
+
+    if missing_synthesis_mode and profile == "arxiv-survey":
+        issues.append(
+            QualityIssue(
+                code="writer_context_packs_missing_chapter_synthesis_mode",
+                message=(
+                    f"Some writer context packs are missing `chapter_synthesis_mode` ({len(missing_synthesis_mode)}/{len(items)}) "
+                    f"(e.g., {', '.join(missing_synthesis_mode[:10])}{'...' if len(missing_synthesis_mode) > 10 else ''}); "
+                    "fix `chapter-briefs` and regenerate."
+                ),
+            )
+        )
+
+    if missing_must_use and profile == "arxiv-survey":
+        issues.append(
+            QualityIssue(
+                code="writer_context_packs_missing_must_use",
+                message=(
+                    f"Some writer context packs are missing `must_use` contract ({len(missing_must_use)}/{len(items)}) "
+                    f"(e.g., {', '.join(missing_must_use[:10])}{'...' if len(missing_must_use) > 10 else ''}); "
+                    "regenerate `writer-context-pack` so C5 has explicit minima (anchors/comparisons/limitations)."
                 ),
             )
         )
@@ -2637,7 +2746,7 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                         if isinstance(hl, dict):
                             blob_parts.append(str(hl.get("excerpt") or ""))
                 blob = " ".join([p for p in blob_parts if p]).strip()
-                if blob and re.search(r"\\d", blob):
+                if blob and re.search(r"\d", blob):
                     numeric_available.add(sid)
         except Exception:
             # Non-fatal: skip this check if evidence packs are unreadable.
@@ -2678,6 +2787,19 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                     message=f"`{rel}` contains pipeline-style boilerplate; rewrite to be subsection-specific and avoid repeated template sentences.",
                 )
             )
+        # Citation embedding: avoid stand-alone citation lines (label-style citations).
+        if re.search(r"(?m)^\\[@[^\\]]+\\]\\s*$", text):
+            issues.append(
+                QualityIssue(
+                    code="sections_citation_dump_line",
+                    message=(
+                        f"`{rel}` contains a stand-alone citation line (e.g., a line that is only `[@...]`). "
+                        "Embed citations into the sentence they support (system name + claim), not as end-of-paragraph tags."
+                    ),
+                )
+            )
+            break
+
             break
 
         # H3 body files must not contain headings.
@@ -2728,6 +2850,30 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                             message=f"`{rel}` has too few paragraphs ({len(paragraphs)}); aim for {min_paragraphs}–{max(min_paragraphs, 12)} paragraphs per H3 for this draft profile.",
                         )
                     )
+                # Citation embedding: discourage paragraphs where citations appear only as a trailing dump.
+                dump_paras = 0
+                for para in paragraphs:
+                    m = re.search(r"\[@([^\]]+)\]\s*$", para)
+                    if not m:
+                        continue
+                    # Only consider paragraphs with >=3 cited keys to avoid over-blocking.
+                    keys_in_tail = set(re.findall(r"[A-Za-z0-9:_-]+", m.group(1) or ""))
+                    if len(keys_in_tail) < 3:
+                        continue
+                    if para.count("[@") != 1:
+                        continue
+                    dump_paras += 1
+                if dump_paras:
+                    issues.append(
+                        QualityIssue(
+                            code="sections_h3_citation_dump_paragraphs",
+                            message=(
+                                f"`{rel}` has {dump_paras} paragraph(s) where citations appear only as a trailing dump (e.g., ending with `[@a; @b; @c]`). "
+                                "Embed citations into the sentence they support (system name + claim), rather than tagging the paragraph at the end."
+                            ),
+                        )
+                    )
+
 
                 content = re.sub(r"\[@[^\]]+\]", "", text)
                 content = re.sub(r"\s+", " ", content).strip()
@@ -2752,7 +2898,7 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                     )
 
                 if uid in numeric_available:
-                    has_cited_numeric = any(re.search(r"\\d", p) and "[@" in p for p in paragraphs)
+                    has_cited_numeric = any(re.search(r"\d", p) and "[@" in p for p in paragraphs)
                     if not has_cited_numeric:
                         issues.append(
                             QualityIssue(
@@ -2765,29 +2911,78 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                         )
 
                 # “Grad paragraph” micro-structure signals: contrast + evaluation anchor + limitation.
+                # Density (not just presence) helps prevent long-but-hollow prose.
                 contrast_re = r"(?i)\b(?:whereas|however|in\s+contrast|by\s+contrast|versus|vs\.)\b|相比|不同于|相较|对比|反之"
                 eval_re = r"(?i)\b(?:benchmark|dataset|datasets|metric|metrics|evaluation|eval\.|protocol|human|ablation)\b|评测|基准|数据集|指标|协议|人工|实验"
                 limitation_re = r"(?i)\b(?:limitation|limited|unclear|sensitive|caveat|downside|failure|risk|open\s+question|remains)\b|受限|尚不明确|缺乏|需要核验|局限|失败|风险|待验证"
 
-                if not re.search(contrast_re, text):
+                if draft_profile == "deep":
+                    min_contrast = 3
+                    min_eval = 3
+                    min_lim = 2
+                    min_anchor_paras = 3
+                elif draft_profile == "lite":
+                    min_contrast = 1
+                    min_eval = 1
+                    min_lim = 1
+                    min_anchor_paras = 1
+                else:
+                    min_contrast = 2
+                    min_eval = 2
+                    min_lim = 1
+                    min_anchor_paras = 2
+
+                contrast_n = len(re.findall(contrast_re, text))
+                eval_n = len(re.findall(eval_re, text))
+                lim_n = len(re.findall(limitation_re, text))
+
+                if contrast_n < min_contrast:
                     issues.append(
                         QualityIssue(
                             code="sections_h3_missing_contrast",
-                            message=f"`{rel}` lacks explicit contrast phrasing (e.g., whereas/in contrast/相比/不同于); survey paragraphs should compare routes, not only summarize.",
+                            message=(
+                                f"`{rel}` lacks explicit contrast phrasing (need >= {min_contrast}; found {contrast_n}). "
+                                "Use whereas/in contrast/相比/不同于 to compare routes, not only summarize."
+                            ),
                         )
                     )
-                if not re.search(eval_re, text):
+                if eval_n < min_eval:
                     issues.append(
                         QualityIssue(
                             code="sections_h3_missing_eval_anchor",
-                            message=f"`{rel}` lacks an evaluation anchor (benchmark/dataset/metric/protocol/评测); add at least one concrete evaluation reference even at abstract level.",
+                            message=(
+                                f"`{rel}` lacks evaluation anchors (need >= {min_eval}; found {eval_n}). "
+                                "Include benchmark/dataset/metric/protocol/评测 even at abstract level."
+                            ),
                         )
                     )
-                if not re.search(limitation_re, text):
+                if lim_n < min_lim:
                     issues.append(
                         QualityIssue(
                             code="sections_h3_missing_limitation",
-                            message=f"`{rel}` lacks a limitation/provisional sentence (limited/unclear/受限/待验证); include at least one explicit caveat to avoid overclaiming.",
+                            message=(
+                                f"`{rel}` lacks limitation/provisional signals (need >= {min_lim}; found {lim_n}). "
+                                "Add explicit caveats (limited/unclear/受限/待验证) to avoid overclaiming."
+                            ),
+                        )
+                    )
+
+                # Evidence-consumption proxy: count paragraphs that are both cited and anchored
+                # (digit OR evaluation token OR limitation token). Helps prevent long-but-generic prose.
+                anchored_paras = 0
+                for p in paragraphs:
+                    if "[@" not in p:
+                        continue
+                    if re.search(r"\d", p) or re.search(eval_re, p) or re.search(limitation_re, p):
+                        anchored_paras += 1
+                if anchored_paras < min_anchor_paras:
+                    issues.append(
+                        QualityIssue(
+                            code="sections_h3_weak_anchor_density",
+                            message=(
+                                f"`{rel}` has too few anchored+cited paragraphs ({anchored_paras}; min={min_anchor_paras}). "
+                                "Ensure multiple paragraphs include citations along with numbers, evaluation anchors, or concrete limitations."
+                            ),
                         )
                     )
             if bib_keys:
@@ -2957,6 +3152,120 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                                 message=f"`{rel}` ({label}) has too few substantive paragraphs ({len(long_paras)}; min={min_paras}). Avoid bullet-only structure; write full paragraphs with citations.",
                             )
                         )
+
+    return issues
+
+
+def _check_section_logic_polisher(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    """Logic-level polish gate (thesis + connector density) for H3 files under `sections/`.
+
+    This is intended to run after drafting and before merge; it blocks when subsections read like paragraph islands.
+    """
+
+    report_rel = outputs[0] if outputs else "output/SECTION_LOGIC_REPORT.md"
+    report_path = workspace / report_rel
+    if not report_path.exists():
+        return [QualityIssue(code="missing_section_logic_report", message=f"`{report_rel}` does not exist.")]
+    report = report_path.read_text(encoding="utf-8", errors="ignore").strip()
+    if not report:
+        return [QualityIssue(code="empty_section_logic_report", message=f"`{report_rel}` is empty.")]
+    if _check_placeholder_markers(report) or "…" in report:
+        return [
+            QualityIssue(
+                code="section_logic_report_placeholders",
+                message=f"`{report_rel}` contains placeholders/ellipsis; regenerate the report after fixing section files.",
+            )
+        ]
+
+    draft_profile = _draft_profile(workspace)
+    if draft_profile == "deep":
+        causal_min, contrast_min, extension_min, impl_min = 3, 2, 2, 1
+    elif draft_profile == "lite":
+        causal_min, contrast_min, extension_min, impl_min = 1, 1, 1, 0
+    else:
+        causal_min, contrast_min, extension_min, impl_min = 2, 2, 2, 1
+
+    thesis_patterns = [
+        r"(?i)\bthis\s+subsection\s+(?:argues|shows|surveys|suggests|demonstrates|contends)\s+that\b",
+        r"(?i)\bin\s+this\s+subsection,\s*(?:we\s+)?(?:argue|show|survey|suggest)\s+that\b",
+        r"(?i)\bwe\s+(?:argue|show|suggest)\s+that\b",
+        r"(?:本小节|本节)(?:认为|指出|主张|讨论|表明)",
+    ]
+
+    causal_re = re.compile(r"\b(therefore|thus|hence|as a result|consequently|accordingly)\b|因此|所以|从而|因而|由此", re.IGNORECASE)
+    contrast_re = re.compile(r"\b(however|nevertheless|nonetheless|yet|whereas|unlike|in contrast|by contrast)\b|然而|相比之下|相较|不同于", re.IGNORECASE)
+    extension_re = re.compile(r"\b(moreover|furthermore|additionally|in addition|similarly|likewise|building on|following)\b|此外|并且|同时|进一步|另外", re.IGNORECASE)
+    implication_re = re.compile(r"\b(this raises|this suggests|this implies|this motivates|this highlights)\b|这(?:提示|表明|意味着|引出)", re.IGNORECASE)
+
+    sec_dir = workspace / "sections"
+    if not sec_dir.exists():
+        return [QualityIssue(code="missing_sections_dir", message="Missing `sections/`; write per-subsection files before logic polishing.")]
+
+    issues: list[QualityIssue] = []
+    for p in sorted(sec_dir.glob("S*.md")):
+        name = p.name
+        if name in {"abstract.md", "discussion.md", "conclusion.md"}:
+            continue
+        if name.endswith("_lead.md"):
+            continue
+        # H3 units are rendered as S<sec>_<sub>.md (underscore).
+        if "_" not in name:
+            continue
+
+        rel = str(p.relative_to(workspace))
+        text = p.read_text(encoding="utf-8", errors="ignore")
+        # First paragraph thesis signal.
+        paras = [q.strip() for q in re.split(r"\n\s*\n", text.strip()) if q.strip()]
+        first = paras[0] if paras else ""
+        first_wo_cites = re.sub(r"\[@[^\]]+\]", "", first)
+        first_wo_cites = re.sub(r"\s+", " ", first_wo_cites).strip()
+        thesis_ok = any(re.search(pat, first_wo_cites) for pat in thesis_patterns)
+        if not thesis_ok:
+            issues.append(
+                QualityIssue(
+                    code="sections_h3_missing_thesis_statement",
+                    message=(
+                        f"`{rel}` is missing an explicit thesis signal in paragraph 1 "
+                        "(prefer: 'This subsection argues/shows/surveys that ...')."
+                    ),
+                )
+            )
+
+        blob = re.sub(r"\[@[^\]]+\]", "", text)
+        blob = blob.lower()
+        causal_n = len(causal_re.findall(blob))
+        contrast_n = len(contrast_re.findall(blob))
+        extension_n = len(extension_re.findall(blob))
+        impl_n = len(implication_re.findall(blob))
+
+        if causal_n < causal_min or contrast_n < contrast_min or extension_n < extension_min or impl_n < impl_min:
+            issues.append(
+                QualityIssue(
+                    code="sections_h3_low_connector_density",
+                    message=(
+                        f"`{rel}` connector density too low for `{draft_profile}` profile: "
+                        f"causal={causal_n} (min {causal_min}), contrast={contrast_n} (min {contrast_min}), "
+                        f"extension={extension_n} (min {extension_min}), implication={impl_n} (min {impl_min})."
+                    ),
+                )
+            )
+
+    # If the report claims PASS but checks fail, force the loop to run again.
+    if issues and "- Status: PASS" in report:
+        issues.append(
+            QualityIssue(
+                code="section_logic_report_out_of_date",
+                message=f"`{report_rel}` reports PASS but current `sections/` files fail checks; rerun the polisher script after edits.",
+            )
+        )
+
+    if not issues and "- Status: PASS" not in report:
+        issues.append(
+            QualityIssue(
+                code="section_logic_report_not_pass",
+                message=f"`{report_rel}` is not PASS; fix failing subsections and rerun `section-logic-polisher`.",
+            )
+        )
 
     return issues
 

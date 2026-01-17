@@ -14,11 +14,20 @@ def _backup_existing(path: Path) -> None:
     backup_existing(path)
 
 
-def _trim(text: str, *, max_len: int = 260) -> str:
+def _trim(text: str, *, max_len: int = 400) -> str:
+    """Normalize whitespace and trim without adding ellipsis (avoid leakage into prose)."""
+
     text = re.sub(r"\s+", " ", str(text or "").strip())
-    if len(text) > int(max_len):
-        text = text[: int(max_len)].rstrip() + "…"
-    return text
+    max_len = int(max_len)
+    if len(text) <= max_len:
+        return text
+
+    cut = text[:max_len].rstrip()
+    # Avoid cutting a token in half.
+    tail = cut[-60:]
+    if " " in tail:
+        cut = cut.rsplit(" ", 1)[0].rstrip()
+    return cut
 
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -60,6 +69,31 @@ def _iter_outline_subsections(outline: Any) -> list[dict[str, str]]:
             if sec_id and sec_title and sub_id and title:
                 out.append({"sub_id": sub_id, "title": title, "section_id": sec_id, "section_title": sec_title})
     return out
+
+
+def _draft_profile(workspace: Path) -> str:
+    """Best-effort parse from `queries.md` (lite|survey|deep)."""
+
+    path = workspace / "queries.md"
+    if not path.exists():
+        return "survey"
+    keys = {"draft_profile", "writing_profile", "quality_profile"}
+    try:
+        for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = raw.strip()
+            if not line.startswith("- ") or ":" not in line:
+                continue
+            key, value = line[2:].split(":", 1)
+            key = key.strip().lower().replace(" ", "_")
+            if key not in keys:
+                continue
+            value = value.split("#", 1)[0].strip().strip('"').strip("'").strip().lower()
+            if value in {"lite", "survey", "deep"}:
+                return value
+            return "survey"
+    except Exception:
+        return "survey"
+    return "survey"
 
 
 def main() -> int:
@@ -158,8 +192,19 @@ def main() -> int:
             if bk and (not bibkeys or bk in bibkeys):
                 bucket.add(bk)
 
+    # Trim policy (avoid silent truncation; keep long enough to preserve concrete detail).
+    TRIM = {
+        "default": 400,
+        "anchor_fact": 420,
+        "highlight_excerpt": 280,
+        "comparison_write_prompt": 420,
+        "eval_bullet": 320,
+        "limitation_excerpt": 320,
+    }
+
     records: list[dict[str, Any]] = []
     now = now_iso_seconds()
+    draft_profile = _draft_profile(workspace)
 
     for sub in subsections:
         sid = sub["sub_id"]
@@ -173,6 +218,7 @@ def main() -> int:
         chapter = chapters_by_sec.get(sec_id) or {}
 
         rq = str(brief.get("rq") or "").strip()
+        thesis = str(brief.get("thesis") or "").strip()
         axes = [str(a).strip() for a in (brief.get("axes") or []) if str(a).strip()]
         paragraph_plan = brief.get("paragraph_plan") or []
 
@@ -181,47 +227,71 @@ def main() -> int:
         mapped = [k for k in mapped if (not bibkeys or k in bibkeys)]
         selected = [k for k in selected if (not bibkeys or k in bibkeys)]
 
+        # Anchor facts (evidence hooks).
         anchors_raw = anchors_by_sub.get(sid) or []
         anchor_facts: list[dict[str, Any]] = []
-        for a in anchors_raw[:12]:
+        anchors_considered = 0
+        anchors_dropped_no_cites = 0
+
+        raw_limit = 16
+        keep_limit = 12 if draft_profile == "deep" else 8
+
+        for a in anchors_raw[:raw_limit]:
+            anchors_considered += 1
             cites = [str(c).strip() for c in (a.get("citations") or []) if str(c).strip()]
             cites = [c for c in cites if c.startswith("@") and (not bibkeys or c[1:] in bibkeys)]
             if not cites:
+                anchors_dropped_no_cites += 1
                 continue
+
             anchor_facts.append(
                 {
                     "hook_type": str(a.get("hook_type") or "").strip(),
-                    "text": _trim(a.get("text") or ""),
+                    "text": _trim(a.get("text") or "", max_len=TRIM["anchor_fact"]),
                     "citations": cites,
                     "paper_id": str(a.get("paper_id") or "").strip(),
                     "evidence_id": str(a.get("evidence_id") or "").strip(),
                     "pointer": str(a.get("pointer") or "").strip(),
                 }
             )
-            if len(anchor_facts) >= 8:
+
+            if len(anchor_facts) >= keep_limit:
                 break
 
+        # Comparison cards (A-vs-B contrasts).
+        raw_comparisons = pack.get("concrete_comparisons") or []
+        comparisons_considered = 0
+        comparisons_dropped_no_highlights = 0
+        hl_dropped_no_cites = 0
+
         comparison_cards: list[dict[str, Any]] = []
-        for comp in (pack.get("concrete_comparisons") or [])[:6]:
+        comp_raw_limit = 10
+        comp_keep_limit = 6 if draft_profile == "deep" else 4
+
+        for comp in (raw_comparisons or [])[:comp_raw_limit]:
             if not isinstance(comp, dict):
                 continue
+            comparisons_considered += 1
+
             cites = [str(c).strip() for c in (comp.get("citations") or []) if str(c).strip()]
             cites = [c for c in cites if c.startswith("@") and (not bibkeys or c[1:] in bibkeys)]
 
             def _hl(side: str) -> list[dict[str, Any]]:
+                nonlocal hl_dropped_no_cites
                 out: list[dict[str, Any]] = []
-                for hl in (comp.get(side) or [])[:2]:
+                for hl in (comp.get(side) or [])[:3]:
                     if not isinstance(hl, dict):
                         continue
                     hcites = [str(c).strip() for c in (hl.get("citations") or []) if str(c).strip()]
                     hcites = [c for c in hcites if c.startswith("@") and (not bibkeys or c[1:] in bibkeys)]
                     if not hcites:
+                        hl_dropped_no_cites += 1
                         continue
                     out.append(
                         {
                             "paper_id": str(hl.get("paper_id") or "").strip(),
                             "evidence_id": str(hl.get("evidence_id") or "").strip(),
-                            "excerpt": _trim(hl.get("excerpt") or "", max_len=220),
+                            "excerpt": _trim(hl.get("excerpt") or "", max_len=TRIM["highlight_excerpt"]),
                             "citations": hcites,
                             "pointer": str(hl.get("pointer") or "").strip(),
                         }
@@ -235,40 +305,140 @@ def main() -> int:
                 "citations": cites,
                 "A_highlights": _hl("A_highlights"),
                 "B_highlights": _hl("B_highlights"),
-                "write_prompt": _trim(comp.get("write_prompt") or "", max_len=320),
+                "write_prompt": _trim(comp.get("write_prompt") or "", max_len=TRIM["comparison_write_prompt"]),
             }
             if card["axis"] and (card["A_highlights"] or card["B_highlights"]):
                 comparison_cards.append(card)
-            if len(comparison_cards) >= 4:
+            else:
+                comparisons_dropped_no_highlights += 1
+
+            if len(comparison_cards) >= comp_keep_limit:
                 break
 
-        eval_proto = []
-        for it in (pack.get("evaluation_protocol") or [])[:6]:
-            if not isinstance(it, dict):
-                continue
-            cites = [str(c).strip() for c in (it.get("citations") or []) if str(c).strip()]
-            cites = [c for c in cites if c.startswith("@") and (not bibkeys or c[1:] in bibkeys)]
-            if not cites:
-                continue
-            eval_proto.append({"bullet": _trim(it.get("bullet") or "", max_len=260), "citations": cites})
+        # Evaluation protocol bullets.
+        raw_eval = pack.get("evaluation_protocol") or []
+        eval_considered = 0
+        eval_dropped_no_cites = 0
 
-        lim_hooks = []
-        for it in (pack.get("failures_limitations") or [])[:8]:
+        eval_proto: list[dict[str, Any]] = []
+        for it in (raw_eval or [])[:10]:
             if not isinstance(it, dict):
                 continue
+            eval_considered += 1
             cites = [str(c).strip() for c in (it.get("citations") or []) if str(c).strip()]
             cites = [c for c in cites if c.startswith("@") and (not bibkeys or c[1:] in bibkeys)]
             if not cites:
+                eval_dropped_no_cites += 1
+                continue
+            eval_proto.append({"bullet": _trim(it.get("bullet") or "", max_len=TRIM["eval_bullet"]), "citations": cites})
+            if len(eval_proto) >= 8:
+                break
+
+        # Failure/limitation hooks.
+        raw_lim = pack.get("failures_limitations") or []
+        lim_considered = 0
+        lim_dropped_no_cites = 0
+
+        lim_hooks: list[dict[str, Any]] = []
+        for it in (raw_lim or [])[:14]:
+            if not isinstance(it, dict):
+                continue
+            lim_considered += 1
+            cites = [str(c).strip() for c in (it.get("citations") or []) if str(c).strip()]
+            cites = [c for c in cites if c.startswith("@") and (not bibkeys or c[1:] in bibkeys)]
+            if not cites:
+                lim_dropped_no_cites += 1
                 continue
             # `evidence-draft` uses `bullet` (not `excerpt`) for failures/limitations.
             text = it.get("excerpt") or it.get("bullet") or it.get("text") or ""
             lim_hooks.append(
                 {
-                    "excerpt": _trim(text, max_len=260),
+                    "excerpt": _trim(text, max_len=TRIM["limitation_excerpt"]),
                     "citations": cites,
                     "pointer": str(it.get("pointer") or "").strip(),
                 }
             )
+            if len(lim_hooks) >= (10 if draft_profile == "deep" else 8):
+                break
+
+        # Explicit must-use minima: make the writer contract executable (and debuggable).
+        if draft_profile == "deep":
+            min_anchor = 3
+            min_comp = 3
+            min_lim = 2
+        elif draft_profile == "lite":
+            min_anchor = 1
+            min_comp = 1
+            min_lim = 1
+        else:
+            min_anchor = 2
+            min_comp = 2
+            min_lim = 1
+
+        must_use = {
+            "min_anchor_facts": min_anchor,
+            "min_comparison_cards": min_comp,
+            "min_limitation_hooks": min_lim,
+            "require_cited_numeric_if_available": True,
+            "require_multi_cite_synthesis_paragraph": True,
+            "thesis_required": True,
+        }
+
+        pack_warnings: list[str] = []
+        if not thesis:
+            pack_warnings.append(
+                "Missing `thesis` in subsection briefs; fix `subsection-briefs` so the writer has a central claim to execute."
+            )
+        if len(anchor_facts) < min_anchor:
+            pack_warnings.append(
+                "Too few anchor facts after trimming; strengthen `anchor-sheet` or upstream evidence packs to avoid generic prose."
+            )
+        if len(comparison_cards) < min_comp:
+            pack_warnings.append(
+                "Too few comparison cards after trimming; strengthen `evidence-draft` (excerpt-level A-vs-B contrasts) to avoid per-paper summaries."
+            )
+        if len(eval_proto) < 1:
+            pack_warnings.append(
+                "Missing evaluation protocol bullets; strengthen `evidence-draft` so the writer can anchor comparisons to benchmarks/metrics."
+            )
+        if len(lim_hooks) < min_lim:
+            pack_warnings.append(
+                "Too few limitation hooks; strengthen `evidence-draft` so limitations are concrete (not generic future work)."
+            )
+
+        if anchors_considered and anchors_dropped_no_cites / max(1, anchors_considered) >= 0.5:
+            pack_warnings.append(
+                "Many anchor facts were dropped due to missing citations; ensure `anchor-sheet` records citations for each anchor."
+            )
+
+        pack_stats = {
+            "anchors": {
+                "raw": len(anchors_raw),
+                "considered": anchors_considered,
+                "kept": len(anchor_facts),
+                "dropped_no_cites": anchors_dropped_no_cites,
+            },
+            "comparisons": {
+                "raw": len([c for c in (raw_comparisons or []) if isinstance(c, dict)]),
+                "considered": comparisons_considered,
+                "kept": len(comparison_cards),
+                "dropped_no_highlights": comparisons_dropped_no_highlights,
+                "highlights_dropped_no_cites": hl_dropped_no_cites,
+            },
+            "evaluation_protocol": {
+                "raw": len([e for e in (raw_eval or []) if isinstance(e, dict)]),
+                "considered": eval_considered,
+                "kept": len(eval_proto),
+                "dropped_no_cites": eval_dropped_no_cites,
+            },
+            "limitation_hooks": {
+                "raw": len([l for l in (raw_lim or []) if isinstance(l, dict)]),
+                "considered": lim_considered,
+                "kept": len(lim_hooks),
+                "dropped_no_cites": lim_dropped_no_cites,
+            },
+            "trim_policy": TRIM,
+        }
 
         record = {
             "sub_id": sid,
@@ -276,10 +446,12 @@ def main() -> int:
             "section_id": sec_id,
             "section_title": sec_title,
             "rq": rq,
+            "thesis": thesis,
             "axes": axes,
             "paragraph_plan": paragraph_plan,
             "chapter_throughline": chapter.get("throughline") or [],
             "chapter_key_contrasts": chapter.get("key_contrasts") or [],
+            "chapter_synthesis_mode": str(chapter.get("synthesis_mode") or "").strip(),
             "allowed_bibkeys_selected": selected,
             "allowed_bibkeys_mapped": mapped,
             "allowed_bibkeys_chapter": sorted(chapter_union.get(sec_id, set())),
@@ -288,6 +460,9 @@ def main() -> int:
             "comparison_cards": comparison_cards,
             "evaluation_protocol": eval_proto,
             "limitation_hooks": lim_hooks,
+            "must_use": must_use,
+            "pack_warnings": pack_warnings,
+            "pack_stats": pack_stats,
             "generated_at": now,
         }
 

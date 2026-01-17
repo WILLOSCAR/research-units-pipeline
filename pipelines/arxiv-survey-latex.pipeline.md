@@ -1,6 +1,6 @@
 ---
 name: arxiv-survey-latex
-version: 1.8
+version: 1.9
 target_artifacts:
   - papers/retrieval_report.md
   - outline/taxonomy.yml
@@ -30,9 +30,11 @@ target_artifacts:
   - sections/abstract.md
   - sections/discussion.md
   - sections/conclusion.md
+  - output/SECTION_LOGIC_REPORT.md
   - output/GLOBAL_REVIEW.md
   - output/DRAFT.md
   - output/MERGE_REPORT.md
+  - output/CITATION_BUDGET_REPORT.md
   - output/AUDIT_REPORT.md
   - latex/main.tex
   - latex/main.pdf
@@ -148,8 +150,10 @@ Notes:
 ## Stage 5 - Draft + PDF (C5) [PROSE AFTER C2]
 required_skills:
 - subsection-writer
+- section-logic-polisher
 - transition-weaver
 - section-merger
+- citation-diversifier
 - draft-polisher
 - global-reviewer
 - pipeline-auditor
@@ -165,8 +169,10 @@ produces:
 - sections/abstract.md
 - sections/discussion.md
 - sections/conclusion.md
+- output/SECTION_LOGIC_REPORT.md
 - output/MERGE_REPORT.md
 - output/DRAFT.md
+- output/CITATION_BUDGET_REPORT.md
 - output/GLOBAL_REVIEW.md
 - output/AUDIT_REPORT.md
 - latex/main.tex
@@ -178,20 +184,26 @@ Notes:
   - Planner pass: for each section/subsection, pick the exact citation IDs to use from the evidence bank (`outline/evidence_drafts.jsonl`) and keep scope consistent with the outline.
   - Writer pass: write that section using only those citation IDs; avoid dumping the whole notes set into context (prevents “lost in the middle” + template filler).
 - Treat this stage as an iteration loop:
-  - draft per H3 → de-template/cohere → global review → (if gaps) go back to C3/C4 to strengthen evidence packs → regenerate draft.
+  - draft per H3 → logic-polish (thesis + connectors) → weave transitions → merge → de-template/cohere → global review → (if gaps) go back to C3/C4 to strengthen evidence packs → regenerate draft.
 - Depth target (survey-quality): each H3 should be **8–12 paragraphs** (aim ~1200–2000 words) with >=2 concrete contrasts + an evaluation anchor + a cross-paper synthesis paragraph + an explicit limitation (quality gates should block short stubs).
 - Coherence target (paper-like): for every H2 chapter with H3 subsections, write a short **chapter lead** block (`sections/S<sec_id>_lead.md`) that previews the comparison axes and how the H3s connect (no new headings; avoid generic glue).
 - PDF compile should run early/often to catch LaTeX failures, but compile success is not narrative quality.
 - `section-merger` produces a paper-like `output/DRAFT.md` by merging `sections/*.md` plus `outline/transitions.md`. Evidence-first visuals (`outline/tables.md`, `outline/timeline.md`, `outline/figures.md`) are **intermediate artifacts** by default and should be woven into prose intentionally (or kept out of the main draft) to avoid inflating the PDF ToC with short, reader-facing-empty sections.
 - Citation scope policy: citations are subsection-first (from `outline/evidence_bindings.jsonl`), with limited reuse allowed within the same H2 chapter to reduce brittleness; avoid cross-chapter “free cite” drift.
+- If you intentionally add/remove citations after an earlier polish run, reset the citation-anchoring baseline before rerunning `draft-polisher`:
+  - delete `output/citation_anchors.prepolish.jsonl` (workspace-local), then rerun `draft-polisher`.
 - Recommended skills (toolkit, not a rigid one-shot chain):
-  - Modular drafting: `subsection-writer` → `transition-weaver` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor` → `latex-*`.
+  - Modular drafting: `subsection-writer` → `section-logic-polisher` → `transition-weaver` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor` → `latex-*`.
   - Legacy one-shot drafting: `prose-writer` (kept for quick experiments; less debuggable).
+  - If the draft reads like “paragraph islands”, run `section-logic-polisher` and patch only failing `sections/S*.md` until PASS, then merge.
 - `queries.md` can set `evidence_mode: "abstract"|"fulltext"` (default template uses `abstract`).
 - `queries.md` can set `draft_profile: "lite"|"survey"|"deep"` to control writing gate strictness (default: `survey`).
 - If `evidence_mode: "fulltext"`, `pdf-text-extractor` can be tuned via `fulltext_max_papers`, `fulltext_max_pages`, `fulltext_min_chars`, and `--local-pdfs-only`.
 - In strict mode, the pipeline should block if the PDF is too short (<8 pages) or if citations are undefined (even if LaTeX technically compiles).
 
 ## Quality gates (strict mode)
-- Citation coverage: expect a large, verifiable bibliography (e.g., ≥150 BibTeX entries) and high cite density (e.g., H3 ≥8; Intro/Related Work ≥10 in `survey` profile).
+- Citation coverage: expect a large, verifiable bibliography (e.g., ≥150 BibTeX entries) and high cite density:
+  - Per-H3: `survey` profile expects >=10 unique citations per H3 (and deeper profiles may require more).
+  - Front matter: `survey` profile expects Introduction>=12 and Related Work>=15 unique citations.
+  - Global: `pipeline-auditor` also gates on **unique citations across the full draft** (typically ~100+ for 8 H3 subsections); if it fails, add more in-scope citations using each H3’s `allowed_bibkeys_selected` / `allowed_bibkeys_mapped` from `outline/writer_context_packs.jsonl`.
 - Anti-template: drafts containing ellipsis placeholders (`…`) or leaked scaffold instructions (e.g., "enumerate 2-4 ...") should block and be regenerated from improved outline/mapping/evidence artifacts.

@@ -9,6 +9,8 @@ from typing import Any
 
 
 def _stable_choice(key: str, options: list[str]) -> str:
+    """Deterministic choice (stable across runs) while allowing rich template variety."""
+
     if not options:
         return ""
     digest = hashlib.sha1((key or "").encode("utf-8", errors="ignore")).hexdigest()
@@ -99,6 +101,29 @@ def _short_list(items: Any, *, limit: int = 4) -> list[str]:
     return out
 
 
+def _focus_terms(rec: dict[str, Any]) -> str:
+    """Pick subsection-specific, no-facts "handles" to mention in transitions."""
+
+    parts: list[str] = []
+    bridge = ", ".join(_short_list(rec.get("bridge_terms"), limit=3))
+    axes = ", ".join(_short_list(rec.get("axes"), limit=2))
+    hook = str(rec.get("contrast_hook") or "").strip()
+
+    if bridge:
+        parts.append(bridge)
+    if axes:
+        parts.append(axes)
+    if hook:
+        parts.append(hook)
+
+    out: list[str] = []
+    for p in parts:
+        p = str(p or "").strip()
+        if p and p not in out:
+            out.append(p)
+    return "; ".join(out[:2]).strip()
+
+
 def _h3_transition(*, a_id: str, b_id: str, briefs: dict[str, dict[str, Any]]) -> str:
     a = briefs.get(a_id) or {}
     b = briefs.get(b_id) or {}
@@ -106,17 +131,19 @@ def _h3_transition(*, a_id: str, b_id: str, briefs: dict[str, dict[str, Any]]) -
     a_title = str(a.get("title") or a_id).strip()
     b_title = str(b.get("title") or b_id).strip()
 
-    b_bridge = ", ".join(_short_list(b.get("bridge_terms"), limit=3))
-    b_hook = str(b.get("contrast_hook") or "").strip()
-
-    b_focus = b_bridge or b_hook or "the next comparison handles"
+    b_focus = _focus_terms(b) or "a concrete comparison handle"
 
     variants = [
-        f"Next, we move from {a_title} to {b_title}, focusing on {b_focus} so the following comparisons stay operational and checkable.",
-        f"Building on {a_title}, we turn to {b_title} and make the next contrast concrete via {b_focus}.",
-        f"After {a_title}, {b_title} shifts from setup to {b_focus}, tightening the link between mechanisms and evaluation.",
-        f"To keep the thread continuous, we follow {a_title} with {b_title}, focusing on {b_focus} and what it enables or constrains downstream.",
+        f"Next, we move from {a_title} to {b_title}, shifting the lens to {b_focus} so the comparisons stay operational rather than thematic.",
+        f"Building on {a_title}, {b_title} makes the next contrast explicit via {b_focus}, tightening the bridge from mechanism to evaluation.",
+        f"After {a_title}, we turn to {b_title} and reuse {b_focus} as the handle for the next set of trade-offs.",
+        f"To keep the thread continuous, we follow {a_title} with {b_title}, where {b_focus} clarifies what changes and what carries over.",
+        f"With {a_title} as context, {b_title} zooms in on {b_focus}, making the next section of the argument more checkable.",
+        f"We now pivot from {a_title} to {b_title}; the focus on {b_focus} prevents the discussion from fragmenting into isolated summaries.",
+        f"Having established {a_title}, {b_title} revisits the theme through {b_focus}, setting up sharper comparisons in what follows.",
+        f"From {a_title} to {b_title}, the connective tissue is {b_focus}: it determines which comparisons are meaningful and which are misleading.",
     ]
+
     sent = _stable_choice(f"h3:{a_id}->{b_id}", variants)
     return f"- {a_id} → {b_id}: {sent}"
 
@@ -124,17 +151,16 @@ def _h3_transition(*, a_id: str, b_id: str, briefs: dict[str, dict[str, Any]]) -
 def _h2_opener(*, sec_title: str, first_sub_id: str, briefs: dict[str, dict[str, Any]]) -> str:
     b = briefs.get(first_sub_id) or {}
     b_title = str(b.get("title") or first_sub_id).strip()
-
-    b_bridge = ", ".join(_short_list(b.get("bridge_terms"), limit=3))
-    b_hook = str(b.get("contrast_hook") or "").strip()
-
-    b_focus = b_bridge or b_hook or "shared comparison handles"
+    b_focus = _focus_terms(b) or "shared comparison handles"
 
     variants = [
-        f"We open {sec_title} with {b_title} to establish the shared lens ({b_focus}) reused across the chapter.",
-        f"{sec_title} starts with {b_title}, turning the theme into concrete handles ({b_focus}) that later subsections can vary and test.",
-        f"To ground {sec_title}, we begin with {b_title} and establish {b_focus} as the common lens for the chapter’s contrasts.",
+        f"We open {sec_title} with {b_title} to establish {b_focus} as the common lens reused across the chapter.",
+        f"{sec_title} starts with {b_title}, translating the theme into {b_focus} that later subsections can vary and stress-test.",
+        f"To ground {sec_title}, we begin with {b_title} and pin down {b_focus} before layering on additional constraints.",
+        f"The first step in {sec_title} is {b_title}: it fixes {b_focus} so subsequent comparisons do not drift.",
+        f"{sec_title} begins at {b_title}, where {b_focus} turns a broad topic into concrete evaluation-ready handles.",
     ]
+
     sent = _stable_choice(f"h2open:{sec_title}->{first_sub_id}", variants)
     return f"- {sec_title} → {first_sub_id}: {sent}"
 
@@ -142,15 +168,16 @@ def _h2_opener(*, sec_title: str, first_sub_id: str, briefs: dict[str, dict[str,
 def _h2_handoff(*, last_sub_id: str, next_sec_title: str, briefs: dict[str, dict[str, Any]]) -> str:
     a = briefs.get(last_sub_id) or {}
     a_title = str(a.get("title") or last_sub_id).strip()
-    a_bridge = ", ".join(_short_list(a.get("bridge_terms"), limit=3))
-
-    a_focus = a_bridge or "the key axes"
+    a_focus = _focus_terms(a) or "the key axes"
 
     variants = [
-        f"After {a_title} closes the local comparison ({a_focus}), we move to {next_sec_title} to revisit the theme at the next layer (design → evidence → implications).",
-        f"With {a_title} establishing the section’s last needed contrast, we hand off to {next_sec_title} and change the lens while keeping the core terms consistent.",
-        f"Having finished {a_title}, we transition to {next_sec_title} to address what the previous section could not: new constraints, new interfaces, or a different evaluation emphasis.",
+        f"After {a_title} closes the local comparison ({a_focus}), we move to {next_sec_title} to revisit the theme at the next layer of abstraction.",
+        f"With {a_title} completing this chapter’s last needed contrast, we hand off to {next_sec_title} and change the lens while keeping core terms stable.",
+        f"Having finished {a_title}, we transition to {next_sec_title} to address what the previous section leaves open: new interfaces, new constraints, or a different evaluation emphasis.",
+        f"{a_title} leaves us with {a_focus}; {next_sec_title} follows by reframing those handles into a new set of comparisons.",
+        f"We now step from {a_title} into {next_sec_title}, carrying forward {a_focus} but applying it to a different part of the overall argument.",
     ]
+
     sent = _stable_choice(f"h2handoff:{last_sub_id}->{next_sec_title}", variants)
     return f"- {last_sub_id} → {next_sec_title}: {sent}"
 
@@ -158,9 +185,12 @@ def _h2_handoff(*, last_sub_id: str, next_sec_title: str, briefs: dict[str, dict
 def _h2_to_h2(*, a_title: str, b_title: str) -> str:
     variants = [
         f"Next, we move from {a_title} to {b_title}, shifting from framing to evidence-backed comparisons.",
-        f"{a_title} provides context; {b_title} continues by making the next layer of the argument concrete.",
-        f"We now turn to {b_title} to clarify how the previous framing translates into checkable comparisons and evaluation anchors.",
+        f"{a_title} sets the context; {b_title} continues by making the next layer of the argument concrete.",
+        f"We now turn to {b_title} to clarify how the previous framing translates into checkable contrasts and evaluation anchors.",
+        f"With {a_title} established, {b_title} follows by narrowing the discussion to the decisions that matter in practice.",
+        f"From {a_title} to {b_title}, the goal stays the same, but the unit of analysis changes: from concepts to comparisons.",
     ]
+
     sent = _stable_choice(f"h2:{a_title}->{b_title}", variants)
     return f"- {a_title} → {b_title}: {sent}"
 

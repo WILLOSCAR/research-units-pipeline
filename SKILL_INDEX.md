@@ -56,6 +56,7 @@
 - `transition-weaver`：生成 H2/H3 过渡句映射（不新增事实/引用）→ `outline/transitions.md`
 - `grad-paragraph`：研究生段落 micro-skill（张力→对比→评测锚点→限制），用于写出“像综述”的正文段落（通常嵌入 `sections/S*.md` 的写作流程）
 - `subsection-writer`：按 H2/H3 拆分写作到 `sections/`（可独立 QA）→ `sections/sections_manifest.jsonl` + `sections/S*.md`
+- `section-logic-polisher`：写作逻辑自检（thesis + 连接词密度），在 merge 前做局部修复 → `output/SECTION_LOGIC_REPORT.md`
 - `writer-selfloop`：写作自循环（读 `output/QUALITY_GATE.md`，只改失败小节直到 PASS）→ 更新 `sections/*.md`
 - `subsection-polisher`：局部小节润色（pre-merge；结构化段落 + 去模板；不改 citation keys）
 - `section-merger`：把 `sections/` + `outline/transitions.md` 按 `outline/outline.yml` 合并 → `output/DRAFT.md` + `output/MERGE_REPORT.md`
@@ -66,6 +67,7 @@
 - `citation-anchoring`：引用锚定回归（防润色把引用挪到别的小节导致 claim→evidence 错位）
 - `global-reviewer`：全局一致性回看（术语/章节呼应/结论回扣 RQ），输出 `output/GLOBAL_REVIEW.md`
 - `pipeline-auditor`：回归审计（PASS/FAIL）：ellipsis/模板句/引用健康/证据绑定 → `output/AUDIT_REPORT.md`
+- `citation-diversifier`：引用预算与去重增密（NO NEW FACTS）：按 H3 给出未使用且 in-scope 的可加 citation keys → `output/CITATION_BUDGET_REPORT.md`
 - `tutorial-spec`：教程规格说明 → `output/TUTORIAL_SPEC.md`（C1）
 - `tutorial-module-writer`：模块化教程内容 → `output/TUTORIAL.md`（C3）
 - `protocol-writer`：系统综述协议 → `output/PROTOCOL.md`（C1）
@@ -101,6 +103,7 @@
 - “写综述 / 写 draft / prose” → `prose-writer`
 - “研究生段落 / 论证段 / 段落结构（对比+限制+评测锚点）” → `grad-paragraph`
 - “分小节写 / per-section / per-subsection / sections/” → `subsection-writer`
+- “段落逻辑 / thesis / connectors / paragraph islands / 小节主线” → `section-logic-polisher`
 - “自循环 / quality gate loop / 改到 PASS / rewrite failing sections” → `writer-selfloop`
 - “小节润色 / pre-merge polish / per-subsection polish” → `subsection-polisher`
 - “合并草稿 / merge sections / section merger / 拼接草稿” → `section-merger`
@@ -109,6 +112,7 @@
 - “去重复 / boilerplate removal / redundancy” → `redundancy-pruner`
 - “引用锚定 / 引用漂移 / citation anchoring” → `citation-anchoring`
 - “audit / regression / 质量回归 / 证据绑定检查” → `pipeline-auditor`
+- “引用太少 / unique citations too low / citation budget / 增加引用” → `citation-diversifier`
 - “过渡句 / transitions / 章节承接” → `transition-weaver`
 - “LaTeX / PDF / 编译” → `latex-scaffold`, `latex-compile-qa`
 - “系统综述 / PRISMA / protocol” → `protocol-writer`, `screening-manager`, `extraction-form`, `bias-assessor`, `synthesis-writer`

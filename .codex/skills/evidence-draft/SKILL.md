@@ -21,6 +21,7 @@ Key design: every pack should contain **evidence snippets** (1–2 sentences) wi
 - No fabrication: do not invent datasets/metrics/numbers.
 - Citation hygiene: every cite key must exist in `citations/ref.bib`.
 - Claim candidates must be snippet-derived (no axis-driven “Hypothesis: …” items); put questions into `verify_fields` instead.
+- Avoid silent truncation: keep `claim_candidates[].claim` long enough to carry concrete detail (<= ~400 chars) and keep highlight `excerpt` sentence-level (<= ~280 chars).
 - Evidence-aware language:
   - fulltext-backed → can summarize comparisons
   - abstract-only/title-only → must be provisional + list verify-fields (no strong “dominant trade-offs” language)

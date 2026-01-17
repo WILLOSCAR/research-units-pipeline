@@ -101,6 +101,9 @@ If it still fails, only touch the remaining failing files and repeat.
 - `sections_missing_files`: create the missing `sections/*.md` first (don’t merge yet).
 - `sections_h3_too_short` / `sections_h3_too_few_paragraphs`: add concrete comparisons + eval protocol details + synthesis + limitation (don’t add fluff).
 - `sections_h3_missing_cited_numeric`: pick an anchor fact with digits from `outline/anchor_sheet.jsonl` and integrate it with citations.
+- `sections_h3_weak_anchor_density`: ensure multiple paragraphs are both cited and anchored (digit OR evaluation token OR limitation token), not just long descriptions.
+- `sections_h3_citation_dump_paragraphs`: rewrite paragraphs that end with `[@a; @b; @c]` as the only citations; embed citations inside the sentences they support.
+- `sections_citation_dump_line`: remove stand-alone citation-only lines; merge the citation into the claim sentence.
 - `sections_cites_outside_mapping`: you used citation keys outside the binding set → fix mapping/bindings or rewrite to stay in-scope.
 - `sections_h3_missing_contrast` / `sections_h3_missing_eval_anchor` / `sections_h3_missing_limitation`: add the missing micro-structure signals explicitly.
 

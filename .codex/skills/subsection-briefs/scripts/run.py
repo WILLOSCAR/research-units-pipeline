@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -116,7 +117,14 @@ def main() -> int:
             want=3,
         )
 
+        thesis = _thesis_statement(
+            sub_title=sub_title,
+            axes=axes,
+            evidence_summary=dict(evidence_summary),
+        )
+
         paragraph_plan = _paragraph_plan(
+            sub_id=sub_id,
             sub_title=sub_title,
             rq=rq,
             axes=axes,
@@ -133,6 +141,7 @@ def main() -> int:
                 "section_id": sec_id,
                 "section_title": sec_title,
                 "rq": rq,
+                "thesis": thesis,
                 "scope_rule": scope_rule,
                 "axes": axes,
                 "bridge_terms": _bridge_terms(sub_title=sub_title, axes=axes, goal=goal),
@@ -246,6 +255,31 @@ def _paper_ref(pid: str, *, notes_by_id: dict[str, dict[str, Any]]) -> PaperRef:
     year = int(note.get("year") or 0) if str(note.get("year") or "").isdigit() else 0
     evidence_level = str(note.get("evidence_level") or "").strip().lower() or "unknown"
     return PaperRef(paper_id=pid, bibkey=bibkey, title=title, year=year, evidence_level=evidence_level)
+
+def _pick(seed: str, options: list[str]) -> str:
+    """Deterministic picker to avoid repeating the same connector phrasing everywhere."""
+    if not options:
+        return ""
+    h = int(hashlib.md5(seed.encode("utf-8", errors="ignore")).hexdigest()[:8], 16)
+    return options[h % len(options)]
+
+
+def _thesis_statement(*, sub_title: str, axes: list[str], evidence_summary: dict[str, int]) -> str:
+    """Return a 1-sentence, execution-oriented thesis (NO NEW FACTS)."""
+    title = re.sub(r"\s+", " ", (sub_title or "").strip())
+    a1 = axes[0] if axes else "mechanism and evaluation"
+    a2 = axes[1] if len(axes) > 1 else ""
+    axes_phrase = a1 if not a2 else f"{a1} and {a2}"
+
+    has_fulltext = int(evidence_summary.get("fulltext", 0) or 0) > 0
+    if has_fulltext:
+        return (
+            f"This subsection argues that design choices in {title} induce decision-relevant trade-offs—especially in {axes_phrase}—"
+            "and that these trade-offs should be compared under consistent evaluation protocols."
+        )
+    return (
+        f"This subsection surveys {title} and argues that comparisons should emphasize {axes_phrase} while explicitly flagging which claims remain provisional under abstract-only evidence."
+    )
 
 
 def _choose_axes(*, sub_title: str, goal: str, evidence_needs: list[str], outline_axes: list[str]) -> list[str]:
@@ -692,7 +726,15 @@ def _build_clusters(*, paper_refs: list[PaperRef], goal: str, want: int) -> list
 
 
 
-def _paragraph_plan(*, sub_title: str, rq: str, axes: list[str], clusters: list[dict[str, Any]], evidence_summary: dict[str, int]) -> list[dict[str, Any]]:
+def _paragraph_plan(
+    *,
+    sub_id: str,
+    sub_title: str,
+    rq: str,
+    axes: list[str],
+    clusters: list[dict[str, Any]],
+    evidence_summary: dict[str, int],
+) -> list[dict[str, Any]]:
     """Return a paragraph-by-paragraph writing plan (NO PROSE).
 
     Survey default: prefer fewer, thicker paragraphs with explicit contrasts and an evaluation anchor.
@@ -708,65 +750,120 @@ def _paragraph_plan(*, sub_title: str, rq: str, axes: list[str], clusters: list[
 
     axes_hint = ", ".join(axes[:5])
 
+    contrast_prefix = _pick(
+        f"{sub_id}:contrast",
+        ["In contrast,", "However,", "By contrast,", "Unlike this route,"],
+    )
+    extend_prefix = _pick(
+        f"{sub_id}:extend",
+        ["Building on this,", "More concretely,", "At the implementation level,", "Following this design,"],
+    )
+    eval_prefix = _pick(
+        f"{sub_id}:eval",
+        ["To evaluate these trade-offs,", "Empirically,", "In evaluations,", "Under standard benchmarks,"],
+    )
+    synth_prefix = _pick(
+        f"{sub_id}:synth",
+        ["Collectively,", "Stepping back,", "Overall,", "Taken together,"],
+    )
+    causal_prefix = _pick(
+        f"{sub_id}:causal",
+        ["Therefore,", "As a result,", "Consequently,", "This suggests that"],
+    )
+    lim_prefix = _pick(
+        f"{sub_id}:lim",
+        ["Despite these advances,", "However, these routes remain limited by", "A key limitation is that", "This raises the question of whether"],
+    )
+
     plan = [
         {
             "para": 1,
+            "argument_role": "setup_thesis",
             "intent": "Define scope, setup, and the subsection thesis (no pipeline jargon).",
             "focus": ["scope boundary", "key definitions", "thesis vs neighboring subsections"],
+            "connector_to_prev": "",
+            "connector_phrase": "",
             "use_clusters": [c1] if c1 else [],
         },
         {
             "para": 2,
+            "argument_role": "mechanism_cluster_A",
             "intent": "Explain cluster A: core mechanism/architecture and what decision it makes in the agent loop.",
             "focus": [f"cluster: {c1}", "mechanism / architecture", "assumptions"],
+            "connector_to_prev": "grounding",
+            "connector_phrase": f"{_pick(f'{sub_id}:p2', ['To ground this thesis,', 'To make this concrete,'])} we first examine {c1} approaches and the agent-loop decision they make.",
             "use_clusters": [c1] if c1 else [],
         },
         {
             "para": 3,
+            "argument_role": "implementation_cluster_A",
             "intent": "Cluster A implementation details: data/training signals and interface contract (tools/memory) that constrain behavior.",
             "focus": [f"cluster: {c1}", "data / training setup", "interface contract", f"axes: {axes_hint}"],
+            "connector_to_prev": "elaboration",
+            "connector_phrase": f"{extend_prefix} these designs imply concrete interface/data assumptions that shape behavior.",
             "use_clusters": [c1] if c1 else [],
         },
         {
             "para": 4,
+            "argument_role": "evaluation_cluster_A",
             "intent": "Cluster A evaluation/trade-offs: where it works, costs (compute/latency), and typical failure modes.",
             "focus": [f"cluster: {c1}", "evaluation anchor", "efficiency", "failure modes"],
+            "connector_to_prev": "evaluation",
+            "connector_phrase": f"{eval_prefix} summarize what protocols/metrics are used and where {c1} fails or becomes costly.",
             "use_clusters": [c1] if c1 else [],
         },
         {
             "para": 5,
+            "argument_role": "contrast_cluster_B",
             "intent": "Explain cluster B (contrast with A): core mechanism/architecture and what it optimizes for.",
             "focus": [f"cluster: {c2}", f"contrast with {c1}", "mechanism / architecture"],
+            "connector_to_prev": "contrast",
+            "connector_phrase": f"{contrast_prefix} {c2} approaches shift the emphasis and optimize for a different point in the trade-off space.",
             "use_clusters": [c2] if c2 else ([c1] if c1 else []),
         },
         {
             "para": 6,
+            "argument_role": "implementation_cluster_B",
             "intent": "Cluster B implementation details: data/training and interface assumptions (mirror A for comparability).",
             "focus": [f"cluster: {c2}", "data / training setup", "interface contract", f"axes: {axes_hint}"],
+            "connector_to_prev": "elaboration",
+            "connector_phrase": f"{extend_prefix} the B-route relies on different interface/training assumptions, which changes failure modes and costs.",
             "use_clusters": [c2] if c2 else ([c1] if c1 else []),
         },
         {
             "para": 7,
+            "argument_role": "evaluation_cluster_B",
             "intent": "Cluster B evaluation/trade-offs: where it works, costs, and failure modes (mirror A).",
             "focus": [f"cluster: {c2}", "evaluation anchor", "efficiency", "failure modes"],
+            "connector_to_prev": "evaluation",
+            "connector_phrase": f"{eval_prefix} contrast B’s evaluation evidence with A under comparable settings (when available).",
             "use_clusters": [c2] if c2 else ([c1] if c1 else []),
         },
         {
             "para": 8,
+            "argument_role": "cross_paper_synthesis",
             "intent": "Cross-paper synthesis: compare clusters along the main axes (include >=2 citations in one paragraph).",
             "focus": [f"compare {c1} vs {c2}", "multiple citations in one paragraph", f"axes: {axes_hint}"],
+            "connector_to_prev": "synthesis",
+            "connector_phrase": f"{synth_prefix} the key distinction between {c1} and {c2} is how they trade off {axes_hint} under evaluation constraints.",
             "use_clusters": [x for x in [c1, c2, c3] if x],
         },
         {
             "para": 9,
+            "argument_role": "decision_guidance",
             "intent": "Decision guidance: when to choose which route (criteria + evaluation signals + engineering constraints).",
             "focus": ["decision checklist", "evaluation protocol", "practical constraints"],
+            "connector_to_prev": "consequence",
+            "connector_phrase": f"{causal_prefix} propose a decision checklist that maps evaluation signals and constraints to route selection.",
             "use_clusters": [x for x in [c1, c2, c3] if x],
         },
         {
             "para": 10,
+            "argument_role": "limitations_open_questions",
             "intent": "Limitations + verification targets; end with a concrete open question to hand off.",
             "focus": ["limitations", f"evidence mode: {mode}", "what needs verification", "open question"],
+            "connector_to_prev": "limitations",
+            "connector_phrase": f"{lim_prefix} key claims hinge on assumptions that should be stress-tested; end with a concrete verification target.",
             "use_clusters": [x for x in [c1, c2, c3] if x],
         },
     ]
