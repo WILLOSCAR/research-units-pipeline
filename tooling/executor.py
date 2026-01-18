@@ -25,6 +25,32 @@ class RunResult:
     message: str
 
 
+def _append_run_error(*, workspace: Path, unit_id: str, skill: str, kind: str, message: str, log_rel: str | None) -> None:
+    """Append a short failure record to `output/RUN_ERRORS.md` (workspace-local).
+
+    This is a human-facing error sink that survives reruns and makes BLOCKED states debuggable.
+    """
+
+    try:
+        ensure_dir(workspace / "output")
+        out_path = workspace / "output" / "RUN_ERRORS.md"
+
+        stamp = now_iso_seconds()
+        log_hint = f" (log: `{log_rel}`)" if log_rel else ""
+        line = f"- {stamp} `{unit_id}` `{skill}` `{kind}`: {message}{log_hint}"
+
+        if out_path.exists() and out_path.stat().st_size > 0:
+            prev = out_path.read_text(encoding="utf-8", errors="ignore").rstrip() + "\n"
+        else:
+            prev = "# Run errors\n\n"
+
+        atomic_write_text(out_path, prev + line + "\n")
+    except Exception:
+        # Never let the runner crash while trying to log an error.
+        return
+
+
+
 def run_one_unit(
     *,
     workspace: Path,
@@ -143,6 +169,15 @@ def run_one_unit(
         row["status"] = "BLOCKED"
         table.save(units_path)
         update_status_log(status_path, f"{now_iso_seconds()} {unit_id} BLOCKED (exec error)")
+        _append_run_error(
+            workspace=workspace,
+            unit_id=unit_id,
+            skill=skill,
+            kind="exec_error",
+            message=f"{type(exc).__name__}: {exc}",
+            log_rel=None,
+        )
+        _refresh_status_checkpoint(status_path, table)
         return RunResult(unit_id=unit_id, status="BLOCKED", message=str(exc))
 
     missing = [rel for rel in required_outputs if rel and not (workspace / rel).exists()]
@@ -186,9 +221,25 @@ def run_one_unit(
     table.save(units_path)
     if missing:
         update_status_log(status_path, f"{now_iso_seconds()} {unit_id} BLOCKED (missing outputs: {', '.join(missing)})")
+        _append_run_error(
+            workspace=workspace,
+            unit_id=unit_id,
+            skill=skill,
+            kind="missing_outputs",
+            message=f"Missing outputs: {', '.join(missing)}",
+            log_rel=log_rel if log_path.exists() else None,
+        )
         _refresh_status_checkpoint(status_path, table)
         return RunResult(unit_id=unit_id, status="BLOCKED", message=f"Missing outputs: {', '.join(missing)}" + (f"; see {log_rel}" if log_path.exists() else ""))
     update_status_log(status_path, f"{now_iso_seconds()} {unit_id} BLOCKED (script failed)")
+    _append_run_error(
+        workspace=workspace,
+        unit_id=unit_id,
+        skill=skill,
+        kind="script_failed",
+        message=f"Skill script failed (exit {completed.returncode})",
+        log_rel=log_rel if log_path.exists() else None,
+    )
     _refresh_status_checkpoint(status_path, table)
     return RunResult(unit_id=unit_id, status="BLOCKED", message=f"Skill script failed (exit {completed.returncode})" + (f"; see {log_rel}" if log_path.exists() else ""))
 

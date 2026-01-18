@@ -1,5 +1,32 @@
 # Skill & Pipeline Standard (Codex CLI + Claude Code)
 
+> **Core idea**: Make pipelines that can "guide humans / guide models"—each skill is a **semantic execution unit** that knows what to do, how to do it, when it's done, and what NOT to do.
+
+---
+
+## Design Principles
+
+**Traditional problem**: Research pipelines are either black-box scripts (hard to debug) or loose documentation (requires human judgment at runtime).
+
+**Our solution**: **Skills-first + decomposed pipeline + evidence-first**.
+
+1. **Semantic Skills**: Each skill is not a function, but a **guided execution unit**:
+   - `inputs / outputs`: explicit dependencies and artifacts
+   - `acceptance`: completion criteria (e.g., "each subsection maps to >=8 papers")
+   - `notes`: how to do it, edge cases, common mistakes
+   - `guardrail`: what NOT to do (e.g., **NO PROSE** in C2-C4)
+
+2. **Decomposed Pipeline**: 6 checkpoints (C0→C5), 36 atomic units, dependencies explicit in `UNITS.csv`
+3. **Evidence-First**: C2-C4 enforce building evidence substrate first, C5 writes prose
+
+**Design Goals**:
+- **Reusable**: Same skill works across pipelines—no rewriting logic
+- **Guided**: Newcomers/models follow `acceptance` + `notes`—no guessing
+- **Constrained**: `guardrail` prevents executors from going off-rails
+- **Locatable**: Failures point to specific skill + artifact—fix and resume
+
+---
+
 This repo is meant to work well across:
 - OpenAI Codex (Codex CLI / IDE)
 - Anthropic Claude Code (Claude Code CLI)
@@ -68,17 +95,57 @@ Borrowing the best pattern from Anthropic’s `skills` repos:
 
 ## 2b) Paper Voice Contract (writing-stage skills)
 
-When a skill writes/edits prose (C5), prefer a “paper voice” contract over brittle style rules:
+When a skill writes/edits prose (C5), prefer a "paper voice" contract over brittle style rules:
 
 - **No outline narration**: avoid `This subsection ...`, `In this subsection, we ...`, `Next, we move ...` (rewrite as content claims + argument bridges).
-- **Evidence policy once**: keep abstract/fulltext limitations in one short front-matter paragraph; don’t repeat “abstract-only” disclaimers in every H3.
+- **Evidence policy once**: keep abstract/fulltext limitations in one short front-matter paragraph; don't repeat "abstract-only" disclaimers in every H3.
 - **Light signposting**: avoid repeating a literal opener label across many subsections (e.g., `Key takeaway:`); vary opener phrasing and cadence.
-- **Soft academic tone**: calm, understated; avoid hype (`clearly`, `obviously`, `breakthrough`) and “PPT speaker notes”.
-- **Coherence without rigidity**: use connectors (contrast/causal/extension) as needed, but don’t force every paragraph to start with `However/Moreover`.
+- **Soft academic tone**: calm, understated; avoid hype (`clearly`, `obviously`, `breakthrough`) and "PPT speaker notes".
+- **Coherence without rigidity**: use connectors (contrast/causal/extension) as needed, but don't force every paragraph to start with `However/Moreover`.
 - **Controlled citation scope**: subsection-first by default; allow chapter-scoped reuse; treat bibkeys mapped to >= `queries.md:global_citation_min_subsections` subsections (default 3) as cross-cutting/global (`allowed_bibkeys_global`) to reduce brittle writer BLOCKED loops.
 
+### Generator voice anti-patterns (forbidden)
+
+**Planner talk** (construction notes leaking into prose):
+- ❌ "After X, Y makes the bridge explicit via..."
+- ❌ "This paragraph turns the tension into a concrete comparison"
+- ❌ "The following subsection synthesizes..."
+- ✅ Instead: write the content directly (e.g., "Y addresses X by...")
+
+**Template stems** (repetitive survey-guidance phrases):
+- ❌ "Taken together, these approaches..." (limit ≤2 per draft)
+- ❌ "This survey should..." (limit ≤1 per draft)
+- ❌ "This run demonstrates..." (avoid entirely)
+- ✅ Instead: vary synthesis openers (decision-first, tension-first, evidence-first)
+
+**Meta-guidance phrasing** (talking about the paper instead of doing research):
+- ❌ "We organize this section as follows..."
+- ❌ "The remainder of this survey..."
+- ❌ "Our contribution is to survey..."
+- ✅ Instead: state findings/contrasts directly
+
 Implementation bias:
-- Prefer **skill guidance + auditor warnings with examples** over “hard blocks” on specific phrases.
+- Prefer **skill guidance + auditor warnings with examples** over "hard blocks" on specific phrases.
+
+## 2c) "NO PROSE" Definition (C2-C4 guardrail)
+
+C2-C4 outputs must be **structured, non-narrative** to prevent "middle-state leakage" where planning notes accidentally become final prose.
+
+**Allowed formats:**
+- ✅ Bullets, short phrases, JSONL fields, tables, schemas
+- ✅ Structured keys (e.g., `thesis`, `contrast_hook`, `paragraph_plan`)
+- ✅ Citation keys without narrative embedding (e.g., `[@smith2023]` in lists)
+
+**Forbidden patterns:**
+- ❌ Narrative paragraphs or prose sentences
+- ❌ Semicolon-enumerated construction notes (e.g., "mechanism; data; evaluation")
+- ❌ Meta-phrases about transformation (e.g., "turning X into Y", "bridging A to B")
+- ❌ Template phrases (e.g., "Taken together", "This subsection will")
+- ❌ Planner talk (e.g., "After establishing X, we move to Y")
+
+**18 skills enforce this**: subsection-briefs, evidence-draft, evidence-binder, anchor-sheet, writer-context-pack, claim-matrix-rewriter, table-schema, chapter-briefs, transition-weaver (output only), and others in C2-C4.
+
+**Rationale**: Intermediate artifacts are **writing substrate**, not drafts. Prose generation happens only in C5 after human approval.
 
 ## 3) Pipeline/Units contract (repo-specific)
 
@@ -94,6 +161,24 @@ Implementation bias:
 - Units with `owner=HUMAN` block until the corresponding checkbox is ticked.
 - Prose writing is only allowed after the required approval (survey default: `C2`).
 
+### Checkpoint approval workflow
+
+**DECISIONS.md structure** (per checkpoint):
+```markdown
+## C2: Structure Approval
+
+**Workspace**: `<current-workspace-name>`
+**Artifacts to review**: outline/outline.yml, outline/mapping.tsv, outline/coverage_report.md
+
+- [ ] Approve C2 (outline scope + H2/H3 structure + paper coverage)
+```
+
+**Self-check requirement**: Each checkpoint block must show the current workspace path to prevent stale approvals.
+
+**Approval semantics**:
+- Unchecked (`- [ ]`): blocks all downstream units with `owner=HUMAN` dependency
+- Checked (`- [x]`): unblocks C5 prose writing (for C2) or downstream stages
+
 ## 4) “LLM-first” execution model (recommended)
 
 For semantic units:
@@ -104,27 +189,86 @@ For semantic units:
 For deterministic units (retrieval/dedupe/compile/format checks):
 - Use scripts under the skill’s `scripts/` folder.
 
-## 5) Minimal authoring checklist
+## 5) Quality Gate Standards (pipeline-auditor)
+
+**Deterministic checks** (all must pass for PASS status):
+
+| Check | Threshold | Rationale |
+|-------|-----------|-----------|
+| Placeholder leakage | 0 occurrences | No `...`, `TODO`, `[placeholder]`, `<...>` in final draft |
+| Outline alignment | Exact match | H3 count/order must match `outline/outline.yml` |
+| Template phrase repetition | "Taken together" ≤2, "survey should" ≤1 | Avoid survey-guidance stems |
+| Evidence-policy disclaimer spam | ≤1 paragraph | State abstract/fulltext limitations once in front matter |
+| Pipeline voice leakage | 0 occurrences | No "This run", "This pipeline", "This workspace" |
+| Synthesis stem repetition | Varied openers | No more than 2 H3s starting with same synthesis pattern |
+| Meta survey-guidance phrasing | 0 occurrences | No "We organize this section as", "The remainder of" |
+| Numeric claim context | ≥80% coverage | Claims with numbers must include task/metric/constraint context |
+| Citation health | 0 undefined/duplicate keys | All `[@key]` must exist in `citations/ref.bib` |
+| Evidence binding compliance | 100% in-scope | Citations must stay within `outline/evidence_bindings.jsonl` allowed set |
+
+**Report-class skills contract**:
+- All report skills (section-logic-polisher, global-reviewer, pipeline-auditor) **must write output regardless of PASS/FAIL**.
+- Standard report structure:
+  ```markdown
+  ## Status: PASS | FAIL
+
+  ## Summary
+  <one-line verdict>
+
+  ## Warnings
+  <actionable issues with line numbers/examples>
+
+  ## Details
+  <per-check breakdown>
+  ```
+- Rationale: Self-healing loop requires failure information to be persisted (see RC2 in PIPELINE_DIAGNOSIS_AND_IMPROVEMENT.md).
+
+## 6) JSONL Interface Schema (cross-skill contracts)
+
+**Standardized field names** (enforce consistency across skills):
+
+| Field | Type | Required | Format | Used by |
+|-------|------|----------|--------|---------|
+| `section_id` | string | Yes | `S<H2>.<H3>` (e.g., `S2.1`) | All outline/evidence/writing skills |
+| `subsection_id` | string | Yes (H3-level) | Same as `section_id` | subsection-briefs, evidence-draft, writer-context-pack |
+| `chapter_id` | string | Yes (H2-level) | `S<H2>` (e.g., `S2`) | chapter-briefs |
+| `citations` | array | Optional | `["smith2023", "jones2024"]` (no `@` prefix) | paper-notes, evidence-draft, writer-context-pack |
+| `evidence_ids` | array | Optional | `["E001", "E042"]` | evidence-binder, evidence-draft |
+| `paper_id` | string | Yes (paper-level) | Stable identifier from `papers/core_set.csv` | paper-notes, section-mapper |
+
+**Citation key format**:
+- In JSONL: `"citations": ["smith2023"]` (no `@` prefix)
+- In Markdown: `[@smith2023]` (with `@` prefix)
+- In BibTeX: `@article{smith2023, ...}` (entry key)
+
+**Required vs optional fields per artifact type**:
+- **Briefs** (subsection_briefs.jsonl): `subsection_id`, `thesis`, `contrast_hook`, `paragraph_plan` (required); `citations` (optional)
+- **Evidence packs** (evidence_drafts.jsonl): `subsection_id`, `claim_candidates`, `concrete_comparisons`, `evaluation_protocol`, `limitations` (required); `evidence_ids`, `citations` (optional)
+- **Writer context packs** (writer_context_packs.jsonl): `subsection_id`, `allowed_bibkeys`, `must_use`, `do_not_repeat_phrases` (required)
+
+## 7) Minimal authoring checklist
 
 ### New skill
 
 - [ ] Has `SKILL.md` with `name` + `description`.
 - [ ] Declares clear **Inputs / Outputs** and **Acceptance criteria**.
 - [ ] If scripts exist: they are deterministic and safe; `SKILL.md` explains when to use them.
+- [ ] If outputs JSONL: follows standardized field names from section 6.
 
 ### New pipeline
 
 - [ ] `pipelines/<name>.pipeline.md` has YAML front matter with `units_template`.
 - [ ] Every `required_skills` listed in the pipeline appears in the units template CSV.
 - [ ] Units template references only existing skill folders.
+- [ ] All `target_artifacts` are produced by at least one unit (no orphaned declarations).
 
-## 6) Cross-tool compatibility (.claude + .codex)
+## 8) Cross-tool compatibility (.claude + .codex)
 
 Codex discovers skills under `.codex/skills/`. For Claude Code, keep `.claude/skills/` pointing at the same set (symlink or copy).
 
 Repo helper: `python scripts/validate_repo.py` checks pipeline↔template↔skill alignment.
 
-## 7) Offline-first conventions (optional)
+## 9) Offline-first conventions (optional)
 
 When network is unreliable/unavailable, prefer “record now, verify later” and keep the run auditable:
 - Citations: `citations/verified.jsonl` may include `verification_status=offline_generated` (recorded but not yet verified). Later, rerun `citation-verifier` online to upgrade to verified.
