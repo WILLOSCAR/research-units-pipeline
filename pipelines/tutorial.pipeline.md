@@ -1,6 +1,6 @@
 ---
 name: tutorial
-version: 1.0
+version: 2.0
 target_artifacts:
   - output/TUTORIAL_SPEC.md
   - outline/concept_graph.yml
@@ -11,6 +11,8 @@ units_template: templates/UNITS.tutorial.csv
 ---
 
 # Pipeline: tutorial (teaching loop)
+
+Goal: a tutorial deliverable (`output/TUTORIAL.md`) that has a consistent running example and a real teaching loop (objectives -> steps -> exercises -> verification), not just a blog-style explanation.
 
 ## Stage 0 - Init (C0)
 required_skills:
@@ -29,6 +31,9 @@ required_skills:
 produces:
 - output/TUTORIAL_SPEC.md
 
+Notes:
+- The spec is the scope contract: audience, prerequisites, learning objectives, and a running example (if applicable).
+
 ## Stage 2 - Structure (C2) [NO PROSE]
 required_skills:
 - concept-graph
@@ -41,8 +46,14 @@ human_checkpoint:
 - approve: target audience + scope + running example
 - write_to: DECISIONS.md
 
+Notes:
+- Treat `outline/module_plan.yml` as the execution contract for writing: modules must have concrete outputs and at least one verifiable exercise each.
+
 ## Stage 3 - Writing (C3) [PROSE ALLOWED]
 required_skills:
 - tutorial-module-writer
 produces:
 - output/TUTORIAL.md
+
+Notes:
+- Write only within the approved scope; if you discover missing prerequisites, record them as a follow-up instead of expanding scope silently.

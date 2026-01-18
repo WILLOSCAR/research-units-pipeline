@@ -5,4 +5,6 @@ U010,Run broad retrieval and save raw papers,RETRIEVE,arxiv-search,queries.md,pa
 U020,Dedupe+rank and produce core set,CURATE,dedupe-rank,papers/papers_raw.jsonl,papers/papers_dedup.jsonl;papers/core_set.csv,"core_set 20-30篇且重复率<2%",C1,TODO,U010,CODEX
 U030,Build taxonomy (2-level minimum),STRUCTURE,taxonomy-builder,papers/core_set.csv,outline/taxonomy.yml,"taxonomy至少2层且节点带解释",C2,TODO,U020,CODEX
 U040,Build outline bullets (NO PROSE),STRUCTURE,outline-builder,outline/taxonomy.yml,outline/outline.yml,"每小节≥3个bullet，且无长 prose",C2,TODO,U030,CODEX
-U050,Write 1-page snapshot (bullets/evidence),WRITE,prose-writer,outline/outline.yml;papers/core_set.csv,output/SNAPSHOT.md,"1页以内；仅 bullets+key refs；不写长段落",C2,TODO,U040,CODEX
+U042,Draft C2 review summary (scope+outline),META,pipeline-router,outline/taxonomy.yml;outline/outline.yml,DECISIONS.md,"DECISIONS含C2 review摘要",C2,TODO,U040,CODEX
+U045,HUMAN approve C2 (scope+outline),META,pipeline-router,DECISIONS.md,DECISIONS.md,"勾选 DECISIONS.md 的 Approve C2",C2,TODO,U042,HUMAN
+U050,Write 1-page snapshot (bullet-first),WRITE,snapshot-writer,outline/outline.yml;papers/core_set.csv;DECISIONS.md,output/SNAPSHOT.md,"1页以内；bullets-first；每个非平凡观点附 1-2 个 paper pointers；避免模板旁白句式",C3,TODO,U045,CODEX

@@ -336,6 +336,12 @@ flowchart LR
   S_section_merger --> F_output_DRAFT_md
   F_output_MERGE_REPORT_md["`output/MERGE_REPORT.md`"]:::file
   S_section_merger --> F_output_MERGE_REPORT_md
+  S_snapshot_writer["`snapshot-writer`"]:::skill
+  F_outline_outline_yml --> S_snapshot_writer
+  F_papers_core_set_csv --> S_snapshot_writer
+  F_papers_papers_dedup_jsonl --> S_snapshot_writer
+  F_queries_md --> S_snapshot_writer
+  S_snapshot_writer --> F_output_SNAPSHOT_md
   S_subsection_briefs["`subsection-briefs`"]:::skill
   F_GOAL_md --> S_subsection_briefs
   F_outline_claim_evidence_matrix_md --> S_subsection_briefs
@@ -698,15 +704,21 @@ flowchart LR
     U_U002["`U002`\n`pipeline-router`"]:::unit
   end
 
-  subgraph "C1 - Retrieval"
+  subgraph "C1 - Retrieval & core set"
     U_U010["`U010`\n`arxiv-search`"]:::unit
     U_U020["`U020`\n`dedupe-rank`"]:::unit
   end
 
-  subgraph "C2 - Structure + snapshot"
+  subgraph "C2 - Structure"
     U_U030["`U030`\n`taxonomy-builder`"]:::unit
     U_U040["`U040`\n`outline-builder`"]:::unit
-    U_U050["`U050`\n`prose-writer`"]:::unit
+    U_U042["`U042`\n`pipeline-router`"]:::unit
+    U_U045["`U045`\n`pipeline-router`"]:::unit
+    class U_U045 human
+  end
+
+  subgraph "C3 - Snapshot"
+    U_U050["`U050`\n`snapshot-writer`"]:::unit
   end
 
   U_U001 --> U_U002
@@ -714,7 +726,9 @@ flowchart LR
   U_U010 --> U_U020
   U_U020 --> U_U030
   U_U030 --> U_U040
-  U_U040 --> U_U050
+  U_U040 --> U_U042
+  U_U042 --> U_U045
+  U_U045 --> U_U050
 ```
 
 ### peer-review
@@ -768,23 +782,30 @@ flowchart LR
     class U_U020 human
   end
 
-  subgraph "C2 - Screening"
+  subgraph "C2 - Retrieval & candidate pool"
+    U_U025["`U025`\n`literature-engineer`"]:::unit
+    U_U026["`U026`\n`dedupe-rank`"]:::unit
+  end
+
+  subgraph "C3 - Screening"
     U_U030["`U030`\n`screening-manager`"]:::unit
   end
 
-  subgraph "C3 - Extraction"
+  subgraph "C4 - Extraction"
     U_U040["`U040`\n`extraction-form`"]:::unit
     U_U045["`U045`\n`bias-assessor`"]:::unit
   end
 
-  subgraph "C4 - Synthesis"
+  subgraph "C5 - Synthesis"
     U_U050["`U050`\n`synthesis-writer`"]:::unit
   end
 
   U_U001 --> U_U002
   U_U002 --> U_U010
   U_U010 --> U_U020
-  U_U020 --> U_U030
+  U_U020 --> U_U025
+  U_U025 --> U_U026
+  U_U026 --> U_U030
   U_U030 --> U_U040
   U_U040 --> U_U045
   U_U045 --> U_U050

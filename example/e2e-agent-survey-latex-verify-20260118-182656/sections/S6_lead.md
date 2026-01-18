@@ -1,0 +1,3 @@
+Evaluation and risk are the shared constraints that determine whether an agent design is meaningful beyond a demo. Benchmarks define what is measured and what is ignored; security and governance define what cannot be ignored in deployment, even if it is inconvenient to measure [@Mohammadi2025Evaluation; @Zhang2025Security].
+
+We focus on protocol-aware evaluation: task suites, cost models, and reproducibility controls, alongside threat models such as prompt injection, data exfiltration, and tool abuse. The goal is to make the evaluation layer explicit enough that conclusions can transfer across systems and settings [@Fu2025Eval; @Kale2025Reliable].

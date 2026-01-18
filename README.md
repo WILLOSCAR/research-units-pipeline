@@ -2,6 +2,8 @@
 
 一个 skills-first 的研究流水线骨架：用 `pipelines/*.pipeline.md` 定义流程，用 workspace 下的 `UNITS.csv + CHECKPOINTS.md + DECISIONS.md` 做执行合约（可见、可审计、可自循环）。
 
+English version: [`README.en.md`](README.en.md).
+
 ## 一句话启用（推荐：对话里跑 Pipeline）
 
 把下面这句话丢给 Codex（或 Claude Code）即可：
@@ -41,3 +43,48 @@
 - Pipeline：`pipelines/`
 - Skills 索引：`SKILL_INDEX.md`
 - 质量门/问题清单：`PIPELINE_DIAGNOSIS_AND_IMPROVEMENT.md` + `question.md`
+
+## 示例产物（v0.1，包含完整中间产物）
+
+路径：`example/e2e-agent-survey-latex-verify-20260118-182656/`（pipeline：`pipelines/arxiv-survey-latex.pipeline.md`）。
+配置摘要：`draft_profile: lite` / `evidence_mode: abstract` / `core_size: 220`（详见 `queries.md`）。
+
+目录速览（每个文件夹干嘛用）：
+
+```text
+example/e2e-agent-survey-latex-verify-20260118-182656/
+  STATUS.md            # 进度与执行日志（当前 checkpoint）
+  UNITS.csv            # 执行合约：一行一个 unit（依赖/验收/产物）
+  DECISIONS.md         # 人类检查点（Approve C*）
+  CHECKPOINTS.md       # checkpoint 规则
+  PIPELINE.lock.md     # 选中的 pipeline（单一真相源）
+  GOAL.md              # 目标/范围 seed
+  queries.md            # 检索与写作档位配置（draft_profile/evidence_mode/core_size...）
+  papers/              # C1/C3：检索结果与论文“底座”
+  outline/             # C2/C3/C4：taxonomy/outline/mapping + briefs + evidence packs + tables/figures 规格
+  citations/           # C4：BibTeX 与 verification 记录
+  sections/            # C5：按 H2/H3 拆分的可 QA 小文件（含 chapter lead）
+  output/              # C5：合并后的 DRAFT + 报告（audit/merge/citation budget...）
+  latex/               # C5：LaTeX scaffold + 编译产物（main.pdf）
+```
+
+文件夹之间的“流水线关系”：
+
+```mermaid
+flowchart LR
+  C0["Contract files<br/>(STATUS/UNITS/DECISIONS)"] --> C1["papers/ (retrieval + core set)"]
+  C1 --> C2["outline/ (taxonomy/outline/mapping)"]
+  C2 --> C4["citations/ (ref.bib + verified)"]
+  C4 --> C5s["sections/ (per-H3 writing units)"]
+  C5s --> OUT["output/ (DRAFT + reports)"]
+  OUT --> TEX["latex/ (main.tex + main.pdf)"]
+```
+
+只看最终交付：
+- Markdown 草稿：`example/e2e-agent-survey-latex-verify-20260118-182656/output/DRAFT.md`
+- PDF：`example/e2e-agent-survey-latex-verify-20260118-182656/latex/main.pdf`
+- QA 报告：`example/e2e-agent-survey-latex-verify-20260118-182656/output/AUDIT_REPORT.md`
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=WILLOSCAR/research-units-pipeline-skills&type=Date)](https://star-history.com/#WILLOSCAR/research-units-pipeline-skills&Date)

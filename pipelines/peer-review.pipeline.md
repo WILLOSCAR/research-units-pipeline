@@ -1,6 +1,6 @@
 ---
 name: peer-review
-version: 1.0
+version: 2.0
 target_artifacts:
   - output/CLAIMS.md
   - output/MISSING_EVIDENCE.md
@@ -11,6 +11,8 @@ units_template: templates/UNITS.peer-review.csv
 ---
 
 # Pipeline: peer review / referee report
+
+Goal: produce an actionable referee report (`output/REVIEW.md`) that is traceable to the submitted paper’s claims and evidence (no free-floating advice, no invented comparisons).
 
 ## Stage 0 - Init (C0)
 required_skills:
@@ -29,6 +31,10 @@ required_skills:
 produces:
 - output/CLAIMS.md
 
+Notes:
+- Input expectation: you must have the manuscript text available as `output/PAPER.md` (or equivalent extracted text) before running this stage.
+- Contract: every claim must include a source pointer (section/page/quote) so later critique is auditable.
+
 ## Stage 2 - Evidence audit (C2)
 required_skills:
 - evidence-auditor
@@ -37,8 +43,15 @@ produces:
 - output/MISSING_EVIDENCE.md
 - output/NOVELTY_MATRIX.md
 
+Notes:
+- Evidence-auditor should write gaps/risks/verification steps, not “fix the paper”.
+- Novelty-matrix should be conservative: compare against cited/known related work; if you lack sources, record that limitation explicitly.
+
 ## Stage 3 - Rubric write-up (C3)
 required_skills:
 - rubric-writer
 produces:
 - output/REVIEW.md
+
+Notes:
+- Prefer concrete, minimal fixes (what experiment/ablation/analysis would resolve the concern) over generic “needs more experiments”.
