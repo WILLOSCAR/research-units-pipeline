@@ -70,6 +70,7 @@
 
 - `transition-weaver`：生成 H2/H3 过渡句映射（不新增事实/引用）→ `outline/transitions.md`
 - `grad-paragraph`：研究生段落 micro-skill（张力→对比→评测锚点→限制），用于写出“像综述”的正文段落（通常嵌入 `sections/S*.md` 的写作流程）
+- `snapshot-writer`：写 1 页 snapshot（bullets-first + paper pointers；不需要 evidence packs/BibTeX）→ `output/SNAPSHOT.md`（用于 `lit-snapshot`）
 - `subsection-writer`：按 H2/H3 拆分写作到 `sections/`（可独立 QA）→ `sections/sections_manifest.jsonl` + `sections/S*.md`
 - `section-logic-polisher`：写作逻辑自检（thesis + 连接词密度），在 merge 前做局部修复 → `output/SECTION_LOGIC_REPORT.md`
 - `writer-selfloop`：写作自循环（读 `output/QUALITY_GATE.md`，只改失败小节直到 PASS）→ 更新 `sections/*.md`
@@ -118,6 +119,7 @@
 - “tables / 表格 / schema-first tables / 表格填充” → `table-schema`, `table-filler`
 - “timeline / figures / 可视化” → `survey-visuals`
 - “写综述 / 写 draft / prose” → `prose-writer`
+- “snapshot / 速览 / SNAPSHOT.md / one-page snapshot” → `snapshot-writer`
 - “研究生段落 / 论证段 / 段落结构（对比+限制+评测锚点）” → `grad-paragraph`
 - “分小节写 / per-section / per-subsection / sections/” → `subsection-writer`
 - “段落逻辑 / thesis / connectors / paragraph islands / 小节主线” → `section-logic-polisher`
@@ -143,8 +145,10 @@
 - `papers/papers_raw.jsonl` → `dedupe-rank`
 - `papers/papers_dedup.jsonl` → `taxonomy-builder`（可选辅助输入）
 - `papers/core_set.csv` → `taxonomy-builder`, `section-mapper`, `pdf-text-extractor`, `paper-notes`
+- `papers/core_set.csv` → `snapshot-writer`
 - `outline/taxonomy.yml` → `outline-builder`
 - `outline/outline.yml` → `section-mapper`, `table-schema`, `transition-weaver`, `prose-writer`
+- `outline/outline.yml` → `snapshot-writer`
 - `outline/OUTLINE_BUDGET_REPORT.md` → `outline-refiner`（可选：解释大纲 merge 变更）
 - `outline/mapping.tsv` → `pdf-text-extractor`, `paper-notes`
 - `papers/paper_notes.jsonl` → `citation-verifier`
@@ -187,6 +191,7 @@
 - `outline/timeline.md`, `outline/figures.md` → `survey-visuals`
 - `outline/transitions.md` → `transition-weaver`
 - `output/DRAFT.md` → `prose-writer`, `draft-polisher`
+- `output/SNAPSHOT.md` → `snapshot-writer`
 - `output/CITATION_BUDGET_REPORT.md` → `citation-diversifier`
 - `output/CITATION_INJECTION_REPORT.md` → `citation-injector`
 - `output/citation_anchors.prepolish.jsonl` → `draft-polisher`（baseline）, `citation-anchoring`

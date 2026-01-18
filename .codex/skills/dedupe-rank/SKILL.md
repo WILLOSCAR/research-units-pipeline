@@ -55,6 +55,7 @@ This is a deterministic “curation” step: it should be stable and repeatable.
 ### Notes
 
 - This step may annotate `papers/core_set.csv:reason` with tags such as `pinned_classic` and `prior_survey` (deterministic, topic-aware guards for survey writing).
+- Systematic-review default: if the active pipeline is `systematic-review` and `core_size` is not specified, the script keeps the full deduped pool in `papers/core_set.csv` (so screening does not silently drop candidates).
 - This step is deterministic; reruns should be stable for the same inputs.
 
 ## Troubleshooting

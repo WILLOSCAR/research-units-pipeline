@@ -10,7 +10,6 @@
 
 ```mermaid
 flowchart LR
-  classDef optional stroke-dasharray: 5 5;
   classDef human fill:#ffebee,stroke:#e53935,color:#b71c1c,stroke-width:2px;
 
   subgraph "C0 - Init"
@@ -143,37 +142,48 @@ flowchart LR
   OB -.-> OBU -.-> SM
 ```
 
-## lit-snapshot (C0–C2)
+## lit-snapshot (C0–C3)
 
 ```mermaid
 flowchart LR
   classDef optional stroke-dasharray: 5 5;
+  classDef human fill:#ffebee,stroke:#e53935,color:#b71c1c,stroke-width:2px;
 
   subgraph "C0 - Init"
     WS[workspace-init]
     PR0[pipeline-router]
   end
 
-  subgraph "C1 - Retrieval"
+  subgraph "C1 - Retrieval & core set"
     KX[keyword-expansion]:::optional
     AS[arxiv-search]
     DR[dedupe-rank]
   end
 
-  subgraph "C2 - Structure + snapshot [NO LONG PROSE]"
+  subgraph "C2 - Structure [NO PROSE]"
     TB[taxonomy-builder]
     OB[outline-builder]
-    PW[prose-writer]
+    OBU[outline-budgeter]:::optional
+    PR2[pipeline-router]
+    C2A{{Approve C2 (HUMAN)}}:::human
   end
 
-  WS --> PR0 --> AS --> DR --> TB --> OB --> PW
+  subgraph "C3 - Snapshot [SHORT PROSE]"
+    SW[snapshot-writer]
+    PW[prose-writer]:::optional
+  end
+
+  WS --> PR0 --> AS --> DR --> TB --> OB --> PR2 --> C2A --> SW
   KX -.-> AS
+  OB -.-> OBU -.-> PR2
+  C2A -.-> PW
 ```
 
 ## tutorial (C0–C3)
 
 ```mermaid
 flowchart LR
+  classDef optional stroke-dasharray: 5 5;
   classDef human fill:#ffebee,stroke:#e53935,color:#b71c1c,stroke-width:2px;
 
   subgraph "C0 - Init"
@@ -199,10 +209,11 @@ flowchart LR
   WS --> PR0 --> TS --> CG --> MP --> EB --> C2A --> TMW
 ```
 
-## systematic-review (C0–C4)
+## systematic-review (C0–C5)
 
 ```mermaid
 flowchart LR
+  classDef optional stroke-dasharray: 5 5;
   classDef human fill:#ffebee,stroke:#e53935,color:#b71c1c,stroke-width:2px;
 
   subgraph "C0 - Init"
@@ -215,20 +226,29 @@ flowchart LR
     C1A{{Approve C1 (HUMAN)}}:::human
   end
 
-  subgraph "C2 - Screening"
+  subgraph "C2 - Retrieval & candidate pool"
+    KX[keyword-expansion]:::optional
+    AS[arxiv-search]:::optional
+    LE[literature-engineer]
+    DR[dedupe-rank]
+  end
+
+  subgraph "C3 - Screening"
     SCM[screening-manager]
   end
 
-  subgraph "C3 - Extraction"
+  subgraph "C4 - Extraction"
     EF[extraction-form]
     BA[bias-assessor]
   end
 
-  subgraph "C4 - Synthesis [PROSE]"
+  subgraph "C5 - Synthesis [PROSE]"
     SW[synthesis-writer]
   end
 
-  WS --> PR0 --> PR --> C1A --> SCM --> EF --> BA --> SW
+  WS --> PR0 --> PR --> C1A --> LE --> DR --> SCM --> EF --> BA --> SW
+  KX -.-> LE
+  AS -.-> DR
 ```
 
 ## peer-review (C0–C3)

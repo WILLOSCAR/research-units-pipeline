@@ -114,6 +114,21 @@ def main() -> int:
     write_jsonl(dedup_path, deduped)
 
     core_size = max(1, int(args.core_size))
+    if not core_size_cfg:
+        lock_path = workspace / "PIPELINE.lock.md"
+        if lock_path.exists():
+            try:
+                for raw in lock_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                    line = raw.strip().lower()
+                    if not line.startswith("pipeline:"):
+                        continue
+                    pipeline = line.split(":", 1)[1].strip()
+                    if "systematic-review" in pipeline:
+                        # Systematic reviews should not silently drop candidates; keep the full deduped pool by default.
+                        core_size = max(core_size, len(deduped))
+                    break
+            except Exception:
+                pass
     query_tokens = _query_tokens(workspace)
     pinned = _pinned_records(workspace, deduped)
     if query_tokens:
