@@ -267,10 +267,8 @@ def main() -> int:
     if report_path.exists() and report_path.stat().st_size > 0 and freeze_marker.exists():
         return 0
 
-    issues = check_unit_outputs(skill="global-reviewer", workspace=workspace, outputs=[report_rel])
-    if not issues:
-        return 0
-
+    # Always write a report (PASS/OK included). Reports are pipeline contract artifacts
+    # and should exist even when there is nothing to flag (for audit/regression).
     atomic_write_text(report_path, _global_review_report(workspace=workspace))
 
     issues = check_unit_outputs(skill="global-reviewer", workspace=workspace, outputs=[report_rel])

@@ -86,6 +86,7 @@ def _kickoff(decisions_path: Path, *, goal: str, pipeline: str, workspace: Path)
             "",
             f"- Pipeline: `{pipeline_line}`",
             f"- Workspace: `{ws_rel}`",
+            f"- Workspace name: `{workspace.name}`",
             "",
             "Optional: confirm constraints (or reply \"你自己决定\" and we will proceed with best-effort defaults):",
             "- Deliverable: language (中文/英文), target length, venue/audience, format (Markdown/LaTeX/PDF).",
@@ -106,9 +107,9 @@ def _kickoff(decisions_path: Path, *, goal: str, pipeline: str, workspace: Path)
 
 
 def _workspace_hint(workspace: Path) -> str:
+    repo_root = Path(__file__).resolve().parents[4]
     try:
-        # Prefer a short relative hint.
-        return str(workspace.relative_to(Path.cwd()))
+        return str(workspace.relative_to(repo_root))
     except Exception:
         return str(workspace)
 

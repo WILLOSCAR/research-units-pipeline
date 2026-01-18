@@ -420,7 +420,15 @@ def write_quality_report(*, workspace: Path, unit_id: str, skill: str, issues: l
         lines.append("- Proceed to the next unit.")
     lines.append("")
 
-    atomic_write_text(report_path, "\n".join(lines).rstrip() + "\n")
+    entry = "\n".join(lines).rstrip() + "\n"
+
+    # Append-only by default: keep a history of quality-gate outcomes in the workspace.
+    # This makes failures debuggable without rerunning (and preserves context across retries).
+    if report_path.exists() and report_path.stat().st_size > 0:
+        prev = report_path.read_text(encoding="utf-8", errors="ignore").rstrip() + "\n\n---\n\n"
+        atomic_write_text(report_path, prev + entry)
+    else:
+        atomic_write_text(report_path, entry)
     return report_path
 
 
@@ -2609,6 +2617,36 @@ def _check_transitions(workspace: Path, outputs: list[str]) -> list[QualityIssue
         return [QualityIssue(code="empty_transitions", message=f"`{out_rel}` is empty.")]
     if _check_placeholder_markers(text) or "…" in text:
         return [QualityIssue(code="transitions_placeholders", message=f"`{out_rel}` contains placeholders; rewrite transitions into concrete, title/RQ-driven sentences.")]
+
+    # Planner-talk leakage: transitions are injected into the draft body, so meta construction notes are high-impact.
+    banned: list[tuple[str, str]] = [
+        (r"(?i)\bafter\b[^\n]{0,180}\bmakes\s+the\s+bridge\s+explicit\s+via\b", "transitions_planner_talk_after_via"),
+        (r"(?i)\bfollows\s+naturally\s+by\s+turning\b", "transitions_planner_talk_turning"),
+    ]
+    for pat, code in banned:
+        if re.search(pat, text):
+            return [
+                QualityIssue(
+                    code=code,
+                    message=(
+                        f"`{out_rel}` contains planner-talk transition phrasing ({code}); "
+                        "rewrite transitions into content argument bridges (no construction notes)."
+                    ),
+                )
+            ]
+
+    # Avoid semicolon enumeration: it reads like a planning note once merged into the paper body.
+    if re.search(r"(?m)^-\s+[^:\n]{1,80}:\s+[^\n]*;\s*[^\n]+", text):
+        return [
+            QualityIssue(
+                code="transitions_semicolon_enumeration",
+                message=(
+                    f"`{out_rel}` contains semicolon-style enumerations; "
+                    "rewrite each transition as a single content sentence (no list-like construction notes)."
+                ),
+            )
+        ]
+
     # Transitions must not introduce citations.
     if "[@" in text:
         return [

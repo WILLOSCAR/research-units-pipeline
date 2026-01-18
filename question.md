@@ -1,82 +1,180 @@
-# Pipeline Questions / Improvement Backlog (skills-first)
+# Pipeline / Skills Improvement Backlog (arxiv-survey-latex)
 
-This file tracks *pipeline/skills* improvement work (not per-workspace artifacts).
+本文件只跟踪 **pipeline + skills 的结构性改进**（不是某次 draft 的内容修修补补）。
 
-## Canonical E2E Run (for regression)
+诊断主文档：`PIPELINE_DIAGNOSIS_AND_IMPROVEMENT.md`
 
-- `workspaces/e2e-agent-survey-latex-verify-20260118-182656/` (E2E verify; `draft_profile: lite`; abstract-first)
-  - Draft: `workspaces/e2e-agent-survey-latex-verify-20260118-182656/output/DRAFT.md`
-  - PDF: `workspaces/e2e-agent-survey-latex-verify-20260118-182656/latex/main.pdf`
-  - Audit: `workspaces/e2e-agent-survey-latex-verify-20260118-182656/output/AUDIT_REPORT.md` (unique cites=101; pages=23)
-  - Citation injection: `workspaces/e2e-agent-survey-latex-verify-20260118-182656/output/CITATION_INJECTION_REPORT.md` (before=57; after=101; target>=66)
+回归基线 workspace（用于复现问题与验证改进，不是交付物）：
+- `workspaces/e2e-agent-survey-latex-verify-20260118-182656/`
 
-## What’s Still Weak (Writer-facing)
+对标材料（写法/结构基准）：
+- `ref/agent-surveys/STYLE_REPORT.md`
 
-- Citation density is sometimes *globally* OK but can still feel locally “thin” if too many citations are reused across H3.
-- Transitions can still be overly templated if subsection briefs lack `bridge_terms` / `contrast_hook` specificity.
-- Evidence packs can be “long but low-signal” if claim candidates / highlights are truncated too aggressively.
+---
 
-## Changes Implemented (so far)
+## P0 — 必须先修（可信 + 可审计 + 不再一眼自动化）
 
-- Fixed a hard crash in `tooling/quality_gate.py` (outline gate referenced `draft_profile` before it was defined).
-- Fixed numeric-anchor detection bug in `tooling/quality_gate.py` (regex `\\d` → `\d`).
-- Fixed `section-logic-polisher` report bug (previously miscomputed FAIL/PASS due to tuple indexing).
-- `section-logic-polisher` no longer blocks purely on “This subsection …” openers; it reports them as non-blocking paper-voice warnings (blocking remains thesis+connectors).
-- Raised context-pack trimming limits + added `pack_stats` so truncation/drop isn’t silent:
-  - `.codex/skills/writer-context-pack/scripts/run.py`
-- Reduced evidence loss from truncation:
-  - `.codex/skills/evidence-draft/scripts/run.py` (claim candidates up to ~400 chars; highlights up to ~280 chars; no `...` suffix)
-- Enforced paper-like outline budgets (accounting for Discussion+Conclusion added in C5 merge):
-  - `tooling/quality_gate.py` blocks if outline H2 is too many for a paper-like final ToC (survey target: final H2 <= 8).
-  - H3 budget now depends on `draft_profile`: lite<=8, survey<=10, deep<=12 (fewer, thicker subsections).
-- Reduced brittle front-matter assumptions:
-  - `tooling/quality_gate.py` detects Introduction/Related Work by title (with fallback to the first two H2s), not hard-coded numeric ids.
-- Made Stage A outline requirements explicit (so C2 is less likely to degenerate into generic bullets):
-  - `.codex/skills/outline-builder/SKILL.md` now documents the Stage A bullet schema (`Intent/RQ/Evidence needs/Expected cites`).
-- Added writer-stage logic polish unit:
-  - `.codex/skills/section-logic-polisher/` (thesis + connector density report)
-- Added a skills-first fix for low unique citations:
-  - `.codex/skills/citation-diversifier/` (writes `output/CITATION_BUDGET_REPORT.md`)
-  - referenced in `.codex/skills/pipeline-auditor/SKILL.md` and Stage C5 optional skills.
-- Added a deterministic “apply the budget” step:
-  - `.codex/skills/citation-injector/` (edits `output/DRAFT.md` and writes `output/CITATION_INJECTION_REPORT.md`)
-- Added anti-template **skill guidance** (semantic, not gate-heavy):
-  - `subsection-writer` / `draft-polisher`: explicitly forbid “This subsection …” + slide-like navigation; provide rewrite patterns.
-  - `writer-context-pack`: emits `do_not_repeat_phrases` in packs to make this constraint visible to the writer.
-- Carried transition handles into writer packs (so C5 can keep connectors specific without leaking outline meta):
-  - `writer-context-pack` now includes `bridge_terms` / `contrast_hook` / `required_evidence_fields` from `subsection_briefs.jsonl`.
-- Strengthened audit checks to match ref-style expectations (default: non-blocking warnings):
-  - `pipeline-auditor` reports evidence-policy disclaimer spam and PPT-like narration phrases with examples.
-  - `pipeline-auditor` also warns on repeated opener labels (e.g., `Key takeaway:`) as a “generator voice” signal.
-- Removed a citation-diversifier “bad example” that encouraged trailing citation dumps; examples now use per-work embedded citations.
-- Standardized wording: “evidence policy paragraph (once, in front matter)” instead of encouraging a dedicated “Evidence note” section.
-- Added an optional C2 outline merge tool (skills diversity; NO PROSE):
-  - `.codex/skills/outline-budgeter/` (writes `outline/OUTLINE_BUDGET_REPORT.md`; referenced by `outline-refiner`; optional in `pipelines/arxiv-survey*.pipeline.md`)
-- Improved C5 writer self-loop (front matter + evidence consumption visibility):
-  - `.codex/skills/writer-selfloop/SKILL.md` includes explicit fixes for `sections_intro_*` / `sections_related_work_*` gate codes (rewrite H2 body files, not just H3).
-  - `.codex/skills/writer-selfloop/scripts/run.py` prints `must_use` minima + `pack_stats`/`pack_warnings` from `writer_context_packs.jsonl`, and shows `allowed_bibkeys_global` counts so writers can fix the *right* upstream artifact instead of adding filler.
-- Improved gate messages (semantic guidance, not new blocking logic):
-  - `tooling/quality_gate.py` now suggests `outline-budgeter` when the outline is over-fragmented, and provides paper-voice/front-matter rewrite hints for Intro/Related Work failures.
+### P0-1 合同闭环：DONE 必须意味着“产物存在”
 
-- De-templated two common generator-voice sources seen in E2E smoke audits:
-  - `transition-weaver/scripts/run.py`: removed the 'From X to Y ...' title-narration variant; transitions default to argument-bridge phrasing.
-  - `citation-injector/scripts/run.py`: injection sentences now use subsection handles (`contrast_hook`/title) and avoid the common “enumerator” stems (`Work on ... includes ...`, `Concrete examples ... include ...`) by default (paper-like `e.g., ...` parentheticals).
-- De-narrated between-H2 transitions in the merged draft (paper voice):
-  - `.codex/skills/section-merger/scripts/run.py`: between-H2 transition insertion is **off by default** (avoids narrator paragraphs); enable only with `outline/transitions.insert_h2.ok`.
-- pipeline-auditor: warn on pipeline voice leakage:
-  - `.codex/skills/pipeline-auditor/scripts/run.py`: flags `this run` as a generator/pipeline-voice smell (non-blocking; includes examples).
-- writer-context-pack: strengthened anti-template hints:
-  - `.codex/skills/writer-context-pack/scripts/run.py`: expanded `do_not_repeat_phrases` to cover common generator-voice stems (pipeline voice, injection-enumerator openers, repeated synthesis openers like `Taken together,`).
-  - `.codex/skills/writer-context-pack/scripts/run.py`: emits `opener_mode` / `opener_hint` per H3 to nudge varied, paper-like paragraph-1 framing (tension-first vs decision-first vs lens-first).
-- Standardized remaining short SKILL.md files to match the repo standard (clear Inputs/Outputs):
-  - `.codex/skills/citation-anchoring/SKILL.md`, `.codex/skills/redundancy-pruner/SKILL.md`, `.codex/skills/terminology-normalizer/SKILL.md`, `.codex/skills/research-pipeline-runner/SKILL.md`, `.codex/skills/grad-paragraph/SKILL.md`
+现象（baseline 可证）：
+- pipeline `target_artifacts`=38，workspace 缺 2 个 QA 报告：
+  - `workspaces/e2e-agent-survey-latex-verify-20260118-182656/output/SECTION_LOGIC_REPORT.md`
+  - `workspaces/e2e-agent-survey-latex-verify-20260118-182656/output/GLOBAL_REVIEW.md`
 
-- Made citation scope less brittle (controlled flexibility):
-  - New knob: `queries.md:global_citation_min_subsections` (default 3) controls when a bibkey counts as cross-cutting/global.
-  - Surfaced to writers: `writer-context-pack` and `sections/sections_manifest.jsonl` now emit `allowed_bibkeys_global` so C5 can reuse foundations/benchmarks/surveys without random out-of-scope cite failures.
-  - `citation-diversifier` can use `allowed_bibkeys_global` as a last-resort budget source to raise *global* unique-citation counts (still NO NEW FACTS; polisher keeps keys immutable).
+为什么是 P0：
+- 这是 Units 合同失效，会直接让自循环失去证据（只能靠“感觉”改写）。
 
-## Next Candidates (P1/P2)
+建议改动（偏合同/流程，不靠硬风格 gate）：
+- 把“报告类 skill”合同写死：PASS/FAIL 都必须写 report 文件。
+  - 目标 skill：`section-logic-polisher`, `global-reviewer`（至少这两个）
+- 新增（或合并进 `pipeline-auditor`）：`artifact-contract-auditor`
+  - 输出：`output/CONTRACT_REPORT.md`（缺失项列表 + PASS/FAIL）
 
-- P1: Add a C5 “per-H3 evidence consumption” check against `must_use` minima (anchors/comparisons/limitations) to prevent long-but-hollow prose (beyond proxy heuristics).
-- P2: Consider a `citation-injector` skill that writes per-H3 subset `.bib` files (harder cite-scope), if drift remains a problem.
+预期收益：
+- 每个 workspace 可作为回归样本；质量与失败可复盘。
+
+风险：
+- 更严格会暴露更多“以前假装跑通”的 run（属预期）。
+
+验证：
+- 任意一次 e2e：38/38 target artifacts 存在；或 `CONTRACT_REPORT` 明确列出 optional/missing。
+
+---
+
+### P0-2 失败沉淀：BLOCKED 不再需要重跑才能定位
+
+现象（baseline 可证）：
+- `STATUS.md` 有 `BLOCKED (script failed)` / `BLOCKED (quality gate: output/QUALITY_GATE.md)`，但 workspace 中没有对应的错误沉淀文件。
+
+建议改动：
+- 为所有 pipeline 定义两个标准 error sinks（append-only）：
+  - `output/QUALITY_GATE.md`：gate code + 路由建议（回到哪个 stage/skill 修）
+  - `output/RUN_ERRORS.md`：unit_id + timestamp + stderr 摘要
+
+验证：
+- 人为制造失败（删 input），run 结束后上述两个文件必存在且可定位到具体 unit。
+
+---
+
+### P0-3 transition-weaver 去“planner talk”（最影响论文感）
+
+现象（baseline 可证）：
+- `workspaces/e2e-agent-survey-latex-verify-20260118-182656/outline/transitions.md` 含大量构建注释句（分号枚举、turning framing into…）。
+- 被 merge 后出现在 `output/DRAFT.md:59/111/165/221`。
+
+为什么是 P0：
+- transition 是全篇高频句型，一旦像注释，读者第一眼判定“自动生成”。
+
+建议改动（优先语义化引导）：
+- transition-weaver 的默认输出必须是“内容论证桥”（1 句即可）：
+  - 写：上一节结论/局限 → 下一节为什么重要
+  - 不写：工具链路/构建过程/“setting up a cleaner A-vs-B comparison”
+- 明确禁止模式（写入 SKILL.md + auditor 检测）：
+  - `After .* makes the bridge explicit via`
+  - `follows naturally by turning .* framing into`
+  - 分号 `;` 形式的枚举规划句
+
+验证：
+- `outline/transitions.md` 不包含上述模式；`output/DRAFT.md` 也为 0。
+
+---
+
+### P0-4 DECISIONS checkpoint 绑定 workspace（审计性 canary）
+
+现象（baseline 可证）：
+- `workspaces/e2e-agent-survey-latex-verify-20260118-182656/DECISIONS.md` 的 C0 kickoff block workspace 路径是旧的。
+
+建议改动：
+- pipeline-router 写 checkpoint block 时必须刷新 workspace/pipeline 行。
+- block 中增加 self-check：显示当前目录名（使 drift 可见）。
+
+验证：
+- 新 workspace 的 DECISIONS.md C0 block 永远指向自身目录。
+
+---
+
+## P1 — 提升 paper voice（减少“正确但空”）
+
+### P1-1 subsection-briefs：让 thesis/contrast 更“具体张力”
+
+现象：
+- thesis/contrast_hook 偏泛（如 tension 只落在“mechanism/data”轴），writer 容易回到 `Taken together` / `survey should` 省力口吻。
+
+建议改动：
+- 给每个 H3 强制新增两个字段（NO PROSE）：
+  - `tension_statement`：具体张力句（例如“表达性 vs 可验证性”），必须可直接做段落 1 的核心句
+  - `evaluation_anchor_minimal`：task + metric + constraint 三元组（允许 unknown slot，但要显式标注）
+- connector_phrase 改为 clause-level 短提示，禁止整句（降低 copy-paste 模板化）。
+
+验证：
+- audit：`Taken together` <=2；`survey ... should` <=1。
+
+---
+
+### P1-2 writer-context-pack：补“正向写法引导”（替代句式库）
+
+现象：
+- pack 已有禁令（do_not_repeat）但缺少替代句式/微结构提示。
+
+建议改动：
+- 新增结构化字段 `paper_voice_palette`：
+  - opener archetypes（decision-first/tension-first/evidence-first）示例
+  - synthesis alternatives（替代 Taken together）
+  - rewrite rules（把 survey should → 内容主张句 的映射）
+
+验证：
+- audit report 中 phrase family 复发显著下降；且不靠硬 blocking。
+
+---
+
+### P1-3 evidence-binder：从“同构配方”变成 subsection-specific 证据计划
+
+现象（baseline 可证）：
+- `outline/evidence_binding_report.md` 每节同样 mix：limitation=1/method=1/result=10。
+
+建议改动：
+- evidence-binder 输出增加：
+  - `binding_rationale`（短 bullet）：这些 evidence 如何覆盖 axes
+  - `binding_gaps`：哪些 required_evidence_fields 未覆盖（回退到 C3 或 C1）
+
+验证：
+- binding report 能看到小节差异；gaps 能驱动自循环回到上游补证据。
+
+---
+
+## P2 — 结构性重构（减少无效劳动 + 降 drift）
+
+### P2-1 visuals（tables/timeline/figures）：要么 optional，要么闭环注入
+
+现象（baseline 可证）：
+- workspace 有 `outline/tables.md`/`timeline.md`/`figures.md`，但 `latex/main.tex` 不包含它们。
+
+二选一决策：
+1) 简化：把 table-schema/table-filler/survey-visuals 改为 optional（默认不跑）。
+2) 闭环：新增 `visuals-inserter`（C5）把这些内容插入 DRAFT/LaTeX。
+
+验证：
+- 若闭环：PDF 中至少出现 1–2 张表（或 timeline/figure placeholder），且引用可编译。
+
+---
+
+### P2-2 schema 规范化（减少 best-effort heuristics）
+
+现象（baseline 可证）：
+- briefs 有 section_id，evidence_drafts 没有；citations 表达格式不统一。
+
+建议改动：
+- 在 `SKILLS_STANDARD.md` 写清 JSONL interface schema（必填字段 + citation key 规范）。
+- 可选：新增 `schema-normalizer` skill（NO PROSE，deterministic）。
+
+验证：
+- briefs → evidence packs → writer packs 无需 heuristics join。
+
+---
+
+## 产品/策略问题（需要你拍板）
+
+- “一键跑”默认 profile：`lite`（速度）还是 `survey`（论文感）？
+- transition/meta-voice：长期保持 warning，还是成熟后升级为 blocking？
+- citation scope：想要严格计划（writer 必须跟 plan），还是软计划（writer 可在 mapped 内选 + injector 补）？
+
