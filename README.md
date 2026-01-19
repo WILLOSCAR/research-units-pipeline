@@ -99,7 +99,7 @@ C5: sections/*.md → output/DRAFT.md → latex/main.pdf                  # 写�
 
 ## 示例产物（v0.1，包含完整中间产物）
 该版本由 codex 中的 gpt-5.2-xhigh 运行约 2 小时 生成，过程中仅进行过 一次 human-in-the-loop（C2 阶段） 介入。
-路径：`example/e2e-agent-survey-latex-verify-20260118-182656/`（pipeline：`pipelines/arxiv-survey-latex.pipeline.md`）。
+路径：`example/e2e-agent-survey-latex-verify-****时间戳/`（pipeline：`pipelines/arxiv-survey-latex.pipeline.md`）。
 配置摘要：`draft_profile: lite` / `evidence_mode: abstract` / `core_size: 220`（详见 `queries.md`）。
 
 目录速览（每个文件夹干嘛用）：
@@ -137,6 +137,9 @@ flowchart LR
 - Markdown 草稿：`example/e2e-agent-survey-latex-verify-20260118-182656/output/DRAFT.md`
 - PDF：`example/e2e-agent-survey-latex-verify-20260118-182656/latex/main.pdf`
 - QA 报告：`example/e2e-agent-survey-latex-verify-20260118-182656/output/AUDIT_REPORT.md`
+
+
+## 欢迎提出各类 issue，一起改进写作流程
 
 ## Star History
 
