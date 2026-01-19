@@ -13,11 +13,11 @@ description: |
 
 Purpose: upgrade one `sections/S<sub_id>.md` (H3 body-only) so it reads like survey prose **before** you merge into `output/DRAFT.md`.
 
-This is intentionally local: fix one unit at a time, then rerun gates so you converge without rewriting the whole draft.
+This is intentionally local: fix one unit at a time, rerun gates, and converge without rewriting the whole paper.
 
 ## Inputs
 
-- One target file under `sections/`: `sections/S<sub_id>.md` (H3 body-only)
+- Target file: `sections/S<sub_id>.md` (H3 body-only)
 - Preferred context: `outline/writer_context_packs.jsonl`
 - Fallback context: `outline/subsection_briefs.jsonl` + `outline/evidence_drafts.jsonl`
 - `citations/ref.bib`
@@ -26,47 +26,123 @@ This is intentionally local: fix one unit at a time, then rerun gates so you con
 
 - Updated `sections/S<sub_id>.md` (same path; citation keys unchanged)
 
-## Paper voice constraints (soft, not robotic)
+## Non-negotiables (contract)
 
-- Delete outline narration: `This subsection ...`, `In this subsection, we ...`, `Next, we ...`, `We now turn to ...`.
-- Keep signposting light: avoid repeating the same opener stem across many subsections (including literal `Key takeaway:` labels).
-- Keep evidence-policy disclaimers out of H3 prose; keep them once in front matter, unless the caveat is truly subsection-specific.
-- Use calm academic tone; avoid hype (`clearly`, `obviously`, `breakthrough`) and avoid “PPT speaker notes”.
+- Citation keys are immutable: do not add/remove any `[@BibKey]` markers.
+- Scope is immutable: keep all citations within this H3’s allowed scope (`outline/evidence_bindings.jsonl` / writer pack `allowed_bibkeys_*`).
+- No invented facts: if you cannot write a concrete contrast or evaluation anchor without guessing, stop and fix upstream evidence.
+- Body-only: no headings; `section-merger` adds headings.
+
+## Target quality (what “polished” means)
+
+A polished H3 reads like an argument, not a topic list:
+- Paragraph 1 ends with a **thesis** (conclusion-first takeaway) and does not use narration templates.
+- At least **two explicit contrasts** (A vs B) using contrast words.
+- At least **one evaluation anchor** paragraph (task/benchmark + metric + constraint/budget/tool access when relevant).
+- At least **one cross-paper synthesis** paragraph with >=2 citations in the same paragraph.
+- At least **one limitation/caveat** tied to protocol mismatch / missing details / unclear threat model (not boilerplate).
+
+## Paper voice constraints (high signal anti-patterns)
+
+Delete / rewrite these (they read like a generator):
+- Outline narration: `This subsection ...`, `In this subsection, we ...`.
+- Slide navigation: `Next, we move ...`, `We now turn to ...`, `In the next section ...`.
+- Meta guidance: `survey synthesis/comparisons should ...`.
+- Evidence-policy disclaimer spam: repeated `abstract-only/title-only/provisional` boilerplate inside H3.
+
+Prefer these (paper voice):
+- Content-first openers: `A central tension is ...`, `In practice, ...`, `One recurring pattern is ...`.
+- Argument bridges (not navigation): `This contrast matters because ...`, `These assumptions shape ...`.
+- Embedded citations as evidence (no trailing dump tags).
 
 ## Workflow (one subsection)
 
-1) **Load the plan + evidence**
-- Read the subsection’s record in `outline/writer_context_packs.jsonl` (preferred) or the matching brief in `outline/subsection_briefs.jsonl` + evidence pack in `outline/evidence_drafts.jsonl`.
-- From that pack/brief, list: 2–3 concrete contrasts, 1 evaluation anchor (benchmark/dataset/metric/protocol), and 1 limitation you will explicitly mention.
+1) Load the subsection contract
+- Read this subsection’s pack in `outline/writer_context_packs.jsonl`.
+- If the pack is missing/thin, fall back to `outline/subsection_briefs.jsonl` (thesis/tension/paragraph_plan) + `outline/evidence_drafts.jsonl` (comparisons/eval/limitations).
+- Extract (write down, not in the prose):
+  - `tension_statement` + `thesis`
+  - 2–3 `comparison_cards` you will use for A-vs-B contrasts
+  - 1 `evaluation_anchor_minimal` (task/metric/constraint)
+  - 1 limitation hook from the evidence pack
 
-2) **Opener pass (paragraph 1)**
-- Remove any narration opener.
-- Write a short, content-bearing setup and end paragraph 1 with the brief’s `thesis` (or a faithful paraphrase with the same commitment level).
+2) Preflight (kept out of the final prose)
+- Draft 4 one-line sentences:
+  - Tension
+  - Contrast (A vs B; >=2 citations)
+  - Evaluation anchor (task/metric/constraint)
+  - Limitation
+If you cannot write these without guessing, stop and push the gap upstream (`paper-notes` / `evidence-draft`).
 
-3) **Paragraph pass (argument > listing)**
-- Rewrite paragraph-by-paragraph using `grad-paragraph` micro-structure (tension → contrast → evaluation anchor → limitation).
-- Ensure at least one cross-paper synthesis paragraph with >=2 citations in the same paragraph.
-- Keep citations embedded inside the sentences they support; avoid trailing citation dumps.
-- Keep citation keys unchanged and valid in `citations/ref.bib`.
+3) Opener rewrite (paragraph 1)
+- Remove narration openers.
+- Write: 1–2 sentences tension/decision/lens + 1 sentence why it matters + end with the thesis.
 
-4) **Rhythm pass (make it feel written)**
-- Vary paragraph openings; don’t start every paragraph with `However/Moreover/Taken together`.
-- Prefer mid-sentence ties (`...; however, ...`) and concrete nouns (systems/benchmarks/protocols) over generic glue.
+Bad:
+- `This subsection surveys tool interfaces for agents.`
 
-5) **Recheck**
-- Run `section-logic-polisher` and fix FAILs (no new citations; keep keys stable).
-- Run `subsection-writer` gates; if the file still fails, fix only what the report flags.
+Better:
+- `A central tension in tool interfaces is balancing expressive action spaces with verifiable execution; interface contracts largely determine which evaluation claims are meaningful.`
 
-## Troubleshooting
+4) Paragraph pass (argument moves > listing)
+- Rewrite paragraph-by-paragraph using the `grad-paragraph` micro-structure:
+  - tension → contrast → evaluation anchor → limitation
+- Ensure you include:
+  - >=2 explicit contrasts (not “A then B” summaries)
+  - >=1 evaluation anchor paragraph
+  - >=1 cross-paper synthesis paragraph (>=2 citations)
+  - >=1 limitation paragraph/clause that is subsection-specific
 
-### Issue: you can’t write a concrete contrast without guessing
+5) Citation embedding pass (no dumps)
+- Rewrite paragraphs where citations appear only at the end as `[@a; @b; @c]`.
+- Ensure every citation key you keep is defined in `citations/ref.bib`.
 
-**Cause**: evidence packs are title-only / abstract-only without concrete comparison snippets.
+Bad (dump):
+- `Many systems adopt tool schemas. [@a; @b; @c]`
 
-**Fix**: strengthen upstream evidence (`paper-notes` → `evidence-draft`) rather than writing filler prose.
+Better (cite-as-evidence):
+- `Systems such as X [@a] and Y [@b] formalize tool schemas to reduce action ambiguity, whereas Z [@c] keeps the interface looser and shifts the burden to validation.`
 
-### Issue: the subsection passes gates but still feels “generated”
+6) Rhythm + de-template pass
+- Vary paragraph openings; avoid repeating the same synthesis stem across many paragraphs (especially `Taken together`).
+- Delete empty glue sentences that don’t add a claim, contrast, protocol detail, or limitation.
 
-**Fix**:
-- Remove repeated opener stems and slide-like navigation phrases.
-- Replace generic summary sentences with subsection-specific contrasts (A vs B) and one explicit evaluation anchor.
+7) Recheck (do not skip)
+- Run `section-logic-polisher` and address FAILs (thesis + connector density) without changing citation keys.
+- Rerun `writer-selfloop` (or the strict quality gate) and fix only what the report flags.
+
+## Rewrite recipes (common failure -> fix)
+
+Use these as rewrite *intentions*, not copy-paste templates.
+
+1) Narration opener -> content claim
+- `This subsection surveys ...` -> `A central tension is ...; this matters because ...` (end paragraph 1 with the thesis).
+
+2) Slide navigation -> argument bridge
+- `Next, we move from planning to memory.` -> `Planning specifies how decisions are made; memory determines what information those decisions can reliably condition on under a fixed protocol.`
+
+3) Disclaimer spam -> one policy paragraph + local caveat only
+- Delete repeated `abstract-only evidence` boilerplate.
+- Keep evidence policy once in Intro/Related Work; in H3, only add a local caveat when it changes the interpretation of a specific comparison.
+
+4) Meta “survey should” -> literature-facing observation
+- `Therefore, survey comparisons should control for tool access.` -> `Across reported protocols, tool access and budget assumptions vary widely, making head-to-head comparison fragile unless those constraints are normalized.`
+
+5) Too-vague quantitative claim -> add minimal context (or weaken)
+- If a paragraph keeps a number, add: task type / metric definition / constraint (budget/cost/tool access) in the same paragraph and keep the citation embedded.
+- If the context is unknown from the evidence pack, rewrite the claim as qualitative and mark the missing field as a verification target (without boilerplate).
+
+## Stop conditions (when polishing is the wrong move)
+
+Stop and go upstream if:
+- you cannot write a contrast without guessing (evidence pack is title/abstract-only)
+- the subsection lacks evaluation anchors (no benchmarks/metrics/protocol tokens in notes)
+- you keep needing out-of-scope citations to make the argument work
+
+## Acceptance checklist
+
+- [ ] Paragraph 1 ends with a thesis (no narration templates).
+- [ ] >=2 explicit contrasts, >=1 evaluation anchor, >=1 synthesis paragraph (>=2 citations), >=1 limitation.
+- [ ] No slide-like navigation / meta guidance / repeated evidence-policy boilerplate.
+- [ ] No citation-dump paragraphs; citations are embedded in claim sentences.
+- [ ] `section-logic-polisher` and `writer-selfloop` no longer flag this file.

@@ -54,17 +54,19 @@
 - `evidence-auditor`：审稿：证据缺口审计 → `output/MISSING_EVIDENCE.md`
 - `novelty-matrix`：审稿：新颖性矩阵 → `output/NOVELTY_MATRIX.md`
 
-### Stage 4 — Citations / Visuals（C4）[NO PROSE]
+### Stage 4 — Citations / Evidence packs（C4）[NO PROSE]
 
 - `citation-verifier`（Network: verify 可选）：生成 BibTeX + verification 记录 → `citations/ref.bib` + `citations/verified.jsonl`
 - `evidence-binder`：把 subsection→evidence_id 绑定成“证据计划”（writer 只能按 ID 取证据）→ `outline/evidence_bindings.jsonl` + `outline/evidence_binding_report.md`
 - `evidence-draft`：把 notes→“可写证据包”（逐小节 claim candidates / concrete comparisons / eval / limitations）→ `outline/evidence_drafts.jsonl`
 - `anchor-sheet`：从 evidence packs 提取“可写锚点”（数字/benchmark/limitation；NO PROSE）→ `outline/anchor_sheet.jsonl`
+- `schema-normalizer`：规范化 JSONL interface（补齐 ids/titles；`citations` 统一为 raw bibkey；NO PROSE）→ `output/SCHEMA_NORMALIZATION_REPORT.md`
 - `writer-context-pack`：把 briefs + evidence + anchors + allowed cites 合并成 per-H3 写作上下文包（NO PROSE）→ `outline/writer_context_packs.jsonl`
+- `evidence-selfloop`：证据自循环 TODO（读 bindings+packs，写出上游修复路径；把缺口挡在 C5 之前）→ `output/EVIDENCE_SELFLOOP_TODO.md`
 - `claim-matrix-rewriter`：从 evidence packs 重写“claim→evidence 索引”（避免模板 claim）→ `outline/claim_evidence_matrix.md`
-- `table-schema`：先定义表格 schema（问题/列/证据字段）→ `outline/table_schema.md`
-- `table-filler`：用 evidence packs 填表（填不出就显式 missing）→ `outline/tables.md`
-- `survey-visuals`：非 prose 的时间线/图规格（v4：表格由 `table-filler` 负责）→ `outline/timeline.md` + `outline/figures.md`
+- `table-schema`（可选）：先定义表格 schema（问题/列/证据字段）→ `outline/table_schema.md`
+- `table-filler`（可选）：用 evidence packs 填表（填不出就显式 missing）→ `outline/tables.md`
+- `survey-visuals`（可选）：非 prose 的时间线/图规格（表格由 `table-filler` 负责）→ `outline/timeline.md` + `outline/figures.md`
 
 ### Stage 5 — Writing（C5）[PROSE after approvals]
 
@@ -79,7 +81,7 @@
 - `grad-paragraph`：研究生段落 micro-skill（张力→对比→评测锚点→限制），用于写出"像综述"的正文段落（通常嵌入 `sections/S*.md` 的写作流程）
 - `snapshot-writer`：写 1 页 snapshot（bullets-first + paper pointers；不需要 evidence packs/BibTeX）→ `output/SNAPSHOT.md`（用于 `lit-snapshot`）
 - `subsection-writer`：按 H2/H3 拆分写作到 `sections/`（可独立 QA；evidence-bounded）→ `sections/sections_manifest.jsonl` + `sections/S*.md`
-- `writer-selfloop`：写作自循环（读 `output/QUALITY_GATE.md`，只改失败小节直到 PASS）→ 更新 `sections/*.md`
+- `writer-selfloop`：写作自循环（严格 sections gate → 写 `output/WRITER_SELFLOOP_TODO.md`；只改失败小节直到 PASS）→ 更新 `sections/*.md`
 - `subsection-polisher`：局部小节润色（pre-merge；结构化段落 + 去模板；不改 citation keys）
 - `section-merger`：把 `sections/` + `outline/transitions.md` 按 `outline/outline.yml` 合并 → `output/DRAFT.md` + `output/MERGE_REPORT.md`
 - `prose-writer`：从已批准的 outline+evidence 写 `output/DRAFT.md`（仅用已验证 citation keys）
@@ -100,6 +102,7 @@
 
 ### Stage 6 — Build / QA / Packaging（可选）
 
+- `artifact-contract-auditor`：workspace 合同审计（DONE outputs + pipeline target_artifacts；回归基线）→ `output/CONTRACT_REPORT.md`
 - `latex-scaffold`：把 Markdown draft scaffold 成 LaTeX → `latex/main.tex`
 - `latex-compile-qa`：编译 LaTeX + QA 报告 → `latex/main.pdf` + `output/LATEX_BUILD_REPORT.md`
 - `agent-survey-corpus`：下载/抽取几篇 agent survey 作为写作风格参考（arXiv PDFs → `ref/agent-surveys/`）
@@ -108,6 +111,7 @@
 
 **Pipeline Control**:
 - "运行 pipeline / 继续执行 / 一键跑完 / kickoff" → `research-pipeline-runner`
+- "contract audit / artifact contract / missing artifacts / 完整性检查 / CONTRACT_REPORT" → `artifact-contract-auditor`
 - "选 pipeline / 不确定该用哪个流程 / workflow router" → `pipeline-router`
 - "初始化 workspace / 创建模板 / artifacts" → `workspace-init`
 
@@ -129,12 +133,13 @@
 - "chapter briefs / 章节导读 / H2 卡片" → `chapter-briefs`
 - "claim matrix / 证据矩阵 / claim-evidence matrix" → `claim-matrix-rewriter`（survey 默认）, `claim-evidence-matrix`（legacy）
 
-**C4: Citations/Visuals (NO PROSE)**:
+**C4: Citations/Evidence (NO PROSE)**:
 - "bibtex / citation / 引用 / 参考文献" → `citation-verifier`
 - "evidence pack / evidence draft / 证据草稿 / 对比维度" → `evidence-draft`
 - "evidence binding / evidence ids / 证据绑定 / subsection→证据计划" → `evidence-binder`
 - "anchor sheet / 写作锚点 / 数字锚点 / evidence hooks" → `anchor-sheet`
 - "writer context pack / 写作上下文包 / per-H3 context" → `writer-context-pack`
+- "evidence gaps / binding gaps / blocking_missing / 证据缺口 / 证据自循环" → `evidence-selfloop`
 - "tables / 表格 / schema-first tables / 表格填充" → `table-schema`, `table-filler`
 - "timeline / figures / 可视化" → `survey-visuals`
 
@@ -164,6 +169,7 @@
 - "去重复 / boilerplate removal / redundancy" → `redundancy-pruner`
 
 **C6: Build/QA**:
+- "contract audit / artifact contract / CONTRACT_REPORT / 完整性检查" → `artifact-contract-auditor`
 - "LaTeX / PDF / 编译" → `latex-scaffold`, `latex-compile-qa`
 - "agent survey corpus / 学习综述写法 / 下载 survey" → `agent-survey-corpus`
 
@@ -225,8 +231,11 @@
 - `outline/transitions.md` → `transition-weaver`
 - `output/DRAFT.md` → `prose-writer`, `draft-polisher`
 - `output/SNAPSHOT.md` → `snapshot-writer`
+- `output/EVIDENCE_SELFLOOP_TODO.md` → `evidence-selfloop`
+- `output/WRITER_SELFLOOP_TODO.md` → `writer-selfloop`
 - `output/CITATION_BUDGET_REPORT.md` → `citation-diversifier`
 - `output/CITATION_INJECTION_REPORT.md` → `citation-injector`
+- `output/CONTRACT_REPORT.md` → `artifact-contract-auditor`
 - `output/citation_anchors.prepolish.jsonl` → `draft-polisher`（baseline）, `citation-anchoring`
 - `output/GLOBAL_REVIEW.md` → `global-reviewer`
 - `output/AUDIT_REPORT.md` → `pipeline-auditor`
@@ -261,40 +270,43 @@
 **Evidence-First Survey (arxiv-survey-latex)**:
 ```
 C1: literature-engineer → dedupe-rank
-C2: taxonomy-builder → outline-builder → section-mapper → outline-refiner
+C2: taxonomy-builder → outline-builder → outline-budgeter (optional) → section-mapper → outline-refiner
 C3: pdf-text-extractor → paper-notes → subsection-briefs → chapter-briefs
-C4: citation-verifier → evidence-binder → evidence-draft → anchor-sheet → writer-context-pack
-C5: subsection-writer → section-logic-polisher → section-merger → draft-polisher → global-reviewer → pipeline-auditor
-C5 (if FAIL): citation-diversifier → citation-injector → writer-selfloop → pipeline-auditor (retry)
-C6: latex-scaffold → latex-compile-qa
+C4: citation-verifier → evidence-binder → evidence-draft → anchor-sheet → schema-normalizer → writer-context-pack → evidence-selfloop → claim-matrix-rewriter
+C4 (if FAIL): evidence-selfloop → (fix briefs/notes/bindings/packs) → rerun C4
+C5: subsection-writer → writer-selfloop → section-logic-polisher → transition-weaver → section-merger → draft-polisher → global-reviewer → pipeline-auditor
+C5 (if FAIL): follow `output/WRITER_SELFLOOP_TODO.md`; if unique cites low → citation-diversifier → citation-injector → rerun auditor
+C6: latex-scaffold → latex-compile-qa → artifact-contract-auditor
 ```
 
 **Quick Snapshot (lit-snapshot)**:
 ```
 C1: arxiv-search → dedupe-rank
 C2: taxonomy-builder → outline-builder
-C5: snapshot-writer (bullets-first; no evidence packs needed)
+C3: snapshot-writer → artifact-contract-auditor
 ```
 
 **Systematic Review (systematic-review)**:
 ```
-C1: literature-engineer → dedupe-rank → protocol-writer
-C2: screening-manager → extraction-form → bias-assessor
-C4: citation-verifier
-C5: synthesis-writer → rubric-writer
+C1: protocol-writer
+C2: literature-engineer → dedupe-rank
+C3: screening-manager
+C4: extraction-form → bias-assessor
+C5: synthesis-writer → artifact-contract-auditor
 ```
 
 **Tutorial (tutorial)**:
 ```
 C1: tutorial-spec
 C2: concept-graph → module-planner → exercise-builder
-C5: tutorial-module-writer
+C3: tutorial-module-writer → artifact-contract-auditor
 ```
 
 **Peer Review (peer-review)**:
 ```
-C3: claims-extractor → evidence-auditor → novelty-matrix
-C5: rubric-writer
+C1: claims-extractor
+C2: evidence-auditor → novelty-matrix
+C3: rubric-writer → artifact-contract-auditor
 ```
 
 ## Network 相关（需要或受益于网络）

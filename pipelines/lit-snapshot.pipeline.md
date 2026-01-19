@@ -1,6 +1,6 @@
 ---
 name: lit-snapshot
-version: 2.0
+version: 2.1
 target_artifacts:
   - papers/papers_raw.jsonl
   - papers/papers_dedup.jsonl
@@ -8,6 +8,9 @@ target_artifacts:
   - outline/taxonomy.yml
   - outline/outline.yml
   - output/SNAPSHOT.md
+  - output/QUALITY_GATE.md
+  - output/RUN_ERRORS.md
+  - output/CONTRACT_REPORT.md
 default_checkpoints: [C0,C1,C2,C3]
 units_template: templates/UNITS.lit-snapshot.csv
 ---
@@ -63,10 +66,12 @@ Notes:
 ## Stage 3 - Snapshot (C3) [SHORT PROSE OK]
 required_skills:
 - snapshot-writer
+- artifact-contract-auditor
 optional_skills:
 - prose-writer
 produces:
 - output/SNAPSHOT.md
+- output/CONTRACT_REPORT.md
 
 Notes:
 - The deliverable is bullets-first and pointer-heavy: every non-trivial claim should attach 1-2 concrete paper pointers from `papers/core_set.csv`.

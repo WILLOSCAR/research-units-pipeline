@@ -167,7 +167,22 @@ def main() -> int:
         axes = brief.get('axes') or []
         axes_txt = ' '.join([str(a) for a in axes])
 
-        want = _tokenize(f"{title} {rq} {axes_txt}")
+        required_fields = brief.get('required_evidence_fields') or []
+        required_txt = ' '.join([str(x) for x in required_fields])
+        want = _tokenize(f"{title} {rq} {axes_txt} {required_txt}")
+
+        joined = f"{title} {rq} {axes_txt} {required_txt}".lower()
+        want_tags: set[str] = set()
+        if any(k in joined for k in ['benchmark', 'benchmarks', 'dataset', 'datasets', 'metric', 'metrics', 'evaluation', 'protocol']):
+            want_tags.add('evaluation')
+        if any(k in joined for k in ['tool', 'tools', 'api', 'function', 'schema', 'mcp', 'interface']):
+            want_tags.add('tooling')
+        if any(k in joined for k in ['memory', 'retrieval', 'rag', 'cache']):
+            want_tags.add('memory')
+        if any(k in joined for k in ['security', 'attack', 'threat', 'guardrail', 'sandbox', 'injection', 'jailbreak']):
+            want_tags.add('security')
+        if any(k in joined for k in ['compute', 'cost', 'latency', 'token', 'budget', 'efficien']):
+            want_tags.add('numbers')
 
         pids = pids_by_sub.get(sid) or []
         if not pids:
@@ -223,6 +238,14 @@ def main() -> int:
                 pick(it)
                 break
 
+        # Subsection-specific tag coverage: prefer at least one item per desired tag when available.
+        for tag in sorted(want_tags):
+            for _, _, it in scored:
+                tags = set([str(t).strip().lower() for t in (it.get('tags') or []) if str(t).strip()])
+                if tag in tags:
+                    pick(it)
+                    break
+
         for _, _, it in scored:
             if len(selected) >= k:
                 break
@@ -252,6 +275,49 @@ def main() -> int:
         if len(eids) < 6:
             flags.append(f"{sid}: too few evidence_ids selected ({len(eids)}); evidence bank may be sparse for mapped papers")
 
+        selected_tags: dict[str, int] = {}
+        for it in selected:
+            for t in (it.get('tags') or []):
+                t = str(t).strip().lower()
+                if not t:
+                    continue
+                selected_tags[t] = selected_tags.get(t, 0) + 1
+
+        def _need_tag(field: str) -> str | None:
+            low = str(field or '').lower()
+            if any(w in low for w in ['benchmark', 'benchmarks', 'dataset', 'datasets', 'metric', 'metrics', 'evaluation', 'protocol']):
+                return 'evaluation'
+            if any(w in low for w in ['tool', 'tools', 'api', 'function', 'schema', 'mcp', 'interface']):
+                return 'tooling'
+            if any(w in low for w in ['memory', 'retrieval', 'rag', 'cache']):
+                return 'memory'
+            if any(w in low for w in ['security', 'attack', 'threat', 'guardrail', 'sandbox', 'injection', 'jailbreak']):
+                return 'security'
+            if any(w in low for w in ['compute', 'cost', 'latency', 'token', 'budget', 'efficien']):
+                return 'numbers'
+            return None
+
+        binding_gaps: list[str] = []
+        for field in required_fields:
+            tag = _need_tag(str(field or ''))
+            if tag and selected_tags.get(tag, 0) <= 0:
+                if str(field or '').strip() and str(field or '').strip() not in binding_gaps:
+                    binding_gaps.append(str(field).strip())
+
+        binding_rationale: list[str] = []
+        if axes and isinstance(axes, list):
+            axes_short = ', '.join([str(a).strip() for a in axes[:3] if str(a).strip()])
+            if axes_short:
+                binding_rationale.append(f"axes: {axes_short}")
+        if want_tags:
+            binding_rationale.append('desired_tags: ' + ', '.join(sorted(want_tags)))
+        if selected_tags:
+            cov = ', '.join([f"{k}={v}" for k, v in sorted(selected_tags.items()) if v])
+            if cov:
+                binding_rationale.append(f"covered_tags: {cov}")
+        if binding_gaps:
+            binding_rationale.append('gaps: ' + ', '.join(binding_gaps[:6]))
+
         records.append(
             {
                 'sub_id': sid,
@@ -265,6 +331,8 @@ def main() -> int:
                     'by_claim_type': by_kind,
                     'by_evidence_level': by_lvl,
                 },
+                'binding_rationale': binding_rationale,
+                'binding_gaps': binding_gaps,
                 'generated_at': now_iso_seconds(),
             }
         )
@@ -281,8 +349,8 @@ def main() -> int:
         '',
         '## Per-subsection stats',
         '',
-        '| Subsection | evidence_ids | claim_type mix | evidence_level mix |',
-        '|---|---:|---|---|',
+        '| Subsection | evidence_ids | claim_type mix | evidence_level mix | gaps |',
+        '|---|---:|---|---|---|',
     ]
 
     for rec in sorted(records, key=lambda r: tuple(int(p) for p in str(r.get('sub_id') or '0').split('.') if p.isdigit())):
@@ -293,7 +361,10 @@ def main() -> int:
         by_lvl = cnt.get('by_evidence_level') or {}
         kind_txt = ', '.join([f"{k}={v}" for k, v in sorted(by_kind.items())]) if isinstance(by_kind, dict) else '—'
         lvl_txt = ', '.join([f"{k}={v}" for k, v in sorted(by_lvl.items())]) if isinstance(by_lvl, dict) else '—'
-        lines.append(f"| {sid} {title} | {cnt.get('selected_total', 0)} | {kind_txt} | {lvl_txt} |")
+        gaps = rec.get('binding_gaps') or []
+        gaps_txt = ', '.join([str(g).strip() for g in gaps if str(g).strip()]) if isinstance(gaps, list) else ''
+        gaps_txt = gaps_txt if gaps_txt else '—'
+        lines.append(f"| {sid} {title} | {cnt.get('selected_total', 0)} | {kind_txt} | {lvl_txt} | {gaps_txt} |")
 
     if flags:
         lines.extend(['', '## Flags', ''])

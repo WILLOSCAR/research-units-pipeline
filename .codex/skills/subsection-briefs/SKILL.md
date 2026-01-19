@@ -49,6 +49,8 @@ JSONL (one JSON object per line). Required fields per record:
 - `axes` (list of 3–5 checkable comparison dimensions; no ellipsis)
 - `bridge_terms` (list of 3–6 short “handles” for transitions; NO NEW FACTS; used by `transition-weaver`)
 - `contrast_hook` (short label/phrase for what this subsection is “about” in transitions; NO NEW FACTS)
+- `tension_statement` (1 sentence; concrete trade-off that can open the subsection in C5; avoid meta phrasing like "tension around X")
+- `evaluation_anchor_minimal` (object: `{task, metric, constraint}`; values may be `unknown` as placeholders to be filled by evidence packs)
 - `required_evidence_fields` (short checklist of evidence fields the evidence packs should eventually support)
 - `clusters` (2–3 clusters; each has `label`, `rationale`, `paper_ids`, and optional `bibkeys`)
 - `paragraph_plan` (8–10 paragraphs; each item is a *unit of comparison* with explicit role + connector)
@@ -83,6 +85,13 @@ Optional context (if present): read `GOAL.md` to pin scope and audience, and use
    - Use the subsection title + mapped-paper tags to specialize axes.
    - **CRITICAL**: For each axis, include a brief note on "why this comparison matters" (e.g., "representation choice affects memory overhead and retrieval latency", "evaluation protocol determines whether claims are reproducible"). This helps writers understand the significance of the comparison, not just the fact that papers differ.
 6. Build 2–3 **clusters** of papers (2–5 papers each) and explain why they cluster (which axis/theme).
+
+
+7a. Write a **tension_statement** (1 sentence; concrete trade-off):
+   - Must be specific enough to serve as the first paragraph frame in C5 (no generic "tension around mechanism/data").
+
+7b. Reserve a minimal **evaluation_anchor_minimal** triple (`task/metric/constraint`):
+   - Use `unknown` for any slot you cannot fill without guessing; the point is to create a fillable contract for evidence packs.
 7. Write a **thesis** (1 sentence; internal intent, not reader-facing):
    - Write it as a **content claim**, not meta-prose (avoid `This subsection ...` / `In this subsection ...`).
    - It should be executable as the end-of-paragraph-1 takeaway in C5 (no new facts; keep commitment conservative when evidence is abstract-level).
@@ -101,6 +110,8 @@ Optional context (if present): read `GOAL.md` to pin scope and audience, and use
 - [ ] `axes` length is 3–5 and each axis is a concrete noun phrase.
 - [ ] `bridge_terms` length is 3–6 (subsection-specific; not generic words like “evaluation” only).
 - [ ] `contrast_hook` is non-empty and short (used for transitions; NO NEW FACTS).
+- [ ] `tension_statement` is concrete (a real trade-off sentence) and not meta narration.
+- [ ] `evaluation_anchor_minimal` is present and uses explicit `unknown` slots when needed.
 - [ ] `clusters` length is 2–3; each cluster has 2–5 papers.
 - [ ] `thesis` is present (1 sentence; no placeholders).
 - [ ] `paragraph_plan` length is 8–10; each item has `argument_role` + `connector_to_prev` + `connector_phrase` (no placeholders).

@@ -1,6 +1,6 @@
 ---
 name: arxiv-survey-latex
-version: 2.1
+version: 2.4
 target_artifacts:
   - papers/retrieval_report.md
   - outline/taxonomy.yml
@@ -17,10 +17,6 @@ target_artifacts:
   - outline/evidence_bindings.jsonl
   - outline/evidence_binding_report.md
   - outline/claim_evidence_matrix.md
-  - outline/table_schema.md
-  - outline/tables.md
-  - outline/timeline.md
-  - outline/figures.md
   - outline/evidence_drafts.jsonl
   - outline/anchor_sheet.jsonl
   - outline/writer_context_packs.jsonl
@@ -30,6 +26,11 @@ target_artifacts:
   - sections/abstract.md
   - sections/discussion.md
   - sections/conclusion.md
+  - output/QUALITY_GATE.md
+  - output/RUN_ERRORS.md
+  - output/SCHEMA_NORMALIZATION_REPORT.md
+  - output/EVIDENCE_SELFLOOP_TODO.md
+  - output/WRITER_SELFLOOP_TODO.md
   - output/SECTION_LOGIC_REPORT.md
   - output/GLOBAL_REVIEW.md
   - output/DRAFT.md
@@ -40,6 +41,7 @@ target_artifacts:
   - latex/main.tex
   - latex/main.pdf
   - output/LATEX_BUILD_REPORT.md
+  - output/CONTRACT_REPORT.md
 default_checkpoints: [C0,C1,C2,C3,C4,C5]
 units_template: templates/UNITS.arxiv-survey-latex.csv
 ---
@@ -119,14 +121,17 @@ produces:
 Notes:
 - `subsection-briefs` converts each H3 into a verifiable writing card (scope_rule/rq/axes/clusters/paragraph_plan) so later drafting is section-specific and evidence-first.
 
-## Stage 4 - Citations + visuals (C4) [NO PROSE]
+## Stage 4 - Citations + evidence packs (C4) [NO PROSE]
 required_skills:
 - citation-verifier
 - evidence-binder
 - evidence-draft
 - anchor-sheet
+- schema-normalizer
 - writer-context-pack
+- evidence-selfloop
 - claim-matrix-rewriter
+optional_skills:
 - table-schema
 - table-filler
 - survey-visuals
@@ -137,24 +142,22 @@ produces:
 - outline/evidence_binding_report.md
 - outline/evidence_drafts.jsonl
 - outline/anchor_sheet.jsonl
+- output/SCHEMA_NORMALIZATION_REPORT.md
 - outline/writer_context_packs.jsonl
+- output/EVIDENCE_SELFLOOP_TODO.md
 - outline/claim_evidence_matrix.md
-- outline/table_schema.md
-- outline/tables.md
-- outline/timeline.md
-- outline/figures.md
 
 Notes:
 - `evidence-draft` turns paper notes into per-subsection evidence packs (claim candidates + concrete comparisons + eval protocol + limitations) that the writer must follow.
 - `claim-matrix-rewriter` makes `outline/claim_evidence_matrix.md` a projection/index of evidence packs (not an outline expansion), so writer guidance stays evidence-first.
 - `writer-context-pack` builds a deterministic per-H3 drafting pack (briefs + evidence + anchors + allowed cites), reducing hollow writing and making C5 more debuggable; it also emits an `opener_mode` hint per H3 to encourage varied, paper-like subsection openers (less “generator voice”).
-- `table-schema` defines comparison table questions/columns and the evidence fields each column must be grounded in.
-- `table-filler` fills `outline/tables.md` from evidence packs; if fields are missing it must surface them explicitly (do not write long prose in cells).
+- Optional: `table-schema` + `table-filler` + `survey-visuals` can produce tables/timelines/figure specs as intermediate artifacts, but they are not inserted into the PDF by default.
 - `citation-verifier` must produce LaTeX-safe BibTeX (escape `& % $ # _`, handle common `X^N` patterns) so `latex-compile-qa` does not fail on `.bbl` errors.
 
 ## Stage 5 - Draft + PDF (C5) [PROSE AFTER C2]
 required_skills:
 - subsection-writer
+- writer-selfloop
 - section-logic-polisher
 - transition-weaver
 - section-merger
@@ -165,6 +168,7 @@ required_skills:
 - pipeline-auditor
 - latex-scaffold
 - latex-compile-qa
+- artifact-contract-auditor
 optional_skills:
 - prose-writer
 - subsection-polisher
@@ -175,6 +179,7 @@ produces:
 - sections/abstract.md
 - sections/discussion.md
 - sections/conclusion.md
+- output/WRITER_SELFLOOP_TODO.md
 - output/SECTION_LOGIC_REPORT.md
 - output/MERGE_REPORT.md
 - output/DRAFT.md
@@ -185,8 +190,10 @@ produces:
 - latex/main.tex
 - latex/main.pdf
 - output/LATEX_BUILD_REPORT.md
+- output/CONTRACT_REPORT.md
 
 Notes:
+- Writing self-loop gate: `subsection-writer` ensures the full `sections/` file set exists (and emits `sections/sections_manifest.jsonl`); `writer-selfloop` blocks until depth/citation-scope/paper-voice checks pass, writing `output/WRITER_SELFLOOP_TODO.md` (PASS/FAIL).
 - WebWeaver-style “planner vs writer” split (single agent, two passes):
   - Planner pass: for each section/subsection, pick the exact citation IDs to use from the evidence bank (`outline/evidence_drafts.jsonl`) and keep scope consistent with the outline.
   - Writer pass: write that section using only those citation IDs; avoid dumping the whole notes set into context (prevents “lost in the middle” + template filler).
@@ -212,7 +219,7 @@ Notes:
 - If you intentionally add/remove citations after an earlier polish run, reset the citation-anchoring baseline before rerunning `draft-polisher`:
   - delete `output/citation_anchors.prepolish.jsonl` (workspace-local), then rerun `draft-polisher`.
 - Recommended skills (toolkit, not a rigid one-shot chain):
-  - Modular drafting: `subsection-writer` → `section-logic-polisher` → `transition-weaver` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor` → `latex-*`.
+  - Modular drafting: `subsection-writer` → `writer-selfloop` → `section-logic-polisher` → `transition-weaver` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor` → `latex-*`.
   - Legacy one-shot drafting: `prose-writer` (kept for quick experiments; less debuggable).
   - If the draft reads like “paragraph islands”, run `section-logic-polisher` and patch only failing `sections/S*.md` until PASS, then merge.
 - `queries.md` can set `evidence_mode: "abstract"|"fulltext"` (default template uses `abstract`).

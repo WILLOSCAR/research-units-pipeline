@@ -169,7 +169,7 @@ def main() -> int:
                         'evidence_id': eid,
                         'text': snippet,
                         'paper_id': pid,
-                        'citations': [f"@{bibkey}"],
+                        'citations': [bibkey],
                         'provenance': prov,
                     }
                 )
@@ -313,7 +313,7 @@ def _cite_keys_for_pids(pids: list[str], *, notes_by_pid: dict[str, dict[str, An
         bibkey = str((notes_by_pid.get(pid) or {}).get("bibkey") or "").strip()
         if not bibkey or (bibkeys and bibkey not in bibkeys):
             continue
-        key = f"@{bibkey}"
+        key = bibkey
         if key not in out:
             out.append(key)
         if len(out) >= 12:
@@ -342,7 +342,7 @@ def _evidence_snippets(*, workspace: Path, pids: list[str], notes_by_pid: dict[s
         bibkey = str(note.get("bibkey") or "").strip()
         if not bibkey or (bibkeys and bibkey not in bibkeys):
             continue
-        cite = f"@{bibkey}"
+        cite = bibkey
 
         key_results = note.get("key_results")
         preferred_snippet = ""
@@ -740,7 +740,7 @@ def _limitations_from_notes(pids: list[str], *, notes_by_pid: dict[str, dict[str
     for pid in pids[:20]:
         note = notes_by_pid.get(pid) or {}
         bibkey = str(note.get("bibkey") or "").strip()
-        cite = [f"@{bibkey}"] if bibkey else cite_keys[:2]
+        cite = [bibkey] if bibkey else cite_keys[:2]
 
         limitations = note.get("limitations") or []
         if isinstance(limitations, list):

@@ -57,7 +57,14 @@ def main() -> int:
 
         def add_anchor(*, hook_type: str, text: str, citations: list[str], paper_id: str = "", evidence_id: str = "", pointer: str = "") -> None:
             text = _trim(text)
-            citations = [c for c in citations if _is_allowed_cite(c, bib_keys=bib_keys)]
+            norm: list[str] = []
+            seen: set[str] = set()
+            for c in citations:
+                k = _normalize_cite_key(c, bib_keys=bib_keys)
+                if k and k not in seen:
+                    seen.add(k)
+                    norm.append(k)
+            citations = norm
             if not text or not citations:
                 return
             anchors.append(
@@ -137,16 +144,18 @@ def main() -> int:
     return 0
 
 
-def _is_allowed_cite(cite: str, *, bib_keys: set[str]) -> bool:
+def _normalize_cite_key(cite: str, *, bib_keys: set[str]) -> str:
     cite = str(cite or "").strip()
-    if not cite.startswith("@"):
-        return False
-    key = cite[1:].strip()
+    if cite.startswith("[@") and cite.endswith("]"):
+        cite = cite[2:-1].strip()
+    if cite.startswith("@"):
+        cite = cite[1:].strip()
+    key = cite.strip()
     if not key:
-        return False
+        return ""
     if bib_keys and key not in bib_keys:
-        return False
-    return True
+        return ""
+    return key
 
 
 def _trim(text: str, *, max_len: int = 280) -> str:

@@ -46,6 +46,33 @@ Manual / LLM-first (in place):
    - **Guardrails**: do not add/remove citation keys; do not introduce new factual claims.
 3. Re-run the checker until `output/SECTION_LOGIC_REPORT.md` is PASS, then proceed to `transition-weaver` and `section-merger`.
 
+
+
+## Examples (thesis + connectors)
+
+### Thesis signal (paragraph 1)
+
+Bad (topic setup only):
+- `Tool interfaces vary across agent systems, and many recent works explore different designs.`
+
+Better (conclusion-first claim):
+- `A central tension in tool interfaces is balancing expressivity with verifiability; as a result, interface contracts often determine which evaluation claims transfer across environments.`
+
+Bad (meta narration):
+- `This subsection argues that memory is important for agents.`
+
+Better (content claim):
+- `Memory designs trade off retrieval reliability against write-time contamination, and this trade-off shows up as distinct failure modes under fixed evaluation protocols.`
+
+### Connectors (avoid paragraph islands)
+
+Bad (paragraphs do not relate):
+- `X does ...` (para 2)
+- `Y does ...` (para 3)
+
+Better (explicit logical tie):
+- `Whereas X optimizes for <axis>, Y shifts the bottleneck to <axis>; as a result, their reported gains are not comparable unless the protocol controls for <constraint>.`
+
 ## Done criteria
 
 - `output/SECTION_LOGIC_REPORT.md` shows `- Status: PASS`

@@ -27,6 +27,7 @@ This skill is the bridge from “Evidence Bank” → “Writer”: the writer s
 
 - `outline/evidence_bindings.jsonl` (1 JSONL record per subsection)
 - `outline/evidence_binding_report.md` (summary; bullets + small tables)
+  - Includes a `gaps` column so missing evidence types are visible per subsection.
 
 ## Output format (`outline/evidence_bindings.jsonl`)
 
@@ -38,6 +39,8 @@ JSONL (one object per H3 subsection). Best-effort fields (keep deterministic):
 - `bibkeys` (a selected subset to encourage subsection-first citations)
 - `evidence_ids` (selected evidence items from `papers/evidence_bank.jsonl`)
 - `evidence_counts` (small summary by claim_type / evidence_level)
+- `binding_rationale` (short bullets; why the selected evidence covers this subsection’s axes / desired tags)
+- `binding_gaps` (list[str]; required evidence fields not covered by selected evidence; drives the evidence self-loop upstream)
 
 ## Binding policy (how strict to be)
 
@@ -84,4 +87,15 @@ JSONL (one object per H3 subsection). Best-effort fields (keep deterministic):
 ### Issue: some subsections have too few evidence IDs
 
 **Fix**:
-- Strengthen `papers/evidence_bank.jsonl` via `paper-notes` (more extractable evidence items), or broaden the mapped paper set via `section-mapper` + rerun.
+- Strengthen `papers/evidence_bank.jsonl` via `paper-notes` (more extractable evidence items).
+- Or broaden the mapped paper set for the subsection via `section-mapper`, then rerun binder.
+
+### Issue: `binding_gaps` is non-empty (missing evidence types)
+
+**What it means**:
+- The subsection brief requires certain evidence fields (e.g., benchmarks/metrics/security/tooling), but the bound evidence items do not cover them.
+
+**Fix (self-loop upstream)**:
+- Prefer enriching `papers/evidence_bank.jsonl` / `papers/paper_notes.jsonl` for mapped papers (extract benchmark/metric/failure-mode details).
+- If the mapping is weak for that evidence type, expand `outline/mapping.tsv` for the subsection and rerun binder.
+- If the requirement is unrealistic for the subsection’s scope, revise `outline/subsection_briefs.jsonl:required_evidence_fields` and rerun binder.

@@ -11,13 +11,15 @@ description: |
 
 # Pipeline Auditor (draft audit + regression)
 
-Goal: catch the failures your writer/polisher can accidentally produce:
-- placeholder leakage (`...`, `…`, TODO)
-- repeated boilerplate sentences
-- missing/undefined/duplicate citations
-- outline drift (H3 headings not matching `outline/outline.yml`)
+Purpose: a deterministic “regression test” for the writing stage.
 
-Outputs are deterministic and auditable.
+It answers:
+- did we leak placeholders or planner talk?
+- did citation scope drift?
+- did the draft fall back to generator voice (navigation/narration templates)?
+- is citation density/health sufficient for a survey-like draft?
+
+This skill is analysis-only. It does not edit content.
 
 ## Inputs
 
@@ -33,18 +35,53 @@ Outputs are deterministic and auditable.
 
 ## What it checks (deterministic)
 
-- **Placeholder leakage** in `output/DRAFT.md`: ellipsis, TODO markers, scaffold tags.
-- **Outline alignment**: section/subsection order and presence compared to `outline/outline.yml`.
-- **Narration-style template phrases**: flags slide-like navigation (“Next, we move from…”, “We now turn to…”) and repeated opener labels (e.g., `Key takeaway:`) that should be rewritten as content claims / argument bridges.
-- **Evidence-policy disclaimer spam**: flags repeated “abstract-only/title-only evidence” disclaimers; keep evidence policy once in front matter.
-- **Pipeline voice leakage**: flags phrases like `this run` that read like execution logs; rewrite as survey methodology (no pipeline/jargon).
-- **Synthesis stem repetition**: flags repeated paragraph openers like `Taken together, ...`; vary synthesis phrasing and keep it content-bearing.
-- **Meta survey-guidance phrasing**: flags `survey synthesis/comparisons should ...` sentences that read like process advice; rewrite as literature-facing observations (no new facts).
-- **Numeric claim context**: flags metric-like numeric paragraphs that cite papers but omit minimal evaluation context tokens (benchmark/dataset/metric/budget/cost).
-- **Citation health** (if `citations/ref.bib` exists): undefined keys, duplicate keys, basic formatting red flags.
-- **Evidence binding hygiene** (if `outline/evidence_bindings.jsonl` exists): citations used per H3 should stay within the bound evidence set.
-- **H3 parsing boundary**: treat new `##` headings as boundaries so tables/figures/open-problems sections are not accidentally attributed to the last H3.
-- **Paragraph-level cite coverage**: only counts substantive paragraphs (ignores headings/tables/short transitions) when computing uncited paragraph rates, to avoid false FAILs.
+- Placeholder leakage: ellipsis (`...`, `…`), TODO markers, scaffold tags.
+- Outline alignment: section/subsection order vs `outline/outline.yml`.
+- Paper voice anti-patterns:
+  - narration templates (`This subsection ...`, `In this subsection ...`)
+  - slide navigation (`Next, we move ...`, `We now turn to ...`)
+  - pipeline voice (`this run`, “pipeline/stage/workspace” in prose)
+- Evidence-policy disclaimer spam: repeated “abstract-only/title-only/provisional” boilerplate inside H3 bodies.
+- Meta survey-guidance phrasing: `survey synthesis/comparisons should ...`.
+- Synthesis stem repetition: repeated `Taken together, ...` and similar high-signal generator stems.
+- Numeric claim context: numbers without minimal evaluation context tokens (benchmark/dataset/metric/budget/cost).
+- Citation health (if `citations/ref.bib` exists): undefined keys, duplicates, basic formatting red flags.
+- Citation scope (if `outline/evidence_bindings.jsonl` exists): citations used per H3 should stay within the bound evidence set.
+
+## How to use the report (routing table)
+
+Treat `output/AUDIT_REPORT.md` as a “what to fix next” router.
+
+Common FAIL families -> responsible stage/skill:
+
+- Placeholders / leaked scaffolds
+  - Fix: C2–C4 artifacts are not clean. Route to `subsection-briefs` / `evidence-draft` / `writer-context-pack`, then rewrite affected sections.
+
+- Planner talk in transitions / narrator bridges
+  - Fix: rerun `transition-weaver` (and ensure briefs include `bridge_terms` / `contrast_hook`), then re-merge.
+
+- Narration templates / slide navigation inside H3
+  - Fix: rewrite the failing `sections/S*.md` via `writer-selfloop` (local, section-level) or `subsection-polisher`.
+
+- Evidence-policy disclaimer spam
+  - Fix: keep evidence policy once in Intro/Related Work (front matter), delete repeats in H3 (use `draft-polisher` or local section rewrites).
+
+- Citation scope drift (out-of-scope bibkeys)
+  - Fix: either (a) rewrite the subsection to stay in-scope, or (b) fix mapping/bindings (`section-mapper` → `evidence-binder`) and regenerate packs.
+
+- Global unique citations too low
+  - Fix: `citation-diversifier` → `citation-injector` (NO NEW FACTS), then `draft-polisher`.
+
+- Intro/Related Work too thin / too few cites
+  - Fix: rewrite the corresponding `sections/S<sec_id>.md` front-matter file via `writer-selfloop` (front-matter path) using dense positioning + method paragraph.
+
+## Prevention guidance (what upstream writers should do)
+
+If you want the auditor to PASS *without* a heavy polish loop:
+- Start each H3 with a content claim + thesis (avoid narration templates).
+- Use explicit contrasts and at least one evaluation anchor paragraph.
+- Embed citations per claim (avoid trailing cite dumps).
+- Put evidence-policy limitations once in the front matter, not in every H3.
 
 ## Script
 
@@ -55,53 +92,32 @@ Outputs are deterministic and auditable.
 
 ### All Options
 
-- `--workspace <dir>`: workspace root
-- `--unit-id <U###>`: unit id (optional; for logs)
-- `--inputs <semicolon-separated>`: override inputs (rare; prefer defaults)
-- `--outputs <semicolon-separated>`: override outputs (rare; prefer defaults)
-- `--checkpoint <C#>`: checkpoint id (optional; for logs)
+- `--workspace <dir>`
+- `--unit-id <U###>` (optional; for logs)
+- `--inputs <semicolon-separated>` (rare override; prefer defaults)
+- `--outputs <semicolon-separated>` (rare override; default writes `output/AUDIT_REPORT.md`)
+- `--checkpoint <C#>` (optional)
 
 ### Examples
 
-- Run audit after `global-reviewer` and before LaTeX:
+- Run audit after `global-reviewer` and before LaTeX/PDF:
   - `python .codex/skills/pipeline-auditor/scripts/run.py --workspace workspaces/<ws>`
 
 ## Troubleshooting
 
 ### Issue: audit fails due to undefined citations
 
-**Fix**:
-- Regenerate citations with `citation-verifier` (ensure `citations/ref.bib` includes every cited key), then rerun.
-
-### Issue: audit fails due to evidence-policy disclaimer spam
-
-**Fix** (skills-first):
-- Keep evidence-policy limitations **once** in front matter (Introduction or Related Work).
-- Remove repeated “abstract-only/title-only evidence” boilerplate from H3 sections (use `draft-polisher` to de-template without changing citation keys).
-
-Note:
-- In the default auditor behavior, these style findings may be reported as **warnings** (non-blocking) with examples; treat them as polish tasks if you want ref-like “paper voice”.
+Fix:
+- Regenerate citations with `citation-verifier` and ensure `citations/ref.bib` contains every cited key.
 
 ### Issue: audit fails due to narration-style navigation phrases
 
-**Fix**:
-- Replace slide-like narration (“Next, we move from…”, “We now turn to…”) with argument bridges that restate the lens/contrast (no new facts).
-- Apply the edits in place (typically via `draft-polisher`), then rerun auditor.
+Fix:
+- Rewrite as argument bridges (content-bearing handoffs, no navigation commentary) in the failing `sections/*` files, then re-merge.
 
-### Issue: audit fails due to suspicious model naming (e.g., “GPT-5”)
+### Issue: audit fails due to "unique citations too low"
 
-**Fix**:
-- Replace ambiguous names with the cited paper’s naming, or a neutral phrase (“a proprietary frontier model”), and add minimal evaluation context if a number is kept (task + metric + constraint/budget/cost).
-
-### Issue: audit fails due to "unique citations too low" (survey/deep profiles)
-
-**Fix** (skills-first; avoid ad-hoc retrieval at this stage):
-- Run `citation-diversifier` to generate a per-H3 plan of *unused, in-scope* citation keys (writes `output/CITATION_BUDGET_REPORT.md`).
-- Apply the plan:
-  - Preferred: run `citation-injector` (edits `output/DRAFT.md` and writes `output/CITATION_INJECTION_REPORT.md`).
-  - Manual fallback: add 3–6 citations per H3, preferring keys in `outline/writer_context_packs.jsonl:allowed_bibkeys_selected` that are **not already used elsewhere** in the draft.
-- Keep all added citation keys within the subsection’s allowed scope (`outline/evidence_bindings.jsonl` / `allowed_bibkeys_mapped`); avoid cross-chapter “free cites”.
-- Add citations via evidence-neutral phrasing (so you don't invent claims), and embed cites per-work (avoid trailing dumps), e.g.:
-  - `In <topic>, systems such as X [@A] and Y [@B] illustrate distinct design points; Z [@C] explores a contrasting point under a different protocol.`
-- Then rerun `draft-polisher` → `global-reviewer` → auditor.
-  - If `draft-polisher` blocks due to anchoring drift after you intentionally added citations, delete `output/citation_anchors.prepolish.jsonl` and rerun to reset the baseline.
+Fix:
+- Run `citation-diversifier` to produce `output/CITATION_BUDGET_REPORT.md`.
+- Apply it via `citation-injector` (edits `output/DRAFT.md`, writes `output/CITATION_INJECTION_REPORT.md`).
+- Then run `draft-polisher` → `global-reviewer` → auditor.
