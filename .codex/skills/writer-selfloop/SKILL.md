@@ -1,9 +1,9 @@
 ---
 name: writer-selfloop
 description: |
-  Self-loop for survey writing: read `output/QUALITY_GATE.md`, then rewrite only the failing per-section files under `sections/` until the gates pass.
+  Writing self-loop for surveys: run the strict section-quality gate, then rewrite only the failing `sections/*.md` files until the report is PASS.
   **Trigger**: writer self-loop, quality gate loop, rewrite failing sections, expand thin sections, 自循环, 反复改到 PASS.
-  **Use when**: `subsection-writer` is BLOCKED (missing/short/thin H3, citation scope errors, missing chapter leads).
+  **Use when**: per-section files under `sections/` exist, but the writing gate is FAIL/BLOCKED (missing/thin H3, out-of-scope citations, missing chapter leads).
   **Skip if**: you are still pre-C2 (NO PROSE), or evidence packs/anchor sheet are incomplete (fix C3/C4 first).
   **Network**: none.
   **Guardrail**: do not invent facts; only use citation keys present in `citations/ref.bib`; keep citations subsection- or chapter-scoped per `outline/evidence_bindings.jsonl`; H3 body files must not contain headings.
@@ -13,11 +13,11 @@ description: |
 
 Purpose: make the writing stage converge **without rewriting everything**.
 
-This skill reads `output/QUALITY_GATE.md`, pinpoints which `sections/*.md` files failed, and iterates only on those files until `subsection-writer` passes.
+This skill runs the strict section-quality gate, writes an actionable TODO report, and iterates only on the failing files until it is PASS.
 
 ## Inputs
 
-- `output/QUALITY_GATE.md` (must mention `subsection-writer` / `sections/*` issues)
+- `output/QUALITY_GATE.md` (optional; append-only gate history; most recent entry contains the gate codes)
 - `sections/sections_manifest.jsonl` (paths + allowed citations + anchor facts)
 - `outline/subsection_briefs.jsonl`
 - `outline/chapter_briefs.jsonl`
@@ -32,21 +32,21 @@ This skill reads `output/QUALITY_GATE.md`, pinpoints which `sections/*.md` files
 
 - Updated `sections/S<sub_id>.md` (H3 body files)
 - Updated `sections/S<sec_id>_lead.md` (H2 chapter lead blocks, when required)
-- `output/WRITER_SELFLOOP_TODO.md` (optional; helper output)
+- `output/WRITER_SELFLOOP_TODO.md` (report-class; always written)
 
 ## Loop contract
 
 Repeat until this passes:
 
 ```bash
-python .codex/skills/subsection-writer/scripts/run.py --workspace workspaces/<ws>
+python .codex/skills/writer-selfloop/scripts/run.py --workspace workspaces/<ws>
 ```
 
 ## Workflow
 
 ### 0) Parse the failure report
 
-- Open `output/QUALITY_GATE.md`.
+- Open `output/WRITER_SELFLOOP_TODO.md` (or generate it by running the script once).
 - Extract:
   - which files failed (e.g., `sections/S3.2.md`, `sections/S3_lead.md`)
   - which gate codes fired (e.g., `sections_h3_too_short`, `sections_cites_outside_mapping`)
@@ -113,7 +113,7 @@ Notes:
 Rerun:
 
 ```bash
-python .codex/skills/subsection-writer/scripts/run.py --workspace workspaces/<ws>
+python .codex/skills/writer-selfloop/scripts/run.py --workspace workspaces/<ws>
 ```
 
 If it still fails, only touch the remaining failing files and repeat.
@@ -128,17 +128,68 @@ If it still fails, only touch the remaining failing files and repeat.
 - `sections_h3_missing_cited_numeric`: pick an anchor fact with digits from `outline/anchor_sheet.jsonl` and integrate it with citations.
 - `sections_h3_weak_anchor_density`: ensure multiple paragraphs are both cited and anchored (digit OR evaluation token OR limitation token), not just long descriptions.
 - `sections_h3_missing_thesis_statement`: rewrite paragraph 1 so it ends with a conclusion-first takeaway aligned to briefs `thesis` (avoid “This subsection …” meta narration).
+- `sections_h3_narration_template_opener`: your paragraph 1 uses narration templates (e.g., `This subsection ...`, `In this subsection ...`) -> rewrite as a content claim (tension/decision/lens) and end with the thesis (no meta narration).
 - `sections_h3_low_connector_density`: add explicit logical connectors (contrast/causal/extension/implication) and rerun `section-logic-polisher` until PASS.
+- `sections_h3_slide_narration`: remove slide-like navigation (e.g., `We now turn to ...`, `Next, we move ...`, `In the next section ...`) -> rewrite as argument bridges (content-bearing handoffs, no navigation commentary).
 - `sections_h3_citation_dump_paragraphs`: rewrite paragraphs that end with `[@a; @b; @c]` as the only citations; embed citations inside the sentences they support.
 - `sections_citation_dump_line`: remove stand-alone citation-only lines; merge the citation into the claim sentence.
 - `sections_cites_outside_mapping`: you used citation keys outside the binding set → fix mapping/bindings or rewrite to stay in-scope.
 - `sections_h3_missing_contrast` / `sections_h3_missing_eval_anchor` / `sections_h3_missing_limitation`: add the missing micro-structure signals explicitly.
+- `sections_h3_evidence_policy_disclaimer_spam`: repeated abstract/title-only disclaimers inside H3 -> keep evidence policy once in front matter; delete repeated boilerplate (use a short `(abstract-only)` tag only when truly needed).
+- `sections_h3_meta_survey_guidance`: meta guidance (e.g., `survey ... should ...`) -> rewrite as literature-facing observations grounded in cited work (no new facts).
 
 Non-gated but high-impact polish (paper voice):
 - Remove outline narration (`This subsection ...`, `In this subsection, we ...`) and slide navigation (`We now turn to ...`); rewrite into content claims + argument bridges.
 - Keep evidence-policy limitations once in front matter; delete repeated “abstract-only/title-only” boilerplate inside H3 unless truly subsection-specific.
 - Avoid repeating literal opener labels across many H3s (e.g., `Key takeaway:`); vary opener phrasing and cadence.
 - Keep tone calm and academic; delete hype words and “PPT speaker notes”.
+
+
+
+## Rewrite recipes (common failures -> better paper voice)
+
+Use these as *rewrite intentions*, not copy-paste templates.
+
+### 1) Narration opener -> content claim
+
+Bad:
+- `This subsection surveys tool interfaces for agents.`
+
+Better:
+- `A central tension in tool interfaces is balancing expressive action spaces with verifiable execution; interface contracts largely determine which evaluation claims are meaningful.`
+
+### 2) Slide navigation -> argument bridge
+
+Bad:
+- `Next, we move from planning to memory.`
+
+Better:
+- `Planning methods specify how decisions are made; memory mechanisms determine what information those decisions can reliably condition on under a fixed protocol.`
+
+### 3) Disclaimer spam -> one policy paragraph + local caveat only when needed
+
+Bad:
+- `Claims remain provisional under abstract-only evidence.` (repeated in many H3s)
+
+Better:
+- Put the evidence policy once in the Introduction/Related Work.
+- In an H3, only add a *subsection-specific* caveat, e.g., `Reported gains are difficult to compare when protocols differ (tool access, budgets, and logging).`
+
+### 4) "survey should" -> literature-facing observation
+
+Bad:
+- `Therefore, survey comparisons should control for tool access.`
+
+Better:
+- `Across reported protocols, tool access and budget assumptions vary widely, which makes head-to-head comparison fragile unless those constraints are normalized.`
+
+### 5) Cite dump -> cite-as-evidence
+
+Bad:
+- `Many systems adopt tool schemas. [@a; @b; @c; @d]`
+
+Better:
+- `Systems such as X [@a] and Y [@b] formalize tool schemas to reduce action ambiguity, whereas Z [@c] leaves the interface looser and shifts the burden to prompting and post-hoc validation.`
 
 ## Script (optional)
 
@@ -161,4 +212,4 @@ Non-gated but high-impact polish (paper voice):
   - `python .codex/skills/writer-selfloop/scripts/run.py --workspace workspaces/<ws>`
 
 Notes:
-- The script is a deterministic helper: it does not rewrite prose; it only writes `output/WRITER_SELFLOOP_TODO.md`.
+- The script is a deterministic helper: it does not rewrite prose; it runs the section-quality checks and writes `output/WRITER_SELFLOOP_TODO.md` (PASS/FAIL).

@@ -1,6 +1,6 @@
 # Pipeline Diagnosis & Improvement (skills-first LaTeX survey)
 
-Last updated: 2026-01-18
+Last updated: 2026-01-19
 
 本诊断聚焦：**skills 驱动的 LaTeX survey 生成 Pipeline**（不是某次草稿内容打磨）。
 
@@ -14,6 +14,21 @@ Last updated: 2026-01-18
 - 写作不空洞：不是靠硬 gate 堵住，而是通过 **中间态合同**（brief/evidence/pack/transition）把 writer 引导到“论文写法”。
 
 ---
+
+## 0b) Current status (implemented vs remaining)
+
+Implemented (2026-01-19):
+- Contract closure: report-class skills always write outputs; `artifact-contract-auditor` writes `output/CONTRACT_REPORT.md`.
+- Failure sinks: `output/QUALITY_GATE.md` is append-only; runner appends `output/RUN_ERRORS.md`.
+- Paper voice guardrails (non-hardcode first): transition outputs are paper-voice (no planner talk), writer packs include a positive `paper_voice_palette`.
+- Writing-stage playbooks: key C5 skills now encode explicit argument-move contracts + rewrite recipes + good/bad examples (so quality is guided before/during drafting, not only audited after).
+- Schema normalization (P2-2): `schema-normalizer` makes C3/C4 JSONL join keys + citation formats consistent, writing `output/SCHEMA_NORMALIZATION_REPORT.md`.
+- Two self-loops are now explicit in the pipeline:
+  - Evidence self-loop (prewrite routing): `evidence-selfloop` → `output/EVIDENCE_SELFLOOP_TODO.md` (blocks on `blocking_missing`).
+  - Writing self-loop: `writer-selfloop` → `output/WRITER_SELFLOOP_TODO.md` (blocks until PASS; fix only failing `sections/*.md`).
+- Visuals default strategy: optional by default (tables/timeline/figures skills remain available but are not required for arxiv-survey(-latex)).
+
+Remaining: optional visuals insertion into LaTeX if you want closed-loop figures/tables (make visuals a first-class deliverable instead of intermediate-only).
 
 ## 0) 对标：成熟 survey 的“外形”和“写法”是什么
 
@@ -90,7 +105,7 @@ Last updated: 2026-01-18
 
 ### 1.3 可复用性/可审计性差距（这是 pipeline 层面 P0）
 
-pipeline 声称的 `target_artifacts`（共 38 个）在 baseline workspace 缺失 2 个关键 QA 报告：
+pipeline 声称的 `target_artifacts`（`arxiv-survey-latex` 当前 40 个）在 baseline workspace 缺失 2 个关键 QA 报告：
 - 缺失 `output/SECTION_LOGIC_REPORT.md`
 - 缺失 `output/GLOBAL_REVIEW.md`
 
@@ -137,7 +152,7 @@ pipeline 声称的 `target_artifacts`（共 38 个）在 baseline workspace 缺�
 - 更严格会让一些“以前看似跑通”的 run 变成 FAIL（但这是好事：暴露合同问题）。
 
 验证：
-- 任意一次 e2e 结束后：38/38 `target_artifacts` 存在；缺失会被 `CONTRACT_REPORT` 明确列出。
+- 任意一次 e2e 结束后：40/40 `target_artifacts` 存在；缺失会被 `CONTRACT_REPORT` 明确列出。
 
 ---
 
@@ -295,6 +310,9 @@ pipeline 声称的 `target_artifacts`（共 38 个）在 baseline workspace 缺�
 - 你会感觉 pipeline 做了很多，但最终交付（PDF）没有体现，导致“流程看起来强但产出不强”。
 
 改进建议（P2，两种路线二选一，需产品决策）：
+
+Current repo default (2026-01-19): choose route (1) optional — visuals skills remain available, but they are not required/contracted in the default arxiv-survey(-latex) run.
+
 1) 简化路线：把 `table-schema/table-filler/survey-visuals` 改为 optional（默认不跑）。
 2) 闭环路线：新增 `visuals-inserter`（C5）：
    - 把 tables/timeline/figure specs 以“论文可接受”的方式插入 DRAFT（或 LaTeX），并保持 citations 不引入新 key。
@@ -462,7 +480,7 @@ pipeline 声称的 `target_artifacts`（共 38 个）在 baseline workspace 缺�
 建议把下面作为回归 checklist（不要求一次性全部 blocking，但至少要能报告出来）：
 
 ### 6.1 合同/审计（P0）
-- target_artifacts 完整：38/38（或明确哪些是 optional）
+- target_artifacts 完整：40/40（或明确哪些是 optional）
 - `DECISIONS.md` workspace path 正确且可追溯
 - 任意失败都有 `output/QUALITY_GATE.md` / `output/RUN_ERRORS.md`
 
@@ -477,4 +495,3 @@ pipeline 声称的 `target_artifacts`（共 38 个）在 baseline workspace 缺�
   - >=2 个 A-vs-B contrasts（同段多 cite）
   - >=1 个 protocol-aware 段落（task/metric/constraint 至少 2 项）
   - >=1 个 limitation 段落（明确条件/边界）
-

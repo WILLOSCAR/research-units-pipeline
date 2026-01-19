@@ -68,6 +68,37 @@ Rules:
 - Avoid explicit labels like `Key takeaway:`; let the sentence carry the point.
 - Prefer concrete nouns + mid-sentence ties (`...; however, ...`) over “PPT narration” signposting.
 
+
+
+## Examples (what to write / what to avoid)
+
+Bad (template narration + vague claims + cite dump):
+
+```text
+This subsection surveys how agents use memory. Taken together, these approaches improve performance across tasks [@example2023; @example2024; @example2025].
+```
+
+Why it is bad:
+- Starts with narration ("This subsection ...").
+- No explicit A-vs-B contrast (reads like a topic list).
+- No evaluation anchor (benchmark/metric/protocol is missing).
+- Citations are only used as a trailing tag list.
+
+Good (tension -> contrast -> eval anchor -> limitation; citations embedded):
+
+Plan (kept out of final prose):
+
+1) Tension: Memory increases capability but makes evaluation and reproducibility harder.
+2) Contrast: Retrieval-style memory [@example2023] differs from write-heavy episodic memory [@example2024] in what gets stored and when it can be trusted.
+3) Eval anchor: Results are typically reported on agent benchmarks with success-rate style metrics under tool/budget constraints (state the specific benchmark/metric when available).
+4) Limitation: Comparisons remain fragile when protocols differ or when memory writes are not logged, so some gains may not transfer.
+
+Paragraph (final prose):
+
+```text
+A recurring tension in agent memory is that richer state can expand what the system can do, yet it also complicates evaluation and reproducibility. Retrieval-style designs emphasize selecting and grounding a small working set of relevant context [@example2023], whereas write-heavy episodic approaches accumulate longer-term traces that can change the agent behavior across episodes [@example2024]. These choices often surface in benchmarked evaluations as different failure patterns under fixed tool and budget constraints (e.g., higher success at the cost of more brittle behavior when memory writes are noisy). At the same time, cross-paper comparisons remain limited when protocols are not aligned or when memory writes are not transparently logged, making it unclear which gains reflect memory design versus evaluation artifacts.
+```
+
 ## Checklist (quick self-audit)
 
 - [ ] No `...` / `…` / `TODO` / scaffold phrases.

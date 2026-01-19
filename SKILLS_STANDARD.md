@@ -125,7 +125,10 @@ When a skill writes/edits prose (C5), prefer a "paper voice" contract over britt
 - ✅ Instead: state findings/contrasts directly
 
 Implementation bias:
-- Prefer **skill guidance + auditor warnings with examples** over "hard blocks" on specific phrases.
+- Prefer **skill guidance + auditor warnings with examples** over brittle hard blocks.
+- Exception: the `writer-selfloop` section gate may treat a few generator-voice patterns as **BLOCKING** when they
+  reliably correlate with hollow/templated prose (e.g., narration openers, slide navigation, repeated evidence-policy disclaimers).
+  The fix is still a semantic rewrite (content claim + argument bridge), not code tweaks.
 
 ## 2c) "NO PROSE" Definition (C2-C4 guardrail)
 
@@ -207,10 +210,14 @@ For deterministic units (retrieval/dedupe/compile/format checks):
 | Evidence binding compliance | 100% in-scope | Citations must stay within `outline/evidence_bindings.jsonl` allowed set |
 
 **Report-class skills contract**:
-- All report skills (section-logic-polisher, global-reviewer, pipeline-auditor) **must write output regardless of PASS/FAIL**.
+- All report skills (evidence-selfloop, writer-selfloop, section-logic-polisher, global-reviewer, pipeline-auditor, artifact-contract-auditor, latex-compile-qa) **must write output regardless of PASS/FAIL**.
+- Self-loop reports are the *gate interface* (the agent should treat them as “fix plan + unblock signal”):
+  - `evidence-selfloop` → `output/EVIDENCE_SELFLOOP_TODO.md`
+  - `writer-selfloop` → `output/WRITER_SELFLOOP_TODO.md`
+  In both, `- Status: PASS` is the only unblock signal.
 - Standard report structure:
   ```markdown
-  ## Status: PASS | FAIL
+  - Status: PASS | FAIL
 
   ## Summary
   <one-line verdict>
@@ -225,26 +232,35 @@ For deterministic units (retrieval/dedupe/compile/format checks):
 
 ## 6) JSONL Interface Schema (cross-skill contracts)
 
-**Standardized field names** (enforce consistency across skills):
+Survey pipelines treat `outline/outline.yml` as the ID source of truth. All C2-C4 JSONL artifacts should use those ids directly so downstream skills do not rely on best-effort joins.
+
+If you have legacy artifacts (mixed field names / `@BibKey` prefixes), run `schema-normalizer` (NO PROSE) to normalize in-place and write `output/SCHEMA_NORMALIZATION_REPORT.md`.
+
+**Standardized field names** (recommended minimum):
 
 | Field | Type | Required | Format | Used by |
 |-------|------|----------|--------|---------|
-| `section_id` | string | Yes | `S<H2>.<H3>` (e.g., `S2.1`) | All outline/evidence/writing skills |
-| `subsection_id` | string | Yes (H3-level) | Same as `section_id` | subsection-briefs, evidence-draft, writer-context-pack |
-| `chapter_id` | string | Yes (H2-level) | `S<H2>` (e.g., `S2`) | chapter-briefs |
-| `citations` | array | Optional | `["smith2023", "jones2024"]` (no `@` prefix) | paper-notes, evidence-draft, writer-context-pack |
-| `evidence_ids` | array | Optional | `["E001", "E042"]` | evidence-binder, evidence-draft |
-| `paper_id` | string | Yes (paper-level) | Stable identifier from `papers/core_set.csv` | paper-notes, section-mapper |
+| `section_id` | string | Yes (H2-level) | from `outline/outline.yml` (e.g., `"3"`) | chapter-briefs, writer-context-pack, section leads |
+| `sub_id` | string | Yes (H3-level) | from `outline/outline.yml` (e.g., `"3.1"`) | subsection-briefs, evidence-* , writer-context-pack |
+| `section_title` | string | Yes when `section_id` present | from `outline/outline.yml` | most outline/evidence/writing artifacts |
+| `title` | string | Yes when `sub_id` present | from `outline/outline.yml` | most outline/evidence/writing artifacts |
+| `citations` | array | Optional | `["smith2023", "jones2024"]` (raw bibkeys; no `@`) | evidence-draft, anchor-sheet, writer-context-pack |
+| `evidence_ids` | array | Optional | `["E-P0001-…", "E-P0042-…"]` | evidence-binder, evidence-draft |
+| `paper_id` | string | Yes (paper-level) | stable id from `papers/core_set.csv` (e.g., `P0042`) | paper-notes, section-mapper |
 
 **Citation key format**:
 - In JSONL: `"citations": ["smith2023"]` (no `@` prefix)
 - In Markdown: `[@smith2023]` (with `@` prefix)
 - In BibTeX: `@article{smith2023, ...}` (entry key)
 
-**Required vs optional fields per artifact type**:
-- **Briefs** (subsection_briefs.jsonl): `subsection_id`, `thesis`, `contrast_hook`, `paragraph_plan` (required); `citations` (optional)
-- **Evidence packs** (evidence_drafts.jsonl): `subsection_id`, `claim_candidates`, `concrete_comparisons`, `evaluation_protocol`, `limitations` (required); `evidence_ids`, `citations` (optional)
-- **Writer context packs** (writer_context_packs.jsonl): `subsection_id`, `allowed_bibkeys`, `must_use`, `do_not_repeat_phrases` (required)
+**Required vs optional fields per artifact type** (survey pipeline):
+- Briefs (`outline/subsection_briefs.jsonl`): `sub_id`, `title`, `section_id`, `section_title`, `rq`, `thesis`, `axes`, `paragraph_plan`.
+- Chapter briefs (`outline/chapter_briefs.jsonl`): `section_id`, `section_title`, `subsections[]` (`sub_id`, `title`), `throughline`, `lead_paragraph_plan`.
+- Evidence bindings (`outline/evidence_bindings.jsonl`): `sub_id`, `title`, plus `bibkeys`/`mapped_bibkeys` (raw keys), `evidence_ids`.
+- Evidence packs (`outline/evidence_drafts.jsonl`): `sub_id`, `title` (and `section_id/section_title` recommended); nested blocks should use raw `citations`.
+- Anchor sheet (`outline/anchor_sheet.jsonl`): `sub_id`, `title` (and `section_id/section_title` recommended); anchors carry raw `citations`.
+- Writer context packs (`outline/writer_context_packs.jsonl`): `sub_id`, `title`, `section_id`, `section_title`; `allowed_bibkeys_*`; trimmed anchors/comparisons/limitations carry raw `citations`.
+
 
 ## 7) Minimal authoring checklist
 

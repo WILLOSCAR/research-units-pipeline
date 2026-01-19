@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 
 @dataclass(frozen=True)
@@ -263,6 +263,8 @@ def check_unit_outputs(*, skill: str, workspace: Path, outputs: list[str]) -> li
         return _check_evidence_drafts(workspace, outputs)
     if skill == "anchor-sheet":
         return _check_anchor_sheet(workspace, outputs)
+    if skill == "schema-normalizer":
+        return _check_schema_normalization_report(workspace, outputs)
     if skill == "writer-context-pack":
         return _check_writer_context_packs(workspace, outputs)
     if skill == "survey-visuals":
@@ -270,7 +272,12 @@ def check_unit_outputs(*, skill: str, workspace: Path, outputs: list[str]) -> li
     if skill == "transition-weaver":
         return _check_transitions(workspace, outputs)
     if skill == "subsection-writer":
-        return _check_sections_manifest(workspace, outputs)
+        # The subsection-writer unit is LLM-first. Its script is responsible for
+        # generating the expected file manifest, but the strict writing gate is
+        # enforced by the explicit writing self-loop unit (`writer-selfloop`).
+        return _check_sections_manifest_index(workspace, outputs)
+    if skill == "writer-selfloop":
+        return _check_writer_selfloop(workspace, outputs)
     if skill == "section-logic-polisher":
         return _check_section_logic_polisher(workspace, outputs)
     if skill == "section-merger":
@@ -493,7 +500,13 @@ def _next_action_lines(*, skill: str, unit_id: str) -> list[str]:
             "  - `sections/S<sub_id>.md` for each H3 (body only; no headings).",
             "- Each H3 file should have >=3 unique citations and avoid ellipsis/TODO/template boilerplate.",
             "- Keep H3 citations subsection-first: cite keys mapped in `outline/evidence_bindings.jsonl` for that H3; limited reuse from sibling H3s in the same H2 chapter is allowed; avoid cross-chapter “free cite”.",
-            "- If blocked, run `writer-selfloop`: read `output/QUALITY_GATE.md`, fix only the failing `sections/*.md`, then rerun the `subsection-writer` script until it passes.",
+            "- After files exist, run `writer-selfloop` to enforce draft-profile depth/scope and to generate an actionable fix plan (`output/WRITER_SELFLOOP_TODO.md`).",
+        ],
+        "writer-selfloop": [
+            "- Open `output/WRITER_SELFLOOP_TODO.md` and fix only the failing `sections/*.md` files listed there (do not rewrite everything).",
+            "- Keep citations in-scope (per `outline/evidence_bindings.jsonl` / writer packs) and avoid narration templates (`This subsection ...`, `Next, we ...`).",
+            "- Rerun the `writer-selfloop` script until the report shows `- Status: PASS`, then proceed to the next unit.",
+            "- If the failures point to thin evidence (missing anchors/comparisons/limitations), loop upstream: `paper-notes` → `evidence-binder` → `evidence-draft` → `anchor-sheet` → `writer-context-pack`.",
         ],
         "section-merger": [
             "- Ensure all required `sections/*.md` exist (see `output/MERGE_REPORT.md` for missing paths), then rerun merge.",
@@ -1595,6 +1608,8 @@ def _check_subsection_briefs(workspace: Path, outputs: list[str]) -> list[Qualit
         "scope_rule",
         "rq",
         "thesis",
+        "tension_statement",
+        "evaluation_anchor_minimal",
         "axes",
         "clusters",
         "paragraph_plan",
@@ -1614,6 +1629,19 @@ def _check_subsection_briefs(workspace: Path, outputs: list[str]) -> list[Qualit
 
         thesis = str(rec.get("thesis") or "").strip()
         if len(thesis) < 24 or _check_placeholder_markers(thesis) or "…" in thesis:
+            bad += 1
+            continue
+
+        tension = str(rec.get("tension_statement") or "").strip()
+        if len(tension) < 24 or _check_placeholder_markers(tension) or "…" in tension:
+            bad += 1
+            continue
+
+        eva = rec.get("evaluation_anchor_minimal")
+        if not isinstance(eva, dict):
+            bad += 1
+            continue
+        if not all(str(eva.get(k) or "").strip() for k in ("task", "metric", "constraint")):
             bad += 1
             continue
 
@@ -1666,6 +1694,14 @@ def _check_subsection_briefs(workspace: Path, outputs: list[str]) -> list[Qualit
                 continue
             if para_no and para_no > 1:
                 if not (connector_to_prev and connector_phrase):
+                    continue
+                # Clause-level hint only (avoid full-sentence boilerplate leaking into prose).
+                if len(connector_phrase) > 140:
+                    continue
+                if connector_phrase.strip().endswith((".", "?", "!")):
+                    continue
+                words = re.findall(r"[A-Za-z0-9]+", connector_phrase)
+                if len(words) > 18:
                     continue
             plan_ok += 1
         required_ok = 4 if min_plan_len >= 6 else (3 if min_plan_len >= 4 else 2)
@@ -2043,7 +2079,21 @@ def _check_anchor_sheet(workspace: Path, outputs: list[str]) -> list[QualityIssu
             if not str(a.get("text") or "").strip():
                 continue
             cites = a.get("citations") or []
-            if not isinstance(cites, list) or not any(str(c).strip().startswith("@") for c in cites):
+            if not isinstance(cites, list):
+                continue
+            has_key = False
+            for c in cites:
+                s = str(c).strip()
+                if not s:
+                    continue
+                if s.startswith("[@") and s.endswith("]"):
+                    s = s[2:-1].strip()
+                if s.startswith("@"):
+                    s = s[1:].strip()
+                if re.search(r"[A-Za-z0-9:_-]+", s):
+                    has_key = True
+                    break
+            if not has_key:
                 continue
             ok += 1
         if ok < 1:
@@ -2067,6 +2117,47 @@ def _check_anchor_sheet(workspace: Path, outputs: list[str]) -> list[QualityIssu
     return issues
 
 
+
+
+def _check_schema_normalization_report(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    out_rel = outputs[0] if outputs else "output/SCHEMA_NORMALIZATION_REPORT.md"
+    path = workspace / out_rel
+    if not path.exists() or path.stat().st_size == 0:
+        return [QualityIssue(code="missing_schema_normalization_report", message=f"`{out_rel}` is missing or empty.")]
+
+    text = path.read_text(encoding="utf-8", errors="ignore").strip()
+    if not text:
+        return [QualityIssue(code="empty_schema_normalization_report", message=f"`{out_rel}` is empty.")]
+    if _check_placeholder_markers(text) or "…" in text:
+        return [
+            QualityIssue(
+                code="schema_normalization_placeholders",
+                message=f"`{out_rel}` contains placeholders/ellipsis; fix upstream JSONL artifacts and rerun schema normalization.",
+            )
+        ]
+
+    m = re.search(r"(?ims)^##\s+Summary\s*\n\s*-\s*Status:\s*(\w+)\b", text)
+    if m:
+        status = (m.group(1) or "").strip().upper()
+        if status == "PASS":
+            return []
+        return [
+            QualityIssue(
+                code="schema_normalization_not_pass",
+                message=f"`{out_rel}` summary status is {status} (expected PASS).",
+            )
+        ]
+
+    # Fallback: accept any PASS marker if a structured Summary block is missing.
+    if re.search(r"(?im)^-\s*Status:\s*PASS\b", text):
+        return []
+
+    return [
+        QualityIssue(
+            code="schema_normalization_not_pass",
+            message=f"`{out_rel}` does not contain a PASS status; check the report and fix schema drift.",
+        )
+    ]
 def _check_writer_context_packs(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
     from tooling.common import load_yaml, read_jsonl
 
@@ -2685,6 +2776,143 @@ def _check_transitions(workspace: Path, outputs: list[str]) -> list[QualityIssue
     return []
 
 
+def _check_writer_selfloop(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    out_rel = outputs[0] if outputs else "output/WRITER_SELFLOOP_TODO.md"
+    path = workspace / out_rel
+    if not path.exists() or path.stat().st_size == 0:
+        return [QualityIssue(code="missing_writer_selfloop_report", message=f"`{out_rel}` is missing or empty.")]
+
+    text = path.read_text(encoding="utf-8", errors="ignore").strip()
+    if not text:
+        return [QualityIssue(code="empty_writer_selfloop_report", message=f"`{out_rel}` is empty.")]
+
+    # This file is explicitly a TODO plan, so do NOT treat the word "TODO" as placeholder leakage.
+    # We still reject obvious scaffold markers / ellipsis since this is a report-class artifact.
+    if "<!--" in text and "scaffold" in text.lower():
+        return [
+            QualityIssue(
+                code="writer_selfloop_scaffold_markers",
+                message=f"`{out_rel}` contains scaffold markers; regenerate the self-loop report.",
+            )
+        ]
+    if "…" in text:
+        return [
+            QualityIssue(
+                code="writer_selfloop_contains_ellipsis",
+                message=f"`{out_rel}` contains unicode ellipsis (`…`); regenerate the report without truncation markers.",
+            )
+        ]
+
+    if re.search(r"(?im)^-\\s*Status:\\s*PASS\\b", text):
+        return []
+
+    return [
+        QualityIssue(
+            code="writer_selfloop_not_pass",
+            message=f"`{out_rel}` is not PASS; fix the listed failing `sections/*.md` files and rerun `writer-selfloop`.",
+        )
+    ]
+
+
+def _check_sections_manifest_index(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
+    """Minimal manifest check for `subsection-writer`.
+
+    Rationale: `subsection-writer` is LLM-first and its script only materializes
+    `sections/sections_manifest.jsonl`. The strict "writing is good enough" gate
+    is enforced by the explicit self-loop unit (`writer-selfloop`), which
+    produces a report and blocks until sections meet the draft profile thresholds.
+    """
+
+    from tooling.common import load_yaml, read_jsonl
+
+    out_rel = outputs[0] if outputs else "sections/sections_manifest.jsonl"
+    path = workspace / out_rel
+    if not path.exists():
+        return [QualityIssue(code="missing_sections_manifest", message=f"`{out_rel}` does not exist.")]
+
+    records = read_jsonl(path)
+    items = [r for r in records if isinstance(r, dict)]
+    if not items:
+        return [QualityIssue(code="empty_sections_manifest", message=f"`{out_rel}` is empty or has no JSON objects.")]
+
+    # Build expected paths from the outline (and required global section files).
+    outline_path = workspace / "outline" / "outline.yml"
+    outline = load_yaml(outline_path) if outline_path.exists() else []
+
+    def _slug_unit_id(unit_id: str) -> str:
+        raw = str(unit_id or "").strip()
+        out: list[str] = []
+        for ch in raw:
+            out.append(ch if ch.isalnum() else "_")
+        safe = "".join(out).strip("_")
+        return f"S{safe}" if safe else "S"
+
+    expected: set[str] = {"sections/abstract.md", "sections/discussion.md", "sections/conclusion.md"}
+
+    if isinstance(outline, list):
+        for sec in outline:
+            if not isinstance(sec, dict):
+                continue
+            sec_id = str(sec.get("id") or "").strip()
+            subs = sec.get("subsections") or []
+            if isinstance(subs, list) and subs:
+                if sec_id:
+                    expected.add(f"sections/{_slug_unit_id(sec_id)}_lead.md")
+                for sub in subs:
+                    if not isinstance(sub, dict):
+                        continue
+                    sub_id = str(sub.get("id") or "").strip()
+                    if sub_id:
+                        expected.add(f"sections/{_slug_unit_id(sub_id)}.md")
+            else:
+                if sec_id:
+                    expected.add(f"sections/{_slug_unit_id(sec_id)}.md")
+
+    by_path: dict[str, dict[str, Any]] = {}
+    dupes = 0
+    for rec in items:
+        rel = str(rec.get("path") or "").strip()
+        if not rel:
+            continue
+        if rel in by_path:
+            dupes += 1
+        by_path[rel] = rec
+
+    issues: list[QualityIssue] = []
+    if dupes:
+        issues.append(QualityIssue(code="sections_manifest_duplicate_paths", message=f"`{out_rel}` contains duplicate `path` entries ({dupes})."))
+
+    missing = sorted([p for p in expected if p not in by_path])
+    if missing:
+        sample = ", ".join(missing[:8])
+        suffix = "..." if len(missing) > 8 else ""
+        issues.append(
+            QualityIssue(
+                code="sections_manifest_missing_expected_paths",
+                message=f"`{out_rel}` is missing some expected entries (e.g., {sample}{suffix}). Regenerate the manifest from the current outline.",
+            )
+        )
+
+    # Minimal writing gate: require that the expected per-section files exist and are non-empty.
+    # Deeper quality thresholds (length/citations/scope) are enforced by `writer-selfloop`.
+    missing_files: list[str] = []
+    for rel in sorted(expected):
+        p = workspace / rel
+        if not p.exists() or p.stat().st_size <= 0:
+            missing_files.append(rel)
+    if missing_files:
+        sample = ", ".join(missing_files[:8])
+        suffix = "..." if len(missing_files) > 8 else ""
+        issues.append(
+            QualityIssue(
+                code="sections_missing_files",
+                message=f"Missing per-section files under `sections/` (e.g., {sample}{suffix}).",
+            )
+        )
+
+    return issues
+
+
 def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
     from tooling.common import load_yaml, read_jsonl
 
@@ -2980,6 +3208,61 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                     min_chars = 9000
 
                 paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text.strip()) if p.strip()]
+                # Paper voice: block narration templates that read like outline commentary
+                # ("This subsection ...", "In this subsection ...") and slide-like navigation.
+                first_para = paragraphs[0] if paragraphs else ""
+                first_no_cites = re.sub(r"\[@[^\]]+\]", "", first_para)
+                first_no_cites = re.sub(r"\s+", " ", first_no_cites).strip()
+                if re.search(
+                    r"(?i)\b(?:this\s+(?:section|subsection)\s+(?:surveys|argues|shows|highlights|demonstrates|contends)|in\s+this\s+(?:section|subsection))\b",
+                    first_no_cites,
+                ):
+                    issues.append(
+                        QualityIssue(
+                            code="sections_h3_narration_template_opener",
+                            message=(
+                                f"`{rel}` starts with narration-style template phrasing (e.g., 'This subsection ...'). "
+                                "Rewrite paragraph 1 as a content claim (tension/decision/lens) and end with the thesis."
+                            ),
+                        )
+                    )
+                if re.search(
+                    r"(?i)\b(?:next,\s+we\s+move\s+from|we\s+now\s+(?:turn|move)\s+to|in\s+the\s+next\s+(?:section|subsection))\b",
+                    text,
+                ):
+                    issues.append(
+                        QualityIssue(
+                            code="sections_h3_slide_narration",
+                            message=(
+                                f"`{rel}` contains slide-like navigation narration (e.g., 'We now turn to ...'). "
+                                "Rewrite as argument bridges (no navigation commentary)."
+                            ),
+                        )
+                    )
+                # Evidence-policy disclaimers belong once in front matter, not repeated across H3s.
+                if re.search(
+                    r"(?i)\b(?:abstract(?:-|\s+)(?:only|level)\s+evidence|title(?:-|\s+)only\s+evidence|claims?\s+remain\s+provisional\s+under\s+abstract(?:-|\s+)(?:only|level)\s+evidence)\b",
+                    text,
+                ):
+                    issues.append(
+                        QualityIssue(
+                            code="sections_h3_evidence_policy_disclaimer_spam",
+                            message=(
+                                f"`{rel}` repeats evidence-policy/disclaimer phrasing (abstract/title-only/provisional claims). "
+                                "Keep evidence policy once in front matter (Intro/Related Work) and avoid repeating it in H3 bodies."
+                            ),
+                        )
+                    )
+                if re.search(r"(?i)\bsurvey\s+(?:synthesis|comparisons?)\s+should\b", text):
+                    issues.append(
+                        QualityIssue(
+                            code="sections_h3_meta_survey_guidance",
+                            message=(
+                                f"`{rel}` contains meta survey-guidance phrasing ('survey ... should ...'). "
+                                "Rewrite as literature-facing observations grounded in cited work (no new facts)."
+                            ),
+                        )
+                    )
                 if len(paragraphs) < min_paragraphs:
                     issues.append(
                         QualityIssue(

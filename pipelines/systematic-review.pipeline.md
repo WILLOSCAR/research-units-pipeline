@@ -1,6 +1,6 @@
 ---
 name: systematic-review
-version: 2.0
+version: 2.1
 target_artifacts:
   - output/PROTOCOL.md
   - papers/papers_raw.jsonl
@@ -10,6 +10,9 @@ target_artifacts:
   - papers/screening_log.csv
   - papers/extraction_table.csv
   - output/SYNTHESIS.md
+  - output/QUALITY_GATE.md
+  - output/RUN_ERRORS.md
+  - output/CONTRACT_REPORT.md
 default_checkpoints: [C0,C1,C2,C3,C4,C5]
 units_template: templates/UNITS.systematic-review.csv
 ---
@@ -76,5 +79,7 @@ Notes:
 ## Stage 5 - Synthesis (C5) [PROSE ALLOWED]
 required_skills:
 - synthesis-writer
+- artifact-contract-auditor
 produces:
 - output/SYNTHESIS.md
+- output/CONTRACT_REPORT.md

@@ -19,6 +19,11 @@ Goal: produce survey-quality prose in **small, independently verifiable units** 
 
 This skill is LLM-first. The helper script only writes `sections/sections_manifest.jsonl` and runs quality gates.
 
+In the default `arxiv-survey(-latex)` pipeline:
+- `subsection-writer` ensures all required per-section files exist (and emits `sections/sections_manifest.jsonl`).
+- `writer-selfloop` is the strict content gate that blocks until section depth/citation scope/paper-voice checks are satisfied.
+
+
 ## Decision Tree (what to write)
 
 ```
@@ -58,6 +63,78 @@ Required H3 body files (one per H3 subsection):
 
 Required H2 body files (one per H2 section without H3 subsections, e.g., Introduction/Related Work):
 - `sections/S<sec_id>.md`
+
+
+
+## Writing contract (goals + constraints)
+
+Treat each `sections/*.md` file as an auditable unit of argument, not a blob of generated text.
+
+### Global constraints (apply to every file)
+
+- Evidence-bounded: every non-trivial claim is supported by an in-scope citation; prefer in-sentence citations.
+- Paper voice: no outline narration, no slide-like navigation, no pipeline/meta talk.
+- Evidence policy once: place abstract/fulltext caveats once in front matter (Intro/Related Work), not repeated across H3 bodies.
+- No citation dumps: avoid paragraphs where citations appear only as a trailing list like `[@a; @b; @c]`.
+- No "list of papers" paragraphs: if a paragraph mentions many works, it must also explain how they differ along an axis.
+
+### File-type requirements (semantic jobs)
+
+| File | Job (what the reader should learn) | Must include | Common failure |
+|---|---|---|---|
+| `sections/abstract.md` | One-paragraph scope + what the survey contributes | scope boundary + axes + 3-5 citations | generic boilerplate, no anchors |
+| `sections/S<sec_id>.md` (H2 body; Intro/Related Work) | Motivation + positioning + method/evidence policy | scope boundary + evidence policy once + organization preview + dense citations | repeated disclaimers, "Prior Surveys" mini-section, slide narration |
+| `sections/S<sec_id>_lead.md` (H2 lead) | Preview the chapter lens + how H3s connect | 2-3 tight paras + >=2 citations + explicit axes | generic glue without concrete nouns |
+| `sections/S<sub_id>.md` (H3 body) | Execute one evidence-backed comparison story | thesis + >=2 contrasts + eval anchor + synthesis + limitation | topic listing, narration templates, cite dumps |
+| `sections/discussion.md` | Cross-cutting risks + gaps + future directions | 3-5 themes + concrete limitations + citations | re-summarizing sections, vague "future work" |
+| `sections/conclusion.md` | What we learned + what remains hard | 3-5 takeaways + 2-3 open problems | generic recap |
+
+### H3 argument skeleton (default 9-paragraph shape)
+
+Use the brief/pack `paragraph_plan` as the source of truth. When you need a default:
+
+1) Tension + scope boundary -> thesis (end paragraph 1 with the thesis)
+2) Route/cluster A: mechanism and assumptions
+3) Route/cluster A: where it works / what it optimizes
+4) Evaluation anchor for A (task/benchmark/metric/constraint)
+5) Route/cluster B: contrasting mechanism and assumptions
+6) Route/cluster B: where it works / what it optimizes (explicit contrast words)
+7) Evaluation anchor for B + trade-offs
+8) Cross-paper synthesis paragraph (>=2 citations in the same paragraph)
+9) Limitations + decision guidance (what to verify; when to prefer which)
+
+### Opener rewrites (anti-template)
+
+Bad (outline narration):
+- `This subsection surveys ...`
+- `In this subsection, we ...`
+
+Good (content-first opener + thesis):
+- `A central tension is <trade-off>; this matters because <evaluation/constraint>. We contrast <route A> with <route B>, and argue that <thesis>.`
+
+Bad (slide navigation):
+- `Next, we move from ...`
+- `We now turn to ...`
+
+Good (argument bridge):
+- `Having established <lens>, we can now examine how <next lens> changes the trade-offs under comparable protocols.`
+
+Bad (meta guidance):
+- `Therefore, survey comparisons should ...`
+
+Good (literature-facing observation):
+- `Across protocols, the literature suggests <pattern>, but it remains unclear how this generalizes when <constraint> changes.`
+
+### Preflight (before you draft a file)
+
+For each target H3, write (privately) a 4-line plan before prose:
+
+- Tension sentence
+- A vs B contrast sentence (with >=2 citations)
+- Evaluation anchor sentence (task/metric/constraint)
+- Limitation/verification sentence
+
+If you cannot write this plan without guessing, stop and fix upstream evidence (`paper-notes` -> `evidence-draft` -> `anchor-sheet`) instead of writing filler.
 
 ## Workflow (planner → writer → skeptic)
 
@@ -258,7 +335,7 @@ Delete or rewrite any sentence that is:
 - **Generic prose despite long paragraphs** → you skipped `outline/anchor_sheet.jsonl`; rewrite with >=1 cited numeric anchor + >=2 concrete comparisons.
 - **Citations missing in bib** → go upstream: ensure classics/surveys are in `papers/core_set.csv` and regenerate `citations/ref.bib`.
 - **Citations outside binding set** → rewrite to stay within subsection/ chapter mapping; if still impossible, fix `outline/mapping.tsv` then rerun `evidence-binder` (avoid cross-chapter “free cite”).
-- **Quality gate fails after partial writing** → use `writer-selfloop` to rewrite only failing `sections/*.md` based on `output/QUALITY_GATE.md` (don’t rewrite the whole draft).
+- **Writer self-loop fails after partial writing** → run `writer-selfloop` and rewrite only the failing `sections/*.md` listed in `output/WRITER_SELFLOOP_TODO.md` (don’t rewrite the whole draft).
 
 ## Script
 

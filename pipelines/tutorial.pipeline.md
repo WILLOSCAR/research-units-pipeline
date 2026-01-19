@@ -1,11 +1,14 @@
 ---
 name: tutorial
-version: 2.0
+version: 2.1
 target_artifacts:
   - output/TUTORIAL_SPEC.md
   - outline/concept_graph.yml
   - outline/module_plan.yml
   - output/TUTORIAL.md
+  - output/QUALITY_GATE.md
+  - output/RUN_ERRORS.md
+  - output/CONTRACT_REPORT.md
 default_checkpoints: [C0,C1,C2,C3]
 units_template: templates/UNITS.tutorial.csv
 ---
@@ -52,8 +55,10 @@ Notes:
 ## Stage 3 - Writing (C3) [PROSE ALLOWED]
 required_skills:
 - tutorial-module-writer
+- artifact-contract-auditor
 produces:
 - output/TUTORIAL.md
+- output/CONTRACT_REPORT.md
 
 Notes:
 - Write only within the approved scope; if you discover missing prerequisites, record them as a follow-up instead of expanding scope silently.

@@ -53,6 +53,36 @@ def _bib_keys(bib_path: Path) -> set[str]:
     return set(re.findall(r"(?im)^@\w+\s*\{\s*([^,\s]+)\s*,", text))
 
 
+
+
+def _normalize_cite_keys(citations: Any, *, bibkeys: set[str]) -> list[str]:
+    # Normalize citation keys to raw BibTeX keys (no @ prefix).
+    # Tolerates: @Key, [@Key], Key, and semicolon/comma-separated strings.
+
+    out: list[str] = []
+    if not isinstance(citations, list):
+        return out
+
+    for c in citations:
+        s = str(c or "").strip()
+        if not s:
+            continue
+        if s.startswith("[") and s.endswith("]"):
+            s = s[1:-1].strip()
+        if s.startswith("@"):  # tolerate @Key
+            s = s[1:].strip()
+
+        # Split multi-key strings best-effort (e.g., "@a; @b").
+        for k in re.findall(r"[A-Za-z0-9:_-]+", s.replace("@", " ")):
+            k = k.strip()
+            if not k:
+                continue
+            if bibkeys and k not in bibkeys:
+                continue
+            if k not in out:
+                out.append(k)
+
+    return out
 def _stable_choice(key: str, options: list[str]) -> str:
     if not options:
         return ""
@@ -262,6 +292,42 @@ def main() -> int:
         "Main takeaway:",
     ]
 
+    # Positive guidance (paper voice): small phrase palettes + rewrite stems.
+    # Keep these semantic and short; the draft must not read like template narration.
+    PAPER_VOICE_PALETTE = {
+        "opener_archetypes": {
+            "tension-first": [
+                "A key tension is",
+                "The central trade-off is",
+                "A recurring constraint is",
+            ],
+            "decision-first": [
+                "For system builders, the crux is",
+                "A practical decision is",
+                "One design choice is",
+            ],
+            "lens-first": [
+                "Seen through the lens of",
+                "From the perspective of",
+                "Under an interface contract,",
+            ],
+        },
+        "synthesis_stems": [
+            "Across these studies,",
+            "Collectively,",
+            "In summary,",
+            "The evidence suggests that",
+            "A consistent theme is that",
+        ],
+        "rewrite_rules": [
+            {"avoid_stem": "This subsection surveys", "prefer_stem": "A key tension is"},
+            {"avoid_stem": "In this subsection", "prefer_stem": "We focus on"},
+            {"avoid_stem": "Next, we move", "prefer_stem": "Having established"},
+            {"avoid_stem": "We now turn", "prefer_stem": "We then examine"},
+            {"avoid_stem": "survey comparisons should", "prefer_stem": "Across protocols, we observe"},
+        ],
+    }
+
     records: list[dict[str, Any]] = []
     now = now_iso_seconds()
     draft_profile = _draft_profile(workspace)
@@ -282,6 +348,11 @@ def main() -> int:
         axes = [str(a).strip() for a in (brief.get("axes") or []) if str(a).strip()]
         paragraph_plan = brief.get("paragraph_plan") or []
 
+        tension_statement = str(brief.get("tension_statement") or "").strip()
+        eval_anchor = brief.get("evaluation_anchor_minimal") or {}
+        if not isinstance(eval_anchor, dict):
+            eval_anchor = {}
+
         mapped = [str(x).strip() for x in (binding.get("mapped_bibkeys") or []) if str(x).strip()]
         selected = [str(x).strip() for x in (binding.get("bibkeys") or []) if str(x).strip()]
         mapped = [k for k in mapped if (not bibkeys or k in bibkeys)]
@@ -298,8 +369,7 @@ def main() -> int:
 
         for a in anchors_raw[:raw_limit]:
             anchors_considered += 1
-            cites = [str(c).strip() for c in (a.get("citations") or []) if str(c).strip()]
-            cites = [c for c in cites if c.startswith("@") and (not bibkeys or c[1:] in bibkeys)]
+            cites = _normalize_cite_keys(a.get("citations") or [], bibkeys=bibkeys)
             if not cites:
                 anchors_dropped_no_cites += 1
                 continue
@@ -333,8 +403,7 @@ def main() -> int:
                 continue
             comparisons_considered += 1
 
-            cites = [str(c).strip() for c in (comp.get("citations") or []) if str(c).strip()]
-            cites = [c for c in cites if c.startswith("@") and (not bibkeys or c[1:] in bibkeys)]
+            cites = _normalize_cite_keys(comp.get("citations") or [], bibkeys=bibkeys)
 
             def _hl(side: str) -> list[dict[str, Any]]:
                 nonlocal hl_dropped_no_cites
@@ -342,8 +411,7 @@ def main() -> int:
                 for hl in (comp.get(side) or [])[:3]:
                     if not isinstance(hl, dict):
                         continue
-                    hcites = [str(c).strip() for c in (hl.get("citations") or []) if str(c).strip()]
-                    hcites = [c for c in hcites if c.startswith("@") and (not bibkeys or c[1:] in bibkeys)]
+                    hcites = _normalize_cite_keys(hl.get("citations") or [], bibkeys=bibkeys)
                     if not hcites:
                         hl_dropped_no_cites += 1
                         continue
@@ -385,8 +453,7 @@ def main() -> int:
             if not isinstance(it, dict):
                 continue
             eval_considered += 1
-            cites = [str(c).strip() for c in (it.get("citations") or []) if str(c).strip()]
-            cites = [c for c in cites if c.startswith("@") and (not bibkeys or c[1:] in bibkeys)]
+            cites = _normalize_cite_keys(it.get("citations") or [], bibkeys=bibkeys)
             if not cites:
                 eval_dropped_no_cites += 1
                 continue
@@ -404,8 +471,7 @@ def main() -> int:
             if not isinstance(it, dict):
                 continue
             lim_considered += 1
-            cites = [str(c).strip() for c in (it.get("citations") or []) if str(c).strip()]
-            cites = [c for c in cites if c.startswith("@") and (not bibkeys or c[1:] in bibkeys)]
+            cites = _normalize_cite_keys(it.get("citations") or [], bibkeys=bibkeys)
             if not cites:
                 lim_dropped_no_cites += 1
                 continue
@@ -515,6 +581,9 @@ def main() -> int:
             "section_title": sec_title,
             "rq": rq,
             "thesis": thesis,
+            "tension_statement": tension_statement,
+            "evaluation_anchor_minimal": eval_anchor,
+            "paper_voice_palette": PAPER_VOICE_PALETTE,
             "opener_mode": opener_mode,
             "opener_hint": opener_hint,
             "axes": axes,

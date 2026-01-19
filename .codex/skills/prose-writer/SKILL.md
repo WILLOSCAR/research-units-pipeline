@@ -24,6 +24,51 @@ This skill should behave like a synthesis engine:
 - **No placeholder leakage**: if any upstream artifact still contains scaffold markers/ellipsis/TODO, do not write; block and request evidence fixes.
 - **No pipeline voice**: do not leak internal scaffolding terms like “working claim”, “enumerate 2-4”, “scope/design space/evaluation practice”.
 
+
+
+## Writing requirements (explicit contract)
+
+This skill is successful only if the draft reads like an evidence-backed survey, not an outline expansion.
+
+### Per-H3 argument requirements (structure)
+
+For each H3 subsection, ensure the prose contains all of the following *moves* (not necessarily as headings):
+
+- Thesis early: paragraph 1 ends with a clear, conclusion-first thesis sentence (no narration openers).
+- Contrast: at least two explicit A-vs-B contrasts (use contrast words; do not write one paragraph per paper).
+- Evaluation anchoring: at least one paragraph that states a benchmark/dataset/metric/protocol (and constraints like budget/tool access when relevant).
+- Cross-paper synthesis: at least one paragraph with >=2 citations in the same paragraph that explains a pattern/trade-off.
+- Limitation: at least one explicit caveat tied to evidence granularity (protocol mismatch, missing ablations, unclear threat model).
+
+### Citation requirements (verifiability)
+
+- Use only citation keys in `citations/ref.bib`.
+- Keep citations inside the sentence that carries the claim.
+- Avoid citation dumps that act like tags.
+
+Bad:
+- `Many systems adopt tool schemas. [@a; @b; @c]`
+
+Better:
+- `Systems such as X [@a] and Y [@b] formalize tool schemas to reduce action ambiguity, whereas Z [@c] keeps the interface looser and shifts the burden to validation.`
+
+### Style requirements (paper voice)
+
+- Do not narrate the outline (avoid: `This subsection surveys ...`, `In this subsection ...`).
+- Do not use slide navigation (avoid: `Next, we move ...`, `We now turn to ...`).
+- Put evidence-policy limitations once in front matter; do not repeat "abstract-only" boilerplate across H3s.
+- Avoid repeated synthesis stems (e.g., starting many paragraphs with `Taken together, ...`).
+
+### Prevention (before you write)
+
+For each H3, do a short preflight (kept out of the final prose):
+- 1 tension sentence
+- 1 A-vs-B contrast sentence with >=2 citations
+- 1 evaluation-anchor sentence (task/metric/constraint)
+- 1 limitation sentence
+
+If you cannot do this without guessing, stop and fix upstream evidence instead of writing filler.
+
 ## Inputs
 
 - `outline/outline.yml`

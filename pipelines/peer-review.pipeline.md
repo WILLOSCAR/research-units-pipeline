@@ -1,11 +1,14 @@
 ---
 name: peer-review
-version: 2.0
+version: 2.1
 target_artifacts:
   - output/CLAIMS.md
   - output/MISSING_EVIDENCE.md
   - output/NOVELTY_MATRIX.md
   - output/REVIEW.md
+  - output/QUALITY_GATE.md
+  - output/RUN_ERRORS.md
+  - output/CONTRACT_REPORT.md
 default_checkpoints: [C0,C1,C2,C3]
 units_template: templates/UNITS.peer-review.csv
 ---
@@ -50,8 +53,10 @@ Notes:
 ## Stage 3 - Rubric write-up (C3)
 required_skills:
 - rubric-writer
+- artifact-contract-auditor
 produces:
 - output/REVIEW.md
+- output/CONTRACT_REPORT.md
 
 Notes:
 - Prefer concrete, minimal fixes (what experiment/ablation/analysis would resolve the concern) over generic “needs more experiments”.

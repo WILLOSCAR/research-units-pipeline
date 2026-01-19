@@ -38,6 +38,7 @@ JSONL, one object per H3 subsection.
 Required keys:
 - `sub_id`, `title`, `section_id`, `section_title`
 - `rq`, `thesis`, `axes`, `paragraph_plan`
+- `tension_statement`, `evaluation_anchor_minimal` (copied from subsection briefs; concrete tension + minimal eval context slots)
 - `opener_mode`, `opener_hint` (paper-voice hint to vary subsection openers without template labels)
 - `bridge_terms`, `contrast_hook`, `required_evidence_fields` (copied from subsection briefs; transition/evidence handles; NO NEW FACTS)
 - `chapter_synthesis_mode` (copied from chapter briefs; helps avoid template-y “Taken together…” repeats)
@@ -47,6 +48,7 @@ Required keys:
 - `must_use` (writer contract; minima derived from pack richness + `draft_profile`)
 - `do_not_repeat_phrases` (anti-template hints; phrases that should not appear in paper prose)
 - `pack_warnings` (list; why this pack may still draft hollow if not fixed upstream)
+- `paper_voice_palette` (positive paper-voice phrase palette + rewrite stems; avoids "generator voice" without brittle hard blocks)
 - `pack_stats` (object; raw/kept/dropped counts + trim policy so truncation/drop is not silent)
 
 Trim policy:
@@ -71,6 +73,52 @@ Treat each pack as an executable checklist, not optional context:
   - don’t replace them with a new repeated stem; keep phrasing varied and paper-like
 - **Micro-structure**: if prose starts drifting into flat summaries, apply `grad-paragraph` repeatedly (tension → contrast → evaluation anchor → limitation).
 - **Citation scope**: prefer `allowed_bibkeys_selected` (then `allowed_bibkeys_mapped`, then `allowed_bibkeys_chapter`). `allowed_bibkeys_global` is reserved for cross-cutting works mapped across many subsections (foundations/benchmarks/surveys): use it sparingly and still keep >=2 subsection-specific citations per H3.
+
+
+
+## How this pack prevents common writer failures (use it proactively)
+
+Treat the pack as a set of *writing constraints + affordances*.
+
+### Failure -> Pack handle -> Writing move
+
+- Narration opener ("This subsection ...", "In this subsection ...")
+  - Use: `tension_statement`, `opener_mode`, `opener_hint`, `thesis`
+  - Move: write a content-first paragraph 1: tension/decision/lens -> why it matters -> end with thesis.
+
+- Topic listing (one paragraph per paper, no comparison)
+  - Use: `comparison_cards`, `axes`
+  - Move: write A-vs-B sentences with explicit contrast words (whereas / in contrast / unlike) and align them to one axis at a time.
+
+- Missing evaluation context (claims float without protocol/metric)
+  - Use: `evaluation_anchor_minimal`, `evaluation_protocol`
+  - Move: state the minimum trio in the paragraph where you compare results: task type + metric + constraint (budget/tool access/cost).
+
+- Limitation missing (reads overconfident)
+  - Use: `limitation_hooks`, `required_evidence_fields`
+  - Move: add one explicit caveat paragraph or clause tied to what the evidence does NOT show (protocol mismatch, missing ablations, unclear threat model).
+
+- Disclaimer spam ("abstract-only evidence" repeated in every H3)
+  - Use: `pack_warnings` (as a signal), not as copy
+  - Move: keep evidence policy once in front matter; in H3, only add a short local caveat when it is subsection-specific.
+
+- Citation drift / free-citing across the paper
+  - Use: `allowed_bibkeys_selected` (then `mapped`, then `chapter`, rarely `global`)
+  - Move: if you cannot write without citing outside these sets, stop and fix upstream mapping/bindings instead of "making it work" in prose.
+
+### Mini examples (do not copy verbatim; paraphrase)
+
+Bad (narration opener):
+- `This subsection surveys tool interfaces for agents ...`
+
+Better (content-first opener):
+- `A central tension in tool interfaces is balancing expressive action spaces with verifiable execution; we argue that interface contracts largely determine what evaluation claims can be trusted.`
+
+Bad (meta guidance):
+- `Therefore, survey comparisons should focus on ...`
+
+Better (literature-facing observation):
+- `Across reported protocols, comparisons often hinge on whether tools are treated as deterministic APIs or as stochastic resources, which changes both cost and failure modes.`
 
 ## Script
 
