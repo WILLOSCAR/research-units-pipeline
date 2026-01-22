@@ -81,21 +81,23 @@ steer = true
 ## 你会得到什么（分层产物 + 自循环入口）
 
 **执行层**：
-- `UNITS.csv`：36 个原子 unit 的执行合约（依赖 → 输入 → 输出 → 验收标准）
+- `UNITS.csv`：39+（还在增加） 个原子 unit 的执行合约（依赖 → 输入 → 输出 → 验收标准）
 - `DECISIONS.md`：人类检查点（**C2 必须审批大纲**后才进入写作）
 
 **中间产物层**（按 checkpoint 分层）：
 ```
-C1: papers/papers_raw.jsonl → papers/core_set.csv           # 检索 + 去重
-C2: outline/taxonomy.yml → outline/outline.yml → outline/mapping.tsv  # 结构（NO PROSE）
-C3: papers/paper_notes.jsonl → outline/subsection_briefs.jsonl        # 证据底座（NO PROSE）
-C4: citations/ref.bib → outline/evidence_drafts.jsonl                 # 引用 + 证据包（NO PROSE）
-C5: sections/*.md → output/DRAFT.md → latex/main.pdf                  # 写作 + 编译
+C1: papers/papers_raw.jsonl → papers/papers_dedup.jsonl → papers/core_set.csv (+ papers/retrieval_report.md)                  # 检索 + 去重/精选
+C2: outline/taxonomy.yml → outline/outline.yml → outline/mapping.tsv (+ outline/coverage_report.md; outline/outline_state.jsonl) # 结构（NO PROSE）
+C3: papers/fulltext_index.jsonl → papers/paper_notes.jsonl + papers/evidence_bank.jsonl → outline/subsection_briefs.jsonl (+ outline/chapter_briefs.jsonl) # 证据底座（NO PROSE）
+C4: citations/ref.bib + citations/verified.jsonl → outline/evidence_bindings.jsonl → outline/evidence_drafts.jsonl → outline/anchor_sheet.jsonl → outline/writer_context_packs.jsonl (+ outline/claim_evidence_matrix.md) # 引用 + 证据包（NO PROSE）
+C5: sections/*.md → output/DRAFT.md → latex/main.tex → latex/main.pdf                                                       # 写作 + 编译
 ```
 
 **质量门 + 自循环入口**：
-- 质量门 FAIL → `output/QUALITY_GATE.md` 告诉你改哪个中间产物
+- `--strict` 模式才会持续写入质量门结论：unit 被 BLOCKED 时看 `output/QUALITY_GATE.md`（最新条目）定位需要修的中间产物；脚本/缺产物等运行问题看 `output/RUN_ERRORS.md`
+- 非 `--strict` 跑法：不会做 unit-level 质量门拦截（`output/QUALITY_GATE.md` 可能只有模板/历史记录）；以 `output/AUDIT_REPORT.md`（全局审计）+ `output/RUN_ERRORS.md` 为主
 - 写作层自循环（只修复失败小节）：
+  - `output/WRITER_SELFLOOP_TODO.md`（写作门：PASS/FAIL + 需要修复的 sections 列表）
   - `output/SECTION_LOGIC_REPORT.md`（thesis + 连接词密度）
   - `output/CITATION_BUDGET_REPORT.md`（引用增密建议）
 
@@ -107,7 +109,7 @@ C5: sections/*.md → output/DRAFT.md → latex/main.pdf                  # 写�
 ↓ [C0-C1] 检索 800+ 篇论文 → 去重到 150+ 核心集 arxiv 会补全 meta 信息
 ↓ [C2] 构建 taxonomy + outline + mapping（NO PROSE）→ 停在 C2 等审批
 
-你：C2 同意，继续
+你：C2 check 关键文件，看没有问题回复同意，继续
 
 ↓ [C3-C4] 构建证据底座（paper notes + evidence packs + citations）（NO PROSE）
 ↓ [C5] 基于 evidence 开始写作 → 质量门检查
@@ -124,7 +126,8 @@ C5: sections/*.md → output/DRAFT.md → latex/main.pdf                  # 写�
 ## 示例产物（v0.1，包含完整中间产物）
 该版本由 codex 中的 gpt-5.2-xhigh 运行约 2 小时 生成，过程中仅进行过 一次 human-in-the-loop（C2 阶段） 介入。
 路径：`example/e2e-agent-survey-latex-verify-****时间戳/`（pipeline：`pipelines/arxiv-survey-latex.pipeline.md`）。
-配置摘要：`draft_profile: lite` / `evidence_mode: abstract` / `core_size: 220`（详见 `queries.md`）。
+配置摘要（示例 run）：`draft_profile: lite` / `evidence_mode: abstract` / `core_size: 220`（详见 `queries.md`）。
+推荐默认（对齐最终交付）：`draft_profile: survey`（默认）或 `draft_profile: deep`（更严格）。
 
 目录速览（每个文件夹干嘛用）：
 
@@ -149,12 +152,224 @@ example/e2e-agent-survey-latex-verify-<最新时间戳>/
 
 ```mermaid
 flowchart LR
-  C0["Contract files<br/>(STATUS/UNITS/DECISIONS)"] --> C1["papers/ (retrieval + core set)"]
-  C1 --> C2["outline/ (taxonomy/outline/mapping)"]
-  C2 --> C4["citations/ (ref.bib + verified)"]
-  C4 --> C5s["sections/ (per-H3 writing units)"]
-  C5s --> OUT["output/ (DRAFT + reports)"]
-  OUT --> TEX["latex/ (main.tex + main.pdf)"]
+  classDef file fill:#ffffff,stroke:#d0d7de,color:#24292f;
+  classDef report fill:#e7f3ff,stroke:#0969da,color:#24292f;
+  classDef gate fill:#fff8c5,stroke:#bf8700,color:#24292f;
+  classDef step fill:#ffffff,stroke:#6e7781,stroke-dasharray: 4 2,color:#24292f;
+
+  subgraph C0["C0 / workspace root"]
+    GOAL["GOAL.md"]:::file
+    STATUS["STATUS.md"]:::file
+    UNITS["UNITS.csv"]:::file
+    DEC["DECISIONS.md"]:::file
+    LOCK["PIPELINE.lock.md"]:::file
+    QUERIES["queries.md"]:::file
+  end
+
+  subgraph PAPERS["papers/"]
+    RAW["papers/papers_raw.jsonl"]:::file
+    RETREP["papers/retrieval_report.md"]:::report
+    DEDUP["papers/papers_dedup.jsonl"]:::file
+    CORE["papers/core_set.csv"]:::file
+    FULLIDX["papers/fulltext_index.jsonl"]:::file
+    NOTES["papers/paper_notes.jsonl"]:::file
+    BANK["papers/evidence_bank.jsonl"]:::file
+  end
+
+  subgraph OUTLINE["outline/"]
+    TAX["outline/taxonomy.yml"]:::file
+    OL["outline/outline.yml"]:::file
+    MAP["outline/mapping.tsv"]:::file
+    COV["outline/coverage_report.md"]:::report
+    OSTATE["outline/outline_state.jsonl"]:::file
+    SUBBR["outline/subsection_briefs.jsonl"]:::file
+    CHBR["outline/chapter_briefs.jsonl"]:::file
+    TRANS["outline/transitions.md"]:::file
+    BIND["outline/evidence_bindings.jsonl"]:::file
+    BINDREP["outline/evidence_binding_report.md"]:::report
+    EDRAFT["outline/evidence_drafts.jsonl"]:::file
+    ANCH["outline/anchor_sheet.jsonl"]:::file
+    WCP["outline/writer_context_packs.jsonl"]:::file
+    CEM["outline/claim_evidence_matrix.md"]:::file
+  end
+
+  subgraph CITE["citations/"]
+    BIB["citations/ref.bib"]:::file
+    VER["citations/verified.jsonl"]:::file
+  end
+
+  subgraph SECT["sections/"]
+    MAN["sections/sections_manifest.jsonl"]:::file
+    SFILES["sections/S*.md (H3 bodies + leads)"]:::file
+    ABSTRACT["sections/abstract.md"]:::file
+    DISC["sections/discussion.md"]:::file
+    CONC["sections/conclusion.md"]:::file
+  end
+
+  subgraph OUT["output/"]
+    DRAFT["output/DRAFT.md"]:::file
+    FRONTREP["output/FRONT_MATTER_REPORT.md"]:::report
+    MERGEREP["output/MERGE_REPORT.md"]:::report
+    WTODO["output/WRITER_SELFLOOP_TODO.md"]:::report
+    SLOG["output/SECTION_LOGIC_REPORT.md"]:::report
+    CITEBUD["output/CITATION_BUDGET_REPORT.md"]:::report
+    CITEINJ["output/CITATION_INJECTION_REPORT.md"]:::report
+    POSTVOICE["output/POST_MERGE_VOICE_REPORT.md"]:::report
+    GLOBALREV["output/GLOBAL_REVIEW.md"]:::report
+    AUDIT["output/AUDIT_REPORT.md"]:::report
+    SCHEMA["output/SCHEMA_NORMALIZATION_REPORT.md"]:::report
+    ESELF["output/EVIDENCE_SELFLOOP_TODO.md"]:::report
+    GATE["output/QUALITY_GATE.md (strict sink)"]:::gate
+    ERR["output/RUN_ERRORS.md"]:::report
+    LATEXREP["output/LATEX_BUILD_REPORT.md"]:::report
+  end
+
+  subgraph LATEX["latex/"]
+    TEX["latex/main.tex"]:::file
+    PDF["latex/main.pdf"]:::file
+  end
+
+  FM["front-matter-writer"]:::step
+  SW["subsection-writer"]:::step
+  MG["section-merger"]:::step
+
+  %% C1: retrieval -> core set
+  QUERIES --> RAW --> DEDUP --> CORE
+  RAW --> RETREP
+
+  %% C2: structure
+  CORE --> TAX --> OL --> MAP --> COV
+  MAP --> OSTATE
+
+  %% C3: notes + evidence bank (uses mapping to prioritize)
+  CORE --> FULLIDX --> NOTES
+  MAP --> NOTES
+  NOTES --> BANK
+  OL --> SUBBR
+  MAP --> SUBBR
+  NOTES --> SUBBR
+  OL --> CHBR
+  SUBBR --> CHBR
+
+  %% C4: citations + bindings + packs + context packs
+  NOTES --> BIB --> VER
+  BANK --> BIND
+  SUBBR --> BIND
+  MAP --> BIND
+  BIB --> BIND
+  BIND --> BINDREP
+
+  SUBBR --> EDRAFT
+  NOTES --> EDRAFT
+  BANK --> EDRAFT
+  BIND --> EDRAFT
+  BIB --> EDRAFT
+
+  EDRAFT --> ANCH
+  BIB --> ANCH
+
+  OL --> WCP
+  SUBBR --> WCP
+  CHBR --> WCP
+  BIND --> WCP
+  EDRAFT --> WCP
+  ANCH --> WCP
+  BIB --> WCP
+
+  SUBBR --> CEM
+  EDRAFT --> CEM
+  BIB --> CEM
+
+  SUBBR --> ESELF
+  BIND --> ESELF
+  EDRAFT --> ESELF
+  ANCH --> ESELF
+
+  OL --> SCHEMA
+  BIB --> SCHEMA
+  SUBBR --> SCHEMA
+  CHBR --> SCHEMA
+  BIND --> SCHEMA
+  EDRAFT --> SCHEMA
+  ANCH --> SCHEMA
+
+  %% C5: writing -> merge -> audit -> LaTeX
+  OL --> TRANS
+  SUBBR --> TRANS
+
+  %% front-matter (C5)
+  DEC --> FM
+  OL --> FM
+  MAP --> FM
+  RETREP --> FM
+  CORE --> FM
+  QUERIES --> FM
+  BIB --> FM
+  FM --> ABSTRACT
+  FM --> DISC
+  FM --> CONC
+  FM --> FRONTREP
+
+  %% per-H3 writing units (C5)
+  OL --> SW
+  CHBR --> SW
+  SUBBR --> SW
+  ANCH --> SW
+  WCP --> SW
+  EDRAFT --> SW
+  BIND --> SW
+  BIB --> SW
+  DEC --> SW
+  SW --> MAN --> SFILES
+
+  %% merge (C5)
+  GOAL --> MG
+  OL --> MG
+  TRANS --> MG
+  MAN --> MG
+  MG --> DRAFT
+  MG --> MERGEREP
+
+  %% writing self-loops / reports
+  MAN --> WTODO
+  SUBBR --> WTODO
+  CHBR --> WTODO
+  WCP --> WTODO
+  BIND --> WTODO
+  BIB --> WTODO
+  QUERIES --> WTODO
+
+  MAN --> SLOG
+  SUBBR --> SLOG
+  WCP --> SLOG
+  QUERIES --> SLOG
+
+  %% post-merge voice + citation loop + global review + audit
+  DRAFT --> POSTVOICE
+  TRANS --> POSTVOICE
+
+  DRAFT --> CITEBUD
+  OL --> CITEBUD
+  WCP --> CITEBUD
+  BIB --> CITEBUD
+
+  DRAFT -.-> CITEINJ
+  CITEBUD --> CITEINJ
+  OL --> CITEINJ
+  BIB --> CITEINJ
+  CITEINJ -.-> DRAFT
+
+  DRAFT --> GLOBALREV
+  DRAFT --> AUDIT
+  OL --> AUDIT
+  BIND --> AUDIT
+  BIB --> AUDIT
+
+  %% LaTeX scaffold + compile
+  DRAFT --> TEX --> PDF
+  BIB --> TEX
+  TEX --> LATEXREP
+  PDF --> LATEXREP
 ```
 
 最终交付只关注最新版本，测试完成后如有改进直接纳入示例路径中，默认以最新时间戳标记的文件夹即表示最新版本，视情况保留 2-3 个版本：
