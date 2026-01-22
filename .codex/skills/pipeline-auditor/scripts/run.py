@@ -406,6 +406,7 @@ def main() -> int:
     # Global cite coverage (encourage using more of the bibliography, not just a small subset).
     if profile == "arxiv-survey" and expected:
         h3_n = len(set(expected.values()))
+        floor = 0
         if draft_profile == "deep":
             per_h3 = 12
             base = 30
@@ -416,12 +417,15 @@ def main() -> int:
             frac = 0.30
         else:
             per_h3 = 10
-            base = 24
-            frac = 0.45
+            # Survey deliverable expectation: keep global unique citations high enough
+            # that the draft does not look under-cited relative to the available bib.
+            base = 30
+            frac = 0.50
+            floor = 110
 
         min_unique_struct = base + per_h3 * h3_n
         min_unique_frac = int(len(bib_keys) * frac) if bib_keys else 0
-        min_unique = max(min_unique_struct, min_unique_frac)
+        min_unique = max(min_unique_struct, min_unique_frac, floor)
         if bib_keys:
             min_unique = min(min_unique, len(bib_keys))
 

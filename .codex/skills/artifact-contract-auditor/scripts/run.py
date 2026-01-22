@@ -70,6 +70,7 @@ def main() -> int:
     sys.path.insert(0, str(repo_root))
 
     from tooling.common import atomic_write_text, ensure_dir
+    from tooling.quality_gate import QualityIssue, write_quality_report
 
     workspace = Path(args.workspace).resolve()
     current_unit_id = (args.unit_id or "").strip()
@@ -195,6 +196,36 @@ def main() -> int:
     out_path = workspace / "output" / "CONTRACT_REPORT.md"
     ensure_dir(out_path.parent)
     atomic_write_text(out_path, "\n".join(lines).rstrip() + "\n")
+
+    # Keep QUALITY_GATE.md as a single entry point: when the pipeline is complete (or
+    # contract drift is detected), record PASS/FAIL here so the final state is easy
+    # to read without reruns.
+    try:
+        auditor_unit_id = current_unit_id or "U999"
+        issues: list[QualityIssue] = []
+        if missing_done_outputs:
+            issues = [
+                QualityIssue(
+                    code="contract_done_outputs_missing",
+                    message=f"{len(missing_done_outputs)} missing outputs for DONE units; see `output/CONTRACT_REPORT.md`.",
+                )
+            ]
+        elif pipeline_complete and missing_targets:
+            issues = [
+                QualityIssue(
+                    code="contract_missing_target_artifacts",
+                    message=f"{len(missing_targets)} missing required pipeline target artifacts; see `output/CONTRACT_REPORT.md`.",
+                )
+            ]
+        if pipeline_complete or missing_done_outputs:
+            write_quality_report(
+                workspace=workspace,
+                unit_id=auditor_unit_id,
+                skill="artifact-contract-auditor",
+                issues=issues,
+            )
+    except Exception:
+        pass
 
     return 0 if status in {"PASS", "OK"} else 2
 

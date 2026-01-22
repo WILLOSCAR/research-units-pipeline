@@ -161,6 +161,7 @@ Each H3 file should do the following work (order can vary, but all must appear):
 Paper voice (keep it natural):
 - Avoid narration openers (\"This subsection surveys...\") and slide navigation (\"Next, we move...\").
 - Avoid repeating the same discourse stem across many sections (\"Additionally\", \"This suggests\", \"Taken together\").
+- Avoid count-based paragraph openers as a reusable slot ("Two limitations...", "Three takeaways..."); vary phrasing and embed caveats inside contrast paragraphs instead.
 - Never leak pipeline words (workspace/unit/evidence pack/quality gate) into the draft.
 
 ## Opener palette (avoid \"same first sentence everywhere\")
@@ -179,7 +180,9 @@ Allowed opener moves (choose 1; keep it content-bearing):
 High-signal anti-patterns (rewrite immediately):
 - `This subsection surveys/argues ...`
 - `In this subsection, we ...`
+- `This section provides an overview ...` (keep "overview" narration rare; prefer tension/lens openers)
 - `Next, we move ...` / `We now turn ...`
+- Count-based openers used as a slot: `Two limitations...` / `Three takeaways...`
 
 ## Preflight (before you draft an H3)
 
@@ -222,6 +225,10 @@ Narration opener -> content claim:
 Meta \"survey should\" -> literature-facing observation:
 - Bad: `Therefore, survey comparisons should control for tool access.`
 - Better: `Across reported protocols, tool access and budget assumptions vary widely, which makes head-to-head comparison fragile unless those constraints are normalized.`
+
+Count-based limitation slot -> content-bearing caveat:
+- Bad: `Two limitations stand out. First, ...`
+- Better: `A caveat is that ...; this matters because it changes how results transfer across protocols.`
 
 ## Script
 

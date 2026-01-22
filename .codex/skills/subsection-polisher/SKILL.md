@@ -93,6 +93,7 @@ Delete / rewrite these (they read like a generator):
 - Slide navigation: `Next, we move ...`, `We now turn to ...`, `In the next section ...`.
 - Meta guidance: `survey synthesis/comparisons should ...`.
 - Evidence-policy disclaimer spam: repeated `abstract-only/title-only/provisional` boilerplate inside H3.
+- Count-based slot openers: repeated "Two limitations..." / "Three takeaways..." used as paragraph starters.
 
 Prefer these (paper voice):
 - Content-first openers: `A central tension is ...`, `In practice, ...`, `One recurring pattern is ...`.

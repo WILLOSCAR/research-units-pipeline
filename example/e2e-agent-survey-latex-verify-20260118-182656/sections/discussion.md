@@ -1,7 +1,0 @@
-## Discussion
-
-A recurring pattern across agent systems is that progress often comes from tightening contracts rather than adding new prompts. When the tool boundary is explicit (what can be called, with what permissions, and under what cost model), it becomes easier to reason about failure recovery and to compare planning or memory strategies under consistent protocols [@Du2024Anytool; @Liu2025Costbench]. In contrast, when the boundary is implicit, many improvements become hard to attribute: gains may come from better prompting, better tool routing, or simply different evaluation settings.
-
-A second theme is that evaluation is still the bottleneck. Benchmarks are proliferating, but protocol details (cost budgets, tool availability, reset policies, and contamination controls) often vary enough that “higher score” does not translate into a clear engineering decision [@Mohammadi2025Evaluation; @Fu2025Eval]. This gap is especially visible for long-horizon tasks, where small differences in memory policy or error handling compound over time.
-
-Finally, safety and governance are not add-ons; they are entangled with interface design. Prompt injection and tool abuse are easiest to study when systems expose a clear action space and logging surface, but these same interfaces also enlarge the attack surface if permissions and provenance are under-specified [@Zhang2025Security; @Shi2025Progent]. A practical implication is that agent research should report threat models and monitoring hooks as first-class experimental conditions, not as post-hoc disclaimers.

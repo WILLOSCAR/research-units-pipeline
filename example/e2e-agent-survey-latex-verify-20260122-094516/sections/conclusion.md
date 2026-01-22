@@ -1,0 +1,5 @@
+## Conclusion
+
+LLM agents should be understood as closed-loop systems: their behavior is jointly shaped by the model, the action space exposed through interfaces, and the protocol under which they are evaluated. This view helps reconcile why results often fail to transfer across benchmarks and deployments: changes in tool access, budgets, logging, or threat models can change what success means, even when the base model is unchanged [@Yao2022React; @Kim2026Beyond; @Mohammadi2025Evaluation].
+
+Across interfaces, planning and memory, adaptation, and coordination, the most reusable comparisons are those that make protocol assumptions explicit and tie claims to evaluation anchors. Looking forward, the field will benefit from (i) versioned tool catalogs and realistic test environments, (ii) budget-aware reporting that exposes success--cost trade-offs, and (iii) end-to-end security and monitoring benchmarks that operationalize agent-specific risks [@Xi2026Toolgym; @Liu2025Costbench; @Zhang2025Security; @Kutasov2025Shade].

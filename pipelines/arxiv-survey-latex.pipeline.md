@@ -1,6 +1,6 @@
 ---
 name: arxiv-survey-latex
-version: 2.9
+version: 3.0
 target_artifacts:
   - papers/retrieval_report.md
   - outline/taxonomy.yml
@@ -173,6 +173,7 @@ required_skills:
 - chapter-lead-writer
 - subsection-writer
 - writer-selfloop
+- style-harmonizer
 - section-logic-polisher
 - transition-weaver
 - section-merger
@@ -211,6 +212,7 @@ produces:
 
 Notes:
 - Writing self-loop gate: `subsection-writer` ensures the full `sections/` file set exists (and emits `sections/sections_manifest.jsonl`); `writer-selfloop` blocks until depth/citation-scope/paper-voice checks pass, writing `output/WRITER_SELFLOOP_TODO.md` (PASS/FAIL).
+- Style hygiene (non-blocking): even on PASS, read `output/WRITER_SELFLOOP_TODO.md`'s `## Style Smells (non-blocking)` section. If it flags repeated slot phrases (e.g., `Two limitations ...`) or overused stems, run `style-harmonizer` on the listed files and re-run `writer-selfloop`.
 - Triage rule (prevents “写作补洞”): if `writer-selfloop` FAILs because a subsection cannot meet `must_use` *in-scope* (thin packs / missing anchors / out-of-scope citation pressure), stop and rerun the evidence loop (`evidence-selfloop` + upstream C2/C3/C4) instead of padding prose.
 - WebWeaver-style “planner vs writer” split (single agent, two passes):
   - Planner pass: for each section/subsection, pick the exact citation IDs to use from the evidence bank (`outline/evidence_drafts.jsonl`) and keep scope consistent with the outline.
@@ -223,6 +225,7 @@ Notes:
   - `survey`: >=9 paragraphs + >=10 unique cites
   - `deep`: >=10 paragraphs + >=12 unique cites
   In all profiles, require >=2 concrete contrasts + evaluation anchoring + a cross-paper synthesis paragraph + an explicit limitation.
+- Profile semantics: `lite` is for pipeline verification (fewer pages + lower global unique-citation target). For a citation-rich survey deliverable, use `draft_profile: survey` (default).
 - Coherence target (paper-like): for every H2 chapter with H3 subsections, write a short **chapter lead** block (`sections/S<sec_id>_lead.md`) that previews the comparison axes and how the H3s connect (no new headings; avoid generic glue).
 - Anti-template style contract (paper-like, not “outline narration”):
   - Avoid meta openers like “This subsection surveys/argues …” and slide-like navigation (“Next, we move from … / We now turn to …”).
@@ -238,7 +241,7 @@ Notes:
 - If you intentionally add/remove citations after an earlier polish run, reset the citation-anchoring baseline before rerunning `draft-polisher`:
   - delete `output/citation_anchors.prepolish.jsonl` (workspace-local), then rerun `draft-polisher`.
 - Recommended skills (toolkit, not a rigid one-shot chain):
-  - Modular drafting: `subsection-writer` → `writer-selfloop` → `section-logic-polisher` → `transition-weaver` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor` → `latex-*`.
+  - Modular drafting: `subsection-writer` → `writer-selfloop` → `style-harmonizer` → `section-logic-polisher` → `transition-weaver` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor` → `latex-*`.
   - Legacy one-shot drafting: `prose-writer` (kept for quick experiments; less debuggable).
   - If the draft reads like “paragraph islands”, run `section-logic-polisher` and patch only failing `sections/S*.md` until PASS, then merge.
 - `queries.md` can set `evidence_mode: "abstract"|"fulltext"` (default template uses `abstract`).
@@ -250,5 +253,5 @@ Notes:
 - Citation coverage: expect a large, verifiable bibliography (e.g., ≥150 BibTeX entries) and high cite density:
   - Per-H3: `survey` profile expects >=10 unique citations per H3 (and deeper profiles may require more).
   - Front matter: `survey` profile expects Introduction>=12 and Related Work>=15 unique citations.
-  - Global: `pipeline-auditor` also gates on **unique citations across the full draft** (typically ~100+ for 8 H3 subsections); if it fails, prefer `citation-diversifier` → `citation-injector` (in-scope, NO NEW FACTS) using each H3’s `allowed_bibkeys_selected` / `allowed_bibkeys_mapped` from `outline/writer_context_packs.jsonl`.
+  - Global: `pipeline-auditor` also gates on **unique citations across the full draft** (survey profile expects >=110+ unique citations); if it fails, prefer `citation-diversifier` → `citation-injector` (in-scope, NO NEW FACTS) using each H3’s `allowed_bibkeys_selected` / `allowed_bibkeys_mapped` from `outline/writer_context_packs.jsonl`.
 - Anti-template: drafts containing ellipsis placeholders (`…`) or leaked scaffold instructions (e.g., "enumerate 2-4 ...") should block and be regenerated from improved outline/mapping/evidence artifacts.

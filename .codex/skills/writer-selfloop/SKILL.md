@@ -126,6 +126,11 @@ After PASS (merge-aware voice safety):
 - Proceed to `section-logic-polisher` -> `transition-weaver` -> `section-merger` -> `post-merge-voice-gate`.
 - If `post-merge-voice-gate` FAILs with `source: transitions`, fix `outline/transitions.md` via `transition-weaver` and re-merge (do not patch the merged draft).
 
+After PASS (non-blocking style hygiene):
+- Open `output/WRITER_SELFLOOP_TODO.md` and read `## Style Smells (non-blocking)`.
+- If it flags repeated slot phrases (e.g., `Two limitations ...`) or overused stems (e.g., `The key point is that`), run `style-harmonizer` on the listed `sections/*.md` files.
+- Keep meaning + citations fixed; treat this as surface-level rewrite, not new content.
+
 ## How to fix a failing H3 (semantic recipe)
 
 - Use `tension_statement` + `thesis` from the pack to rewrite paragraph 1 (end with the thesis).

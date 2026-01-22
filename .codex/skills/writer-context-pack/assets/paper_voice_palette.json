@@ -1,5 +1,5 @@
 {
-  "version": "0.2",
+  "version": "0.3",
   "notes": [
     "This palette is a soft writing guide for survey prose (paper voice).",
     "writer-context-pack will load this file (or workspace override: outline/paper_voice_palette.json) and copy it into each per-H3 writer pack.",
@@ -21,6 +21,10 @@
     "This subsection surveys",
     "This subsection argues",
     "In this subsection",
+    "provides an overview",
+    "This survey provides an overview",
+    "In this section, we provide an overview",
+    "This section provides an overview",
     "Next, we move from",
     "We now turn to",
     "A few representative references include",
@@ -36,6 +40,9 @@
     "survey synthesis should",
     "survey comparisons should",
     "Taken together,",
+    "The key point is that",
+    "Three limitations",
+    "Two limitations",
     "claims remain provisional under abstract-only evidence",
     "abstract-only evidence",
     "Key takeaway:",
@@ -75,6 +82,10 @@
       "prefer_stem": "We focus on"
     },
     {
+      "avoid_stem": "provides an overview",
+      "prefer_stem": "We focus on"
+    },
+    {
       "avoid_stem": "Next, we move",
       "prefer_stem": "Having established"
     },
@@ -85,6 +96,14 @@
     {
       "avoid_stem": "survey comparisons should",
       "prefer_stem": "Across protocols, we observe"
+    },
+    {
+      "avoid_stem": "Two limitations",
+      "prefer_stem": "A caveat is that"
+    },
+    {
+      "avoid_stem": "Three limitations",
+      "prefer_stem": "One limitation is that"
     }
   ],
   "discourse_stem_watchlist": [
@@ -92,7 +111,8 @@
     "Moreover,",
     "Furthermore,",
     "This suggests",
-    "Taken together,"
+    "Taken together,",
+    "The key point is that"
   ],
   "discourse_stem_rewrites": {
     "Additionally,": [
@@ -109,6 +129,11 @@
       "Across these studies,",
       "Collectively,",
       "The evidence suggests"
+    ],
+    "The key point is that": [
+      "A practical implication is that",
+      "A useful way to read these results is that",
+      "One takeaway is that"
     ]
   },
   "role_cards": {
@@ -148,6 +173,7 @@
         "Reduce slash-enumerations (A/B/C axis labels) by rewriting into natural prose."
       ],
       "avoid": [
+        "Count-based openers used as a slot (e.g., Two limitations..., Three takeaways...).",
         "Repeated discourse stems (Additionally, This suggests, Taken together) across many paragraphs.",
         "Pipeline words (workspace/unit/quality gate/evidence pack) in reader-facing text.",
         "PPT speaker-note tone (Now we..., The remainder of...)."

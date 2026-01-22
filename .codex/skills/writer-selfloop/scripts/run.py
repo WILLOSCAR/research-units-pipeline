@@ -7,6 +7,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from collections import Counter
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -29,11 +30,11 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 def _extract_paths(msg: str) -> list[str]:
     # Prefer backticked paths, then fall back to a loose pattern.
     paths: list[str] = []
-    for m in re.finditer(r"`(sections/[^`]+?\\.md)`", msg or ""):
+    for m in re.finditer(r"`(sections/[^`]+?\.md)`", msg or ""):
         paths.append(m.group(1))
     if paths:
         return paths
-    for m in re.finditer(r"\\b(sections/[A-Za-z0-9_.-]+\\.md)\\b", msg or ""):
+    for m in re.finditer(r"\b(sections/[A-Za-z0-9_.-]+\.md)\b", msg or ""):
         paths.append(m.group(1))
     return paths
 
@@ -79,6 +80,109 @@ def _expected_paths_from_outline(outline: Any) -> set[str]:
                 expected.add(f"sections/{_slug_unit_id(sec_id)}.md")
 
     return expected
+
+
+
+
+def _style_smells_for_h3(*, workspace: Path, h3_paths: list[str]) -> list[str]:
+    # Non-blocking style-smell hints (deterministic, conservative).
+    # These are not hard gates: they exist to surface high-signal paper-voice drift
+    # that can persist even when structural quality checks pass.
+
+    # NOTE: use raw strings for word boundaries; plain "\\b" becomes a backspace byte.
+    # Match count-based paragraph openers like:
+    #   "Two limitations ..."
+    #   "Three key takeaways ..."
+    # We intentionally ignore up to ~2 adjectives between the count and the noun,
+    # so repeated "two key limitations" is counted as the same smell as "two limitations".
+    counting_pat = re.compile(
+        r"(?im)^\s*(two|three|four)\s+(?:\w+\s+){0,2}?(limitations|caveats|takeaways|lessons)\b"
+    )
+    keypoint_pat = re.compile(r"(?i)\bthe\s+key\s+point\s+is\s+that\b")
+    overview_pat = re.compile(
+        r"(?im)^\s*(?:this\s+(?:survey|section|subsection)|in\s+this\s+(?:section|subsection)|we)\b[^\n]{0,140}\b(?:provide|provides|present|presents|offer|offers|give|gives)\b[^\n]{0,80}\boverview\b"
+    )
+
+    counting_files: dict[str, list[str]] = {}
+    keypoint_files: list[str] = []
+    overview_files: list[str] = []
+    opener_stems: Counter[str] = Counter()
+
+    for rel in h3_paths:
+        p = workspace / rel
+        if not p.exists() or p.stat().st_size == 0:
+            continue
+        body = p.read_text(encoding="utf-8", errors="ignore")
+
+        # Opener stem: first non-empty line, strip citations, take first 4 words.
+        first_line = ""
+        for ln in body.splitlines():
+            if ln.strip():
+                first_line = ln.strip()
+                break
+        first_line = re.sub(r"\[@[^\]]+\]", "", first_line)
+        words = re.findall(r"[A-Za-z0-9]+", first_line.lower())[:4]
+        if words:
+            opener_stems[" ".join(words)] += 1
+
+        for m in counting_pat.finditer(body):
+            phrase = f"{m.group(1).lower()} {m.group(2).lower()}"
+            counting_files.setdefault(phrase, []).append(rel)
+
+        if keypoint_pat.search(body):
+            keypoint_files.append(rel)
+
+        if overview_pat.search(body):
+            overview_files.append(rel)
+
+    lines: list[str] = []
+
+    # Counting openers: report the most common one if it appears in >=2 H3 files.
+    worst: tuple[int, str, list[str]] | None = None
+    for phrase, files in counting_files.items():
+        uniq = sorted(set(files))
+        if len(uniq) < 2:
+            continue
+        cand = (len(uniq), phrase, uniq)
+        if worst is None or cand[0] > worst[0] or (cand[0] == worst[0] and cand[1] < worst[1]):
+            worst = cand
+
+    if worst:
+        n, phrase, files = worst
+        lines.append(f"- counting opener reused across H3s ({n} files): `{phrase}`")
+        sample = ", ".join(f"`{f}`" for f in files[:8])
+        if len(files) > 8:
+            sample += f" (+{len(files) - 8} more)"
+        lines.append(f"  - files: {sample}")
+        lines.append("  - fix: run `style-harmonizer` (or rewrite locally) to remove count-based opener slots; fold caveats into contrast paragraphs or vary phrasing.")
+
+    uniq_key = sorted(set(keypoint_files))
+    if len(uniq_key) >= 2:
+        lines.append(f"- repeated stem `The key point is that` across H3s ({len(uniq_key)} files)")
+        sample = ", ".join(f"`{f}`" for f in uniq_key[:8])
+        if len(uniq_key) > 8:
+            sample += f" (+{len(uniq_key) - 8} more)"
+        lines.append(f"  - files: {sample}")
+        lines.append("  - fix: run `style-harmonizer` (safe: citations stay fixed) to vary the discourse stem and sentence shape while keeping meaning.")
+
+    uniq_overview = sorted(set(overview_files))
+    if len(uniq_overview) >= 2:
+        lines.append(f"- overview narration repeated across H3s ({len(uniq_overview)} files): `... overview ...`")
+        sample = ", ".join(f"`{f}`" for f in uniq_overview[:8])
+        if len(uniq_overview) > 8:
+            sample += f" (+{len(uniq_overview) - 8} more)"
+        lines.append(f"  - files: {sample}")
+        lines.append("  - fix: rewrite openers into a content-bearing lens/tension (avoid \"overview\" narration); keep meaning and citation keys unchanged.")
+
+    rep_openers = [(s, c) for s, c in opener_stems.items() if c >= 3]
+    rep_openers.sort(key=lambda kv: (-kv[1], kv[0]))
+    if rep_openers:
+        stem, c = rep_openers[0]
+        lines.append(
+            f"- repeated H3 opener stem ({c}x): `{stem}` (use different opener modes: tension/decision/failure/protocol/contrast)"
+        )
+
+    return lines
 
 
 def main() -> int:
@@ -143,6 +247,30 @@ def main() -> int:
                 "",
             ]
         )
+
+        # Non-blocking style smells: surface high-signal generator-voice drift even when hard checks pass.
+        manifest = _read_jsonl(workspace / manifest_rel)
+        h3_paths: list[str] = []
+        for rec in manifest:
+            if str(rec.get("kind") or "").strip() == "h3":
+                rel = str(rec.get("path") or "").strip()
+                if rel:
+                    h3_paths.append(rel)
+        if not h3_paths:
+            for p in sorted((workspace / "sections").glob("S*_*.md")):
+                if p.name.endswith("_lead.md"):
+                    continue
+                h3_paths.append(str(p.relative_to(workspace)))
+        h3_paths = sorted(set(h3_paths))
+
+        style_lines = _style_smells_for_h3(workspace=workspace, h3_paths=h3_paths)
+        lines.extend(["## Style Smells (non-blocking)", ""])
+        if style_lines:
+            lines.extend(style_lines)
+        else:
+            lines.append("- (none)")
+        lines.append("")
+
         out_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
         return 0
 
