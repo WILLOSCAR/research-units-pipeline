@@ -72,6 +72,7 @@
 
 **Paper Voice Skills** (enforce generator-voice-free prose):
 - `transition-weaver`：生成 H2/H3 过渡句映射（不新增事实/引用；输出 content sentences only）→ `outline/transitions.md`
+- `style-harmonizer`：去槽位句式/去同质化（不改事实/不改 citation keys；只做局部句式改写）→ 更新 `sections/*.md`
 - `section-logic-polisher`：写作逻辑自检（thesis + 连接词密度 + paragraph islands），在 merge 前做局部修复 → `output/SECTION_LOGIC_REPORT.md`
 - `post-merge-voice-gate`：合并后口吻门（把 transitions 视为“注入正文的高频文本源”）：拦截 planner talk / slash-list，并路由回最早责任产物（通常是 `outline/transitions.md`）→ `output/POST_MERGE_VOICE_REPORT.md`
 - `draft-polisher`：对 `output/DRAFT.md` 做去套话 + 连贯性润色（不改变 citation keys 与语义；去 planner talk）

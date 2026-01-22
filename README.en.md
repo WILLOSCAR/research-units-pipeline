@@ -160,9 +160,9 @@ flowchart LR
 ```
 
 Final deliverables only:
-- Draft (Markdown): `example/e2e-agent-survey-latex-verify-20260118-182656/output/DRAFT.md`
-- PDF: `example/e2e-agent-survey-latex-verify-20260118-182656/latex/main.pdf`
-- QA report: `example/e2e-agent-survey-latex-verify-20260118-182656/output/AUDIT_REPORT.md`
+- Draft (Markdown): `example/e2e-agent-survey-latex-verify-最新时间戳/output/DRAFT.md`
+- PDF: `example/e2e-agent-survey-latex-verify-最新时间戳/latex/main.pdf`
+- QA report: `example/e2e-agent-survey-latex-verify-最新时间戳/output/AUDIT_REPORT.md`
 
 ## Feel Free to Open Issues (Help Improve the Writing Workflow)
 

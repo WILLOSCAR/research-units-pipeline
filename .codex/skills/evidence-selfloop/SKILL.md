@@ -79,7 +79,7 @@ Recommended rerun chain (minimal):
 
 This skill is the *prewrite router* for evidence quality. Treat its `Status:` line as the unblock contract:
 
-- `PASS`: no `blocking_missing` and no `binding_gaps` -> proceed to C5 writing.
+- `PASS`: no `blocking_missing` and no `binding_gaps` -> proceed to C5 writing (but still scan non-blocking writability smells: low comparisons/eval/anchors often predict hollow prose).
 - `OK`: no `blocking_missing`, but some `binding_gaps` -> you may draft, but expect weaker specificity; prefer fixing gaps first.
 - `FAIL`: missing inputs OR any `blocking_missing` -> do not write filler prose; fix upstream and rerun C3/C4.
 

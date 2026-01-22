@@ -6,7 +6,7 @@
 
 ## Todo
 1. 加入多 cli 协作，multi-agent design （在合适的环节接入 API，替代或者分担 codex 执行过程中的压力）
-2. 持续打磨写作技巧，提升写作上下限
+2. 持续打磨写作技巧，提升写作上下限（已经尝试了增加 role playing 的 soft 约束）
 3. 完善剩余的Pipeline，example 新增例子
 4. 精简Pipeline中冗余的中间内容，遵循优雅的奥卡姆剃刀原则，如无必要，勿增实体。
 
@@ -72,7 +72,7 @@ steer = true
 
 这句话会触发 repo 内的 skills 自动路由并执行 pipeline（按 `UNITS.csv` 合同落盘中间产物）。
 
-（可选：指定 pipeline 文件：`pipelines/arxiv-survey-latex.pipeline.md`（或 `research-units-pipeline-skills/pipelines/arxiv-survey-latex.pipeline.md`）；不想自动同意 C2：把“C2 自动同意”删掉即可。）
+（可选：指定 pipeline 文件：`pipelines/arxiv-survey-latex.pipeline.md`（或 `research-units-pipeline-skills/pipelines/arxiv-survey-latex.pipeline.md`）；不想自动同意 C2：把“C2 自动同意”删掉即可。C2 是一个 human in the loop 的介入点）
 
 你也可以更明确一点（避免 router 选错）：
 
@@ -129,7 +129,7 @@ C5: sections/*.md → output/DRAFT.md → latex/main.pdf                  # 写�
 目录速览（每个文件夹干嘛用）：
 
 ```text
-example/e2e-agent-survey-latex-verify-20260118-182656/
+example/e2e-agent-survey-latex-verify-<最新时间戳>/
   STATUS.md            # 进度与执行日志（当前 checkpoint）
   UNITS.csv            # 执行合约：一行一个 unit（依赖/验收/产物）
   DECISIONS.md         # 人类检查点（Approve C*）
@@ -157,10 +157,16 @@ flowchart LR
   OUT --> TEX["latex/ (main.tex + main.pdf)"]
 ```
 
-只看最终交付：
-- Markdown 草稿：`example/e2e-agent-survey-latex-verify-20260118-182656/output/DRAFT.md`
-- PDF：`example/e2e-agent-survey-latex-verify-20260118-182656/latex/main.pdf`
-- QA 报告：`example/e2e-agent-survey-latex-verify-20260118-182656/output/AUDIT_REPORT.md`
+最终交付只关注最新版本，测试完成后如有改进直接纳入示例路径中，默认以最新时间戳标记的文件夹即表示最新版本，视情况保留 2-3 个版本：
+
+- Markdown 草稿：
+example/e2e-agent-survey-latex-verify-<最新时间戳>/output/DRAFT.md
+
+- PDF 输出：
+example/e2e-agent-survey-latex-verify-<最新时间戳>/latex/main.pdf
+
+- QA 审计报告：
+example/e2e-agent-survey-latex-verify-<最新时间戳>/output/AUDIT_REPORT.md
 
 
 ## 欢迎提出各类 issue，一起改进写作流程

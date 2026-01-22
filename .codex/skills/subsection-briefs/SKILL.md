@@ -73,6 +73,9 @@ JSONL (one JSON object per line). Required fields per record:
 - `rq` (1–2 sentences)
 - `thesis` (1 sentence; internal intent, not reader-facing; should be executable as the first paragraph’s last sentence in C5)
 - `axes` (list of 3–5 checkable comparison dimensions; no ellipsis)
+  - Contract: each axis item is an atomic noun phrase (not a fragment like `metrics` or `and failure modes ...`).
+  - List formatting: if you encode axes in a single outline bullet (e.g., `Comparison axes:`), prefer semicolons (`;`) to separate axes.
+    Commas inside parentheses are allowed (e.g., `evaluation protocol (datasets, metrics, human evaluation)`).
 - `bridge_terms` (list of 3–6 short “handles” for transitions; NO NEW FACTS; used by `transition-weaver`)
 - `contrast_hook` (short label/phrase for what this subsection is “about” in transitions; NO NEW FACTS)
 - `tension_statement` (1 sentence; concrete trade-off that can open the subsection in C5; avoid meta phrasing like "tension around X")

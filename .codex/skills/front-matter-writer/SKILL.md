@@ -134,6 +134,10 @@ Avoid \"pipeline voice\":
 - Don\x27t write: `evidence pack(s)`, `writer context pack(s)`, `quality gate`, `workspace`, `stage C2/C3...`
 - Do write: \"survey methodology\" phrasing (what was collected, what was prioritized, what is uncertain).
 
+Avoid count-based slot structures:
+- Don't default to "Two limitations..." / "Three takeaways..." as the paragraph opener across multiple sections.
+- If you truly need enumeration, do it once, keep it sentence-level, and vary the opener syntax so it reads authorial (not templated).
+
 Keep the methodology note exactly once:
 - Put one paragraph in **Introduction** *or* **Related Work**.
 - Do not repeat \"abstract-only evidence / claims provisional\" across subsections.
@@ -211,6 +215,7 @@ Include:
 
 Avoid:
 - Template narration (\"This paper/survey concludes...\") and slide navigation.
+- Count-based openers ("Two limitations...", "Three takeaways...") used as a default structure.
 - Overclaiming beyond the cited evidence level (especially in abstract-only mode).
 - Repeating the same takeaway label or ending with a citation dump line.
 

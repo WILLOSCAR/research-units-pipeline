@@ -2889,11 +2889,44 @@ def _check_transitions(workspace: Path, outputs: list[str]) -> list[QualityIssue
             )
         ]
     bullets = [ln for ln in text.splitlines() if ln.strip().startswith("- ")]
-    if len(bullets) < 8:
+
+    # Minimum transition coverage should match what will actually be injected by `section-merger`:
+    # by default, only within-chapter H3->H3 transitions are inserted.
+    #
+    # Compute the expected number of within-chapter H3 transitions from `outline/outline.yml`
+    # (sum over chapters: max(0, #H3-1)). This avoids forcing users to pad unrelated bullets.
+    expected_h3 = 0
+    try:
+        from tooling.common import load_yaml
+
+        outline_path = workspace / "outline" / "outline.yml"
+        if outline_path.exists():
+            outline = load_yaml(outline_path)
+            if isinstance(outline, list):
+                for sec in outline:
+                    if not isinstance(sec, dict):
+                        continue
+                    subs = sec.get("subsections") or []
+                    if isinstance(subs, list) and len(subs) >= 2:
+                        expected_h3 += (len(subs) - 1)
+    except Exception:
+        expected_h3 = 0
+
+    # Count only the H3->H3 transition bullets (these are the default injection format).
+    h3_bullets = [
+        ln
+        for ln in bullets
+        if re.search(r"^\-\s*\d+\.\d+\s*→\s*\d+\.\d+\s*:", ln.strip())
+    ]
+
+    if expected_h3 and len(h3_bullets) < expected_h3:
         return [
             QualityIssue(
                 code="transitions_too_short",
-                message=f"`{out_rel}` looks too short (bullets={len(bullets)}); generate more subsection transitions.",
+                message=(
+                    f"`{out_rel}` has too few within-chapter H3→H3 transitions "
+                    f"(found={len(h3_bullets)}, expected>={expected_h3} from `outline/outline.yml`)."
+                ),
             )
         ]
     rep = _check_repeated_template_text(text=text, min_len=60, min_repeats=8)

@@ -1,3 +1,0 @@
-Planning and memory are the two reusable components that most directly determine whether an agent can act coherently over long horizons. Planning governs how the system allocates deliberation and chooses actions; memory governs what the system treats as state and how it stays grounded when context is long or noisy [@Yao2022React; @Wei2025Memory].
-
-The key comparison axes in this chapter are protocol-level: cost budgets, tool availability, and evaluation metrics. Without holding these fixed, it is easy to conflate “better planning” with “more expensive planning,” or to attribute gains to memory when they are actually due to different task setups [@Liu2025Costbench; @Tao2026Membox].

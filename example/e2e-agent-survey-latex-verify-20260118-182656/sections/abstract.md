@@ -1,5 +1,0 @@
-## Abstract
-
-Tool-using LLM agents are best understood as closed-loop systems: they maintain an internal state, decide on actions, interact with tools or environments, and incorporate observations back into subsequent decisions. In practice, seemingly small choices about the loop boundary and action representation can dominate reliability, cost, and safety outcomes, which is why agent papers increasingly read like systems papers rather than pure model papers [@Yao2022React; @Schick2023Toolformer].
-
-This survey organizes the recent agent literature around four concrete levers: (i) interfaces and action spaces, (ii) planning and memory as reusable components, (iii) adaptation and multi-agent coordination, and (iv) evaluation and risk. Throughout, we emphasize interface contracts and evaluation protocols as the “execution layer” that makes claims comparable across works, and we highlight where benchmarks and threat models remain misaligned with deployment realities [@Mohammadi2025Evaluation; @Zhang2025Security].

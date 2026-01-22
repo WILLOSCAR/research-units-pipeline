@@ -130,6 +130,7 @@ When a skill writes/edits prose (C5), prefer a "paper voice" contract over britt
 - **No outline narration**: avoid `This subsection ...`, `In this subsection, we ...`, `Next, we move ...` (rewrite as content claims + argument bridges).
 - **Evidence policy once**: keep abstract/fulltext limitations in one short front-matter paragraph; don't repeat "abstract-only" disclaimers in every H3.
 - **Light signposting**: avoid repeating a literal opener label across many subsections (e.g., `Key takeaway:`); vary opener phrasing and cadence.
+- **No count-based opener slots**: avoid repeatedly starting sections with "Two limitations..." / "Three takeaways..." (reads templated); integrate caveats naturally or vary syntax.
 - **Soft academic tone**: calm, understated; avoid hype (`clearly`, `obviously`, `breakthrough`) and "PPT speaker notes".
 - **Coherence without rigidity**: use connectors (contrast/causal/extension) as needed, but don't force every paragraph to start with `However/Moreover`.
 - **Controlled citation scope**: subsection-first by default; allow chapter-scoped reuse; treat bibkeys mapped to >= `queries.md:global_citation_min_subsections` subsections (default 3) as cross-cutting/global (`allowed_bibkeys_global`) to reduce brittle writer BLOCKED loops.
@@ -145,6 +146,7 @@ When a skill writes/edits prose (C5), prefer a "paper voice" contract over britt
 **Template stems** (repetitive survey-guidance phrases):
 - ❌ "Taken together, these approaches..." (limit ≤2 per draft)
 - ❌ "This survey should..." (limit ≤1 per draft)
+- ❌ "Two limitations..." / "The key point is that..." as repeated cross-section sentence slots
 - ❌ "This run demonstrates..." (avoid entirely)
 - ✅ Instead: vary synthesis openers (decision-first, tension-first, evidence-first)
 

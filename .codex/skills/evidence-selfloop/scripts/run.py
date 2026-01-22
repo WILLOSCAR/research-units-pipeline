@@ -116,6 +116,9 @@ def main() -> int:
     common_blocking: dict[str, int] = {}
     common_gaps: dict[str, int] = {}
 
+    smell_subs: list[str] = []
+    common_smells: dict[str, int] = {}
+
     all_subs = sorted(set(briefs_by_sub) | set(binds_by_sub) | set(drafts_by_sub), key=_sub_sort_key)
 
     for sid in all_subs:
@@ -150,6 +153,22 @@ def main() -> int:
 
         anchor_n = len([a for a in (anchors_by_sub.get(sid) or []) if str(a.get("text") or "").strip()])
 
+        smells: list[str] = []
+        if comp_n < 3:
+            smells.append(f"comparisons_low({comp_n})")
+        if eval_n == 0:
+            smells.append("missing_eval_protocol")
+        if lim_n == 0:
+            smells.append("missing_limitations")
+        if anchor_n == 0:
+            smells.append("missing_anchors")
+        if snip_n == 0:
+            smells.append("missing_snippets")
+        if smells:
+            smell_subs.append(sid)
+            for s in smells:
+                common_smells[s] = common_smells.get(s, 0) + 1
+
         if blocking_missing:
             blocking_subs.append(sid)
             for m in blocking_missing:
@@ -166,6 +185,7 @@ def main() -> int:
                 "title": title,
                 "binding_gaps": binding_gaps,
                 "blocking_missing": blocking_missing,
+                "writability_smells": smells,
                 "signals": {
                     "snippets": snip_n,
                     "comparisons": comp_n,
@@ -210,6 +230,7 @@ def main() -> int:
     lines.append(f"- Subsections seen: {len(items)}")
     lines.append(f"- Packs with `blocking_missing`: {len(blocking_subs)}")
     lines.append(f"- Subsections with `binding_gaps`: {len(gap_subs)}")
+    lines.append(f"- Subsections with writability smells (non-blocking): {len(smell_subs)}")
 
     if common_blocking:
         lines.append("")
@@ -222,6 +243,12 @@ def main() -> int:
         lines.append("Top `binding_gaps` fields:")
         for g, n in _top_counts(common_gaps):
             lines.append(f"- {n}× {g}")
+
+    if common_smells:
+        lines.append("")
+        lines.append("Top writability smells (non-blocking):")
+        for s, n in _top_counts(common_smells):
+            lines.append(f"- {n}× {s}")
 
     lines.append("")
 
@@ -236,14 +263,17 @@ def main() -> int:
             title = it.get("title") or ""
             gaps = it.get("binding_gaps") or []
             block = it.get("blocking_missing") or []
+            smells = it.get("writability_smells") or []
             sig = it.get("signals") or {}
 
-            has_any = bool(gaps or block)
-            # Always list FAIL/OK subsections; omit clean ones for brevity.
-            if status == "PASS" and not has_any:
-                continue
-            if status != "PASS" and not has_any:
-                continue
+            if status == "PASS":
+                # On PASS, still surface non-blocking smells that predict hollow prose.
+                if not smells:
+                    continue
+            else:
+                # On FAIL/OK, focus the loop on explicit gaps/blocks.
+                if not (gaps or block):
+                    continue
 
             lines.append(f"### {sid} {title}".rstrip())
             lines.append("")
@@ -266,6 +296,11 @@ def main() -> int:
                 for g in gaps[:8]:
                     lines.append(f"  - {g}")
 
+            if smells:
+                lines.append("- writability_smells (non-blocking):")
+                for s in smells[:8]:
+                    lines.append(f"  - {s}")
+
             # Minimal fix routing (skill-level, not code-level).
             fix_steps: list[str] = []
 
@@ -281,6 +316,18 @@ def main() -> int:
 
             if gaps:
                 fix_steps.append("C4: address `binding_gaps`: enrich evidence bank tags for mapped papers OR expand `outline/mapping.tsv` coverage OR relax `required_evidence_fields` if unrealistic")
+
+            if smells:
+                if any("missing_eval_protocol" == s for s in smells):
+                    fix_steps.append("C3: extract evaluation anchors (task/metric/constraint) into notes/bank → rerun `paper-notes` then regenerate packs")
+                if any("missing_anchors" == s for s in smells):
+                    fix_steps.append("C4: improve anchor density: rerun `anchor-sheet` after strengthening packs (anchors should cite specific evidence)")
+                if any(s.startswith("comparisons_low") for s in smells):
+                    fix_steps.append("C3: increase contrastability: refine clusters/axes in `subsection-briefs` → rerun `evidence-draft`")
+                if any("missing_limitations" == s for s in smells):
+                    fix_steps.append("C3: extract limitations/failure modes into notes/packs → rerun `paper-notes` / `evidence-draft`")
+                if any("missing_snippets" == s for s in smells):
+                    fix_steps.append("C3: enrich evidence snippets: prefer fulltext (`pdf-text-extractor`) and rerun `paper-notes` / `evidence-draft`")
 
             if not fix_steps:
                 if block:
@@ -298,6 +345,7 @@ def main() -> int:
         lines.append("## D. Next action")
         lines.append("")
         lines.append("- Evidence looks writeable. Proceed to C5 writing (and keep the evidence policy disclaimer once in front matter).")
+        lines.append("- If section C lists writability smells, consider fixing them now; they often predict hollow prose even when packs are schema-valid.")
     elif status == "OK":
         lines.append("## D. Next action")
         lines.append("")

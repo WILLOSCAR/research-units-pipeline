@@ -112,6 +112,7 @@ Constraints:
 
 - \"This chapter surveys...\" / \"In this section, we...\"
 - \"Next, we move to...\" / \"We now discuss...\"
+- Count-based opener slots ("Two key points...", "Three takeaways...") used as the lead's main shape.
 - Title narration: \"From A to B, ...\"
 - Axis label copying: `planning/memory`, `mechanism/architecture` as slash lists
 

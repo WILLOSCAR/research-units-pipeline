@@ -234,10 +234,35 @@ def _extract_list_prefixed(bullets: list[str], key: str) -> list[str]:
     raw = _extract_prefixed(bullets, key)
     if not raw:
         return []
-    parts = [p.strip() for p in re.split(r"[;,；]", raw) if p.strip()]
+
+    # Split on top-level separators, but do NOT split commas inside parentheses.
+    # This prevents axes like "evaluation protocol (datasets, metrics, human evaluation)"
+    # from being shredded into unusable tokens.
+    parts: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    for ch in raw:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth = max(0, depth - 1)
+        if depth == 0 and ch in ",;；":
+            part = "".join(buf).strip()
+            if part:
+                parts.append(part)
+            buf = []
+            continue
+        buf.append(ch)
+    tail = "".join(buf).strip()
+    if tail:
+        parts.append(tail)
+
     out: list[str] = []
     for p in parts:
-        p = re.sub(r"\s+", " ", p)
+        p = re.sub(r"\s+", " ", (p or "").strip())
+        # Remove leading conjunctions caused by list formatting ("..., and X").
+        p = re.sub(r"(?i)^(?:and|or)\s+", "", p).strip()
+        p = re.sub(r"^(?:以及|并且|还有)\s*", "", p).strip()
         if p and p not in out:
             out.append(p)
     return out

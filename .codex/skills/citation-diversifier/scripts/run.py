@@ -164,8 +164,11 @@ def main() -> int:
 
     # Compute the same global unique-citation target used by pipeline-auditor.
     min_unique = 0
+    min_unique_struct = 0
+    min_unique_frac = 0
     if profile == "arxiv-survey" and outline_order and bib_keys:
         h3_n = len(set(outline_order))
+        floor = 0
         if draft_profile == "deep":
             per_h3 = 12
             base = 30
@@ -176,11 +179,13 @@ def main() -> int:
             frac = 0.30
         else:
             per_h3 = 10
-            base = 24
-            frac = 0.45
+            base = 30
+            frac = 0.50
+            floor = 110
+
         min_unique_struct = base + per_h3 * h3_n
         min_unique_frac = int(len(bib_keys) * frac)
-        min_unique = max(min_unique_struct, min_unique_frac)
+        min_unique = max(min_unique_struct, min_unique_frac, floor)
         min_unique = min(min_unique, len(bib_keys))
 
     need_more = max(0, int(min_unique) - len(used_global))
@@ -247,7 +252,8 @@ def main() -> int:
     ]
 
     if min_unique:
-        lines.append(f"- Global target (pipeline-auditor): >= {min_unique}")
+        details = f"(struct={min_unique_struct}, frac={min_unique_frac}, bib={len(bib_keys)})"
+        lines.append(f"- Global target (pipeline-auditor): >= {min_unique} {details}")
         lines.append(f"- Gap: {need_more}")
         lines.append("")
 
@@ -272,11 +278,13 @@ def main() -> int:
             "",
             "## How to apply (NO NEW FACTS)",
             "",
-            "- Prefer adding cite-embedding sentences that do not change claims:",
-            "  - `Representative systems include X [@a], Y [@b], and Z [@c].`",
-            "  - `Recent work spans A [@a] and B [@b], with further variants in C [@c].`",
+            "- Prefer cite-embedding edits that do not change claims (paraphrase; avoid repeated stems):",
+            "  - Axis-anchored exemplars: `... as seen in X [@a] and Y [@b] ...; Z [@c] illustrates a contrasting design point.`",
+            "  - Parenthetical grounding (low risk): `... (e.g., X [@a], Y [@b], Z [@c]).`",
+            "  - Contrast pointer: `While some systems emphasize <A> (X [@a]; Y [@b]), others emphasize <B> (Z [@c]).`",
+            "- Avoid budget-dump voice (high-signal automation tells): `Representative systems include ...`, `Notable lines of work include ...`.",
             "- Keep additions inside the same H3 (no cross-subsection citation drift).",
-            "- After editing citations, rerun: `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor`.",
+            "- Apply via `citation-injector` (LLM-first) and then rerun: `draft-polisher` → `global-reviewer` → `pipeline-auditor`.",
         ]
     )
 

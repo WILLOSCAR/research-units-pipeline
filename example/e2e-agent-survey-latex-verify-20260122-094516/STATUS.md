@@ -1,0 +1,104 @@
+# Status
+
+## Current pipeline
+- `pipelines/arxiv-survey-latex.pipeline.md`
+
+## Current checkpoint
+- `DONE`
+
+## Next units
+- (fill) list next `U###` from `UNITS.csv`
+
+## Run log
+- 2026-01-22T09:45:29 U001 DOING workspace-init
+- 2026-01-22T09:45:29 U001 DONE workspace-init
+- 2026-01-22T09:45:29 U002 DOING pipeline-router
+- 2026-01-22T09:45:29 U002 DONE pipeline-router
+- 2026-01-22T09:45:29 U010 DOING literature-engineer
+- 2026-01-22T09:46:08 U010 DONE literature-engineer
+- 2026-01-22T09:46:08 U020 DOING dedupe-rank
+- 2026-01-22T09:46:08 U020 DONE dedupe-rank
+- 2026-01-22T09:46:08 U030 DOING taxonomy-builder
+- 2026-01-22T09:46:08 U030 DONE taxonomy-builder
+- 2026-01-22T09:46:08 U040 DOING outline-builder
+- 2026-01-22T09:46:09 U040 DONE outline-builder
+- 2026-01-22T09:46:09 U050 DOING section-mapper
+- 2026-01-22T09:46:09 U050 DONE section-mapper
+- 2026-01-22T09:46:09 U051 DOING outline-refiner
+- 2026-01-22T09:46:09 U051 DONE outline-refiner
+- 2026-01-22T09:46:09 U052 DOING pipeline-router
+- 2026-01-22T09:46:09 U052 DONE pipeline-router
+- 2026-01-22T09:46:09 U055 DOING pipeline-router
+- 2026-01-22T09:46:09 U055 DONE (AUTO approved C2)
+- 2026-01-22T09:46:09 U058 DOING pdf-text-extractor
+- 2026-01-22T09:46:09 U058 DONE pdf-text-extractor
+- 2026-01-22T09:46:09 U060 DOING paper-notes
+- 2026-01-22T09:46:10 U060 DONE paper-notes
+- 2026-01-22T09:46:10 U075 DOING subsection-briefs
+- 2026-01-22T09:46:10 U075 BLOCKED (quality gate: output/QUALITY_GATE.md)
+- 2026-01-22T09:47:05 U075 DOING subsection-briefs
+- 2026-01-22T09:47:05 U075 DONE subsection-briefs
+- 2026-01-22T09:47:05 U076 DOING chapter-briefs
+- 2026-01-22T09:47:05 U076 DONE chapter-briefs
+- 2026-01-22T09:47:05 U090 DOING citation-verifier
+- 2026-01-22T09:47:05 U090 DONE citation-verifier
+- 2026-01-22T09:47:05 U091 DOING evidence-binder
+- 2026-01-22T09:47:05 U091 DONE evidence-binder
+- 2026-01-22T09:47:05 U092 DOING evidence-draft
+- 2026-01-22T09:47:05 U092 DONE evidence-draft
+- 2026-01-22T09:47:05 U093 DOING anchor-sheet
+- 2026-01-22T09:47:05 U093 DONE anchor-sheet
+- 2026-01-22T09:47:05 U0935 DOING schema-normalizer
+- 2026-01-22T09:47:06 U0935 DONE schema-normalizer
+- 2026-01-22T09:47:06 U099 DOING writer-context-pack
+- 2026-01-22T09:47:06 U099 DONE writer-context-pack
+- 2026-01-22T09:47:06 U0995 DOING evidence-selfloop
+- 2026-01-22T09:47:06 U0995 DONE evidence-selfloop
+- 2026-01-22T09:47:06 U094 DOING claim-matrix-rewriter
+- 2026-01-22T09:47:06 U094 DONE claim-matrix-rewriter
+- 2026-01-22T09:47:06 U095 DOING front-matter-writer
+- 2026-01-22T09:47:06 U095 BLOCKED (no script for front-matter-writer; run manually per .codex/skills/front-matter-writer/SKILL.md then mark DONE)
+- 2026-01-22T09:56:54 U095 NOTE front matter written
+- 2026-01-22T09:57:01 U096 DOING chapter-lead-writer
+- 2026-01-22T09:57:01 U096 BLOCKED (no script for chapter-lead-writer; run manually per .codex/skills/chapter-lead-writer/SKILL.md then mark DONE)
+- 2026-01-22T09:59:37 U096 NOTE chapter leads written
+- 2026-01-22T09:59:45 U100 DOING subsection-writer
+- 2026-01-22T09:59:46 U100 BLOCKED (missing outputs: sections/h3_bodies.refined.ok)
+- 2026-01-22T10:23:09 U100 DOING subsection-writer
+- 2026-01-22T10:23:09 U100 BLOCKED (script failed)
+- 2026-01-22T10:24:36 U100 DOING subsection-writer
+- 2026-01-22T10:24:37 U100 DONE subsection-writer
+- 2026-01-22T10:24:37 U1005 DOING writer-selfloop
+- 2026-01-22T10:24:37 U1005 BLOCKED (script failed)
+- 2026-01-22T10:28:23 U1005 DOING writer-selfloop
+- 2026-01-22T10:28:24 U1005 DONE writer-selfloop
+- 2026-01-22T10:28:24 U102 DOING section-logic-polisher
+- 2026-01-22T10:28:24 U102 BLOCKED (script failed)
+- 2026-01-22T10:32:45 U102 DOING section-logic-polisher
+- 2026-01-22T10:32:45 U102 DONE section-logic-polisher
+- 2026-01-22T10:32:45 U098 DOING transition-weaver
+- 2026-01-22T10:32:45 U098 BLOCKED (missing outputs: outline/transitions.md)
+- 2026-01-22T10:33:52 U098 DOING transition-weaver
+- 2026-01-22T10:33:52 U098 BLOCKED (script failed)
+- 2026-01-22T10:35:16 U098 DOING transition-weaver
+- 2026-01-22T10:35:16 U098 DONE transition-weaver
+- 2026-01-22T10:35:16 U101 DOING section-merger
+- 2026-01-22T10:35:17 U101 DONE section-merger
+- 2026-01-22T10:35:17 U103 DOING post-merge-voice-gate
+- 2026-01-22T10:35:17 U103 DONE post-merge-voice-gate
+- 2026-01-22T10:35:17 U104 DOING citation-diversifier
+- 2026-01-22T10:35:17 U104 DONE citation-diversifier
+- 2026-01-22T10:35:17 U1045 DOING citation-injector
+- 2026-01-22T10:35:17 U1045 DONE citation-injector
+- 2026-01-22T10:35:17 U105 DOING draft-polisher
+- 2026-01-22T10:35:17 U105 DONE draft-polisher
+- 2026-01-22T10:35:17 U108 DOING global-reviewer
+- 2026-01-22T10:35:17 U108 DONE global-reviewer
+- 2026-01-22T10:35:17 U109 DOING pipeline-auditor
+- 2026-01-22T10:35:17 U109 DONE pipeline-auditor
+- 2026-01-22T10:35:17 U110 DOING latex-scaffold
+- 2026-01-22T10:35:17 U110 DONE latex-scaffold
+- 2026-01-22T10:35:17 U120 DOING latex-compile-qa
+- 2026-01-22T10:35:23 U120 DONE latex-compile-qa
+- 2026-01-22T10:35:23 U130 DOING artifact-contract-auditor
+- 2026-01-22T10:35:23 U130 DONE artifact-contract-auditor
