@@ -136,7 +136,7 @@ Last updated: 2026-01-22
 
 设计改造（建议）：
 - profile-aware 合同：
-  - lite：允许 0 表（验证链路）
+  - debug（lite）：允许 0 表（仅用于跑通链路/快速调试；不作为默认交付）
   - survey/deep：默认 >=2 表（taxonomy 表 + benchmark/protocol 表）
 - 将 `table-schema` -> `table-filler` 的产物视为“写作一等输入”（writer 必须引用/解释表，而不是把表当附件）。
 

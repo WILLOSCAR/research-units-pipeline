@@ -195,12 +195,13 @@ Writer self-loop（C5）在 PASS 时也输出 “Style Smell Appendix”（不�
 
 建议用同一主题做两次回放（只改 profile），来验证“结构改造能否可控地产生更强的 survey 形态”：
 
-1) lite 回放（验证链路）
-- 目标：无旁白、无模板句、方法学段落一次、H3 少而厚、PDF 成功编译。
-- 验收：`workspaces/<ws>/output/POST_MERGE_VOICE_REPORT.md` PASS；`workspaces/<ws>/output/AUDIT_REPORT.md` unique citations >= lite 门槛。
-
-2) survey 回放（对标形态）
-- 目标：>=2 表、global unique citations >=110、front matter 引用密度明显更高、Style Smell Appendix 明显下降。
+1) survey 回放（默认交付；对齐最终目标）
+- 目标：>=2 表、global unique citations >=110、front matter 引用密度明显更高、Style Smell Appendix 明显下降、PDF 成功编译。
 - 对标：`ref/agent-surveys/STYLE_REPORT.md` 的 section count 与论文形态。
 
-如果 lite 能稳定 PASS，但 survey 反复 FAIL，则说明问题不在写作阶段，而在 C3/C4 的 substrate（brief/binding/pack/anchors）仍不足以支撑更高密度的论证动作：应优先加强 evidence self-loop 的“可写性坏味道”路由，而不是让 writer 去硬写。
+2) deep 回放（更严格；更像论文）
+- 目标：优先使用 `evidence_mode: fulltext`；H3 更厚（>=10 段、>=12 unique cites）；global unique citations 达到 deep profile 门槛；numeric claims 的最小评测上下文更完整。
+
+注：`lite` 仅用于“跑通链路/快速调试”，会显著下调 global unique-citation 目标，不再作为默认建议（容易偏离你的最终交付标准）。
+
+如果 survey 能稳定 PASS，但 deep 反复 FAIL，则说明问题不在写作阶段，而在 C3/C4 的 substrate（brief/binding/pack/anchors）仍不足以支撑更高密度的论证动作：应优先加强 evidence self-loop 的“可写性坏味道”路由，而不是让 writer 去硬写。
