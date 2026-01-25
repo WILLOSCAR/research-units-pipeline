@@ -26,7 +26,7 @@
    - `notes`：怎么做、边界条件、常见错误
    - `guardrail`：不能做什么（如 C2-C4 阶段 **NO PROSE**）
 
-2. **拆解链路**：6 个 checkpoint（C0→C5），36 个原子 units，依赖关系显式写在 `UNITS.csv`
+2. **拆解链路**：6 个 checkpoint（C0→C5），约 40+ 个原子 units（不同 pipeline 略有差异；LaTeX 版本会多几个），依赖关系显式写在 `UNITS.csv`
 3. **证据先行**：C2-C4 强制先建证据底座（taxonomy → mapping → evidence packs），C5 才写作
 
 **设计目标**：
@@ -102,6 +102,7 @@ C5: sections/*.md → output/DRAFT.md → latex/main.tex → latex/main.pdf     
 - 写作层自循环（只修复失败小节）：
   - `output/WRITER_SELFLOOP_TODO.md`（写作门：PASS/FAIL + 需要修复的 sections 列表）
   - `output/SECTION_LOGIC_REPORT.md`（thesis + 连接词密度）
+  - `output/ARGUMENT_SELFLOOP_TODO.md`（论证链路 + 前提/口径一致性；ledger 为中间态，不进终稿）
   - `output/CITATION_BUDGET_REPORT.md`（引用增密建议）
 
 ## 简单的对话式执行（从 0 到 PDF）
@@ -109,7 +110,7 @@ C5: sections/*.md → output/DRAFT.md → latex/main.tex → latex/main.pdf     
 ```
 你：给我写一个 agent 的 latex-survey
 
-↓ [C0-C1] 检索 800+ 篇论文 → 去重到 150+ 核心集 arxiv 会补全 meta 信息
+↓ [C0-C1] 检索 1200+ 候选论文（目标 1500+）→ core set=300（最终文献150++ 默认；arXiv 可补全 meta）
 ↓ [C2] 构建 taxonomy + outline + mapping（NO PROSE）→ 停在 C2 等审批
 
 你：C2 check 关键文件，看没有问题回复同意，继续
@@ -129,7 +130,7 @@ C5: sections/*.md → output/DRAFT.md → latex/main.tex → latex/main.pdf     
 ## 示例产物（v0.1，包含完整中间产物）
 该版本由 codex 中的 gpt-5.2-xhigh 运行约 2 小时 生成，过程中仅进行过 一次 human-in-the-loop（C2 阶段） 介入。
 路径：`example/e2e-agent-survey-latex-verify-****时间戳/`（pipeline：`pipelines/arxiv-survey-latex.pipeline.md`）。
-配置摘要（示例 run）：`draft_profile: survey` / `evidence_mode: abstract` / `core_size: 220`（详见 `queries.md`）。
+配置摘要（A150++ 默认）：`draft_profile: survey` / `evidence_mode: abstract` / `core_size: 300` / `per_subsection: 28`（详见 `queries.md`）。
 推荐默认（对齐最终交付）：`draft_profile: survey`（默认）或 `draft_profile: deep`（更严格）。
 
 目录速览（每个文件夹干嘛用）：

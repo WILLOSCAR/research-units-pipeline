@@ -16,7 +16,7 @@
    - `notes`: how to do it, edge cases, common mistakes
    - `guardrail`: what NOT to do (e.g., **NO PROSE** in C2-C4)
 
-2. **Decomposed Pipeline**: 6 checkpoints (C0→C5), 36 atomic units, dependencies explicit in `UNITS.csv`
+2. **Decomposed Pipeline**: 6 checkpoints (C0→C5), ~40+ atomic units (varies by pipeline; LaTeX adds a few), dependencies explicit in `UNITS.csv`
 3. **Evidence-First**: C2-C4 enforce building evidence substrate first, C5 writes prose
 
 **Design Goals**:
