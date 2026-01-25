@@ -150,6 +150,8 @@ def main() -> int:
     profile = _pipeline_profile(workspace)
     draft_profile = _draft_profile(workspace)
 
+    min_h3_cites = 14 if draft_profile == "deep" else 12
+
     # Tables (survey deliverable): count Markdown tables in the merged draft.
     table_seps = re.findall(r"(?m)^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$", draft)
     table_n = len(table_seps)
@@ -405,27 +407,30 @@ def main() -> int:
     low_cite: list[str] = []
     for sid, rec in found.items():
         uniq = set(rec.get("citations") or [])
-        if len(uniq) < 3:
+        if len(uniq) < min_h3_cites:
             low_cite.append(f"{sid}({len(uniq)})")
     if low_cite:
-        blocking.append(f"some H3 have <3 unique citations: {', '.join(low_cite[:10])}")
+        blocking.append(f"some H3 have <{min_h3_cites} unique citations: {', '.join(low_cite[:10])}")
 
     # Global cite coverage (encourage using more of the bibliography, not just a small subset).
     if profile == "arxiv-survey" and expected:
         h3_n = len(set(expected.values()))
         floor = 0
         if draft_profile == "deep":
-            per_h3 = 12
-            base = 30
-            frac = 0.55
-            floor = 110
+            per_h3 = 16
+            base = 40
+            frac = 0.60
+            floor = 165
         else:
-            per_h3 = 10
-            # Survey deliverable expectation: keep global unique citations high enough
+            per_h3 = 14
+            # Survey deliverable expectation (A150++): keep global unique citations high enough
             # that the draft does not look under-cited relative to the available bib.
-            base = 30
+            base = 35
+            # Hard floor: >=150 unique citations (A150++). Recommended target: ~55% of bib,
+            # which is 165 when bib=300. We enforce the hard floor and report the recommended
+            # target as a non-blocking warning.
             frac = 0.50
-            floor = 110
+            floor = 150
 
         min_unique_struct = base + per_h3 * h3_n
         min_unique_frac = int(len(bib_keys) * frac) if bib_keys else 0
@@ -433,10 +438,22 @@ def main() -> int:
         if bib_keys:
             min_unique = min(min_unique, len(bib_keys))
 
+        # Recommended (non-blocking) target: encourage using more of the available bibliography.
+        rec_unique = min_unique
+        if draft_profile != "deep" and bib_keys:
+            rec_frac = 0.55
+            rec_unique = max(rec_unique, int(len(bib_keys) * rec_frac))
+            rec_unique = min(rec_unique, len(bib_keys))
+
         if len(cited) < min_unique:
             blocking.append(
                 f"unique citations too low ({len(cited)}; target >= {min_unique} for {draft_profile} profile)"
                 + (f" [struct={min_unique_struct}, frac={min_unique_frac}, bib={len(bib_keys)}]" if bib_keys else "")
+            )
+        elif rec_unique > min_unique and len(cited) < rec_unique:
+            warnings.append(
+                f"unique citations below recommended target ({len(cited)}; recommend >= {rec_unique} for {draft_profile} profile)"
+                + (f" [hard={min_unique}, rec_frac={int(len(bib_keys) * 0.55)}, bib={len(bib_keys)}]" if bib_keys else "")
             )
 
     # Paragraph-level no-citation rate (content-only; ignore headings/tables/short transitions).

@@ -64,7 +64,11 @@
     "metric token",
     "metric tokens",
     "evaluation token",
-    "evaluation tokens"
+    "evaluation tokens",
+    "In this survey",
+    "In our survey",
+    "Our survey",
+    "This survey"
   ],
   "opener_archetypes": {
     "tension-first": [
@@ -132,6 +136,22 @@
     {
       "avoid_stem": "Three limitations",
       "prefer_stem": "One limitation is that"
+    },
+    {
+      "avoid_stem": "In this survey",
+      "prefer_stem": "We examine"
+    },
+    {
+      "avoid_stem": "In our survey",
+      "prefer_stem": "We examine"
+    },
+    {
+      "avoid_stem": "Our survey",
+      "prefer_stem": "This work"
+    },
+    {
+      "avoid_stem": "This survey",
+      "prefer_stem": "This work"
     }
   ],
   "discourse_stem_watchlist": [

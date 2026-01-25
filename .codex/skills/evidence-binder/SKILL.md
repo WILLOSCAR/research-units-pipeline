@@ -46,11 +46,19 @@ JSONL (one object per H3 subsection). Best-effort fields (keep deterministic):
 - `binding_rationale` (short bullets; why the selected evidence covers this subsection’s axes / desired tags)
 - `binding_gaps` (list[str]; required evidence fields not covered by selected evidence; drives the evidence self-loop upstream)
 
+## A150++ density contract (default)
+
+- Use `queries.md:per_subsection` as the width contract (A150++ default: 28).
+- Bind enough evidence to make writing *concretely executable* without out-of-scope pressure:
+  - `mapped_bibkeys`: >= per_subsection
+  - `evidence_ids`: >= per_subsection - 4 (A150++: >=24)
+  - `bibkeys` (selected): >= 20 (so each H3 has a usable citation pool, not just a long mapped list)
+
 ## Binding policy (how strict to be)
 
 - Subsection-first by default: the writer should primarily cite `bibkeys` and use `evidence_ids` bound to this `sub_id`.
 - Allow limited within-chapter reuse: citations from sibling H3s within the same H2 chapter may be reused for background/evaluation framing, but:
-  - keep >=2 subsection-specific citations per H3 (avoid “free cite drift”)
+  - keep >=3 subsection-specific citations per H3 (avoid “free cite drift”)
   - avoid cross-chapter reuse unless the outline explicitly calls for it
 
 ## Workflow (NO PROSE)

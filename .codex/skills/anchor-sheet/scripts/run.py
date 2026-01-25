@@ -118,7 +118,7 @@ def main() -> int:
                 continue
             add_anchor(
                 hook_type="limitation",
-                text=str(it.get("excerpt") or "").strip(),
+                text=str(it.get("excerpt") or it.get("bullet") or it.get("text") or "").strip(),
                 citations=[str(c).strip() for c in (it.get("citations") or []) if str(c).strip()],
                 paper_id=str(it.get("paper_id") or "").strip(),
                 evidence_id=str(it.get("evidence_id") or "").strip(),

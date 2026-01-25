@@ -38,9 +38,19 @@ It produces a constraint sheet: `output/CITATION_BUDGET_REPORT.md`.
 ## What a good budget report looks like (contract)
 
 The report should feel like a *constraint sheet*, not a random list:
-- It states the global gap (how many unique keys are missing).
-- For each H3, it proposes a small budget (typically 3–8 keys) drawn from that H3’s allowed sets.
-- It gives a placement hint (where in the subsection those keys can be embedded without adding new facts).
+- It states the **blocking hard target** and the **gap-to-hard** (how many unique keys are missing).
+- For each H3, it proposes a scope-safe budget sized to actually close the gap:
+  - small gaps: 3-6 keys / H3 is often enough
+  - A150++ gaps: plan for ~6-12 keys / H3 (and avoid duplicates across H3 budgets)
+- It gives placement guidance (where in the subsection those keys can be embedded without adding new facts).
+
+Canonical (parseable) lines required (downstream validators depend on these):
+- `- Global target (hard; blocking): >= <N> ...`
+- `- Gap: <K>`  (gap-to-hard; if `0`, injection can be a no-op PASS)
+
+Optional (recommended, non-blocking):
+- `- Global recommended target (non-blocking): >= <N> ...`
+- `- Gap to recommended: <K>`
 
 Recommended prioritization (scope-safe):
 - `allowed_bibkeys_selected` → `allowed_bibkeys_mapped` → `allowed_bibkeys_chapter`
@@ -70,6 +80,8 @@ Important: `citation-injector` is **LLM-first**. Its script is validation-only.
 3) Write `output/CITATION_BUDGET_REPORT.md`
 Required structure:
 - `- Status: PASS|FAIL`
+- `- Global target (hard; blocking): >= <N> ...`
+- `- Gap: <K>`
 - `## Summary` (gap + strategy)
 - `## Per-subsection budgets` (H3 id/title → suggested keys → placement hint)
 

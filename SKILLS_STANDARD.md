@@ -266,11 +266,12 @@ For deterministic units (retrieval/dedupe/compile/format checks):
 | Evidence binding compliance | 100% in-scope | Citations must stay within `outline/evidence_bindings.jsonl` allowed set |
 
 **Report-class skills contract**:
-- All report skills (evidence-selfloop, writer-selfloop, section-logic-polisher, global-reviewer, pipeline-auditor, artifact-contract-auditor, latex-compile-qa) **must write output regardless of PASS/FAIL**.
+- All report skills (evidence-selfloop, writer-selfloop, argument-selfloop, section-logic-polisher, global-reviewer, pipeline-auditor, artifact-contract-auditor, latex-compile-qa) **must write output regardless of PASS/FAIL**.
 - Self-loop reports are the *gate interface* (the agent should treat them as “fix plan + unblock signal”):
   - `evidence-selfloop` → `output/EVIDENCE_SELFLOOP_TODO.md`
   - `writer-selfloop` → `output/WRITER_SELFLOOP_TODO.md`
-  In both, `- Status: PASS` is the only unblock signal.
+  - `argument-selfloop` → `output/ARGUMENT_SELFLOOP_TODO.md` (and its intermediate ledgers: `output/SECTION_ARGUMENT_SUMMARIES.jsonl`, `output/ARGUMENT_SKELETON.md`)
+  In all of them, `- Status: PASS` is the only unblock signal.
 - Standard report structure:
   ```markdown
   - Status: PASS | FAIL

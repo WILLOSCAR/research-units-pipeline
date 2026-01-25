@@ -35,6 +35,10 @@ This skill is analysis-only. It does not edit content.
 
 ## What it checks (deterministic)
 
+A150++ citation targets (used by the auditor):
+- Per-H3: >=12 unique citations (deep: >=14).
+- Global: >=150 unique citations across the full draft (recommended target: 165; deep floor: 165).
+
 - Placeholder leakage: ellipsis (`...`, `…`), TODO markers, scaffold tags.
 - Outline alignment: section/subsection order vs `outline/outline.yml`.
 - Survey tables (survey deliverable): require >=2 Markdown tables in the merged draft (index tables live in `outline/tables_index.md`) (inserted by `section-merger` from `outline/tables_appendix.md`).

@@ -4,7 +4,7 @@ description: |
   Create per-subsection evidence packs (NO PROSE): claim candidates, concrete comparisons, evaluation protocol, limitations, plus citation-backed evidence snippets with provenance.
   **Trigger**: evidence draft, evidence pack, claim candidates, concrete comparisons, evidence snippets, provenance, 证据草稿, 证据包, 可引用事实.
   **Use when**: `outline/subsection_briefs.jsonl` exists and you want evidence-first section drafting where every paragraph can be backed by traceable citations/snippets.
-  **Skip if**: `outline/evidence_drafts.jsonl` already exists and is refined (no placeholders; >=4 comparisons per subsection; `blocking_missing` empty).
+  **Skip if**: `outline/evidence_drafts.jsonl` already exists and is refined (no placeholders; >=8 comparisons per subsection; `blocking_missing` empty).
   **Network**: none (richer evidence improves with abstracts/fulltext).
   **Guardrail**: NO PROSE; do not invent facts; only use citation keys that exist in `citations/ref.bib`.
 ---
@@ -79,9 +79,9 @@ JSONL (one JSON object per line). Required fields per record:
 - `evidence_snippets` (list; each has `text`, `paper_id`, `citations`, `provenance`)
 - `definitions_setup` (list of cited bullets)
 - `claim_candidates` (3–5 items; each has `claim`, `citations`, `evidence_field`)
-- `concrete_comparisons` (>=4 items; each has `axis`, `A_papers`, `B_papers`, `citations`, `evidence_field`; may also include `A_highlights`/`B_highlights` with snippet-backed contrast anchors)
+- `concrete_comparisons` (>=8 items; each has `axis`, `A_papers`, `B_papers`, `citations`, `evidence_field`; may also include `A_highlights`/`B_highlights` with snippet-backed contrast anchors)
 - `evaluation_protocol` (list of concrete protocol bullets + citations)
-- `failures_limitations` (2–4 cited bullets)
+- `failures_limitations` (>=5 cited bullets)
 - `blocking_missing` (list[str]; if non-empty, drafting must stop)
 - `verify_fields` (list[str]; non-blocking: fields to verify before making strong claims)
 
@@ -100,19 +100,19 @@ Allowed `source`: `fulltext|abstract|paper_notes|title`.
 1. Load `outline/subsection_briefs.jsonl` and read each subsection’s `rq`, `axes`, `clusters`, and evidence-level policy.
 2. Load `papers/paper_notes.jsonl` and build a per-paper evidence index (`bibkey`, `evidence_level`, `abstract`, `fulltext_path`, `limitations`).
 3. For each subsection:
-   - Build **evidence_snippets** from mapped papers (prefer fulltext, else abstract), and record provenance.
+   - Build **evidence_snippets** from mapped papers (prefer fulltext, else abstract), and record provenance (A150++: target >=12 snippets per H3).
    - Definitions/setup: 1–2 bullets that define setup + scope boundary (with citations).
    - Claim candidates: 3–5 **checkable** candidates (prefer snippet-derived; tag with `evidence_field`).
-   - Concrete comparisons: >=4 A-vs-B comparisons (cluster-vs-cluster) along explicit axes.
+   - Concrete comparisons: >=8 A-vs-B comparisons (cluster-vs-cluster) along explicit axes.
    - Evaluation protocol: list concrete benchmark/metric names if extractable; otherwise treat as a blocking gap.
-   - Failures/limitations: 2–4 concrete limitations/failure modes with citations.
+   - Failures/limitations: >=5 concrete limitations/failure modes with citations.
    - Set `blocking_missing` for hard blockers (e.g., no usable citations; title-only evidence; no eval tokens for an eval-heavy subsection).
 4. Write `outline/evidence_drafts.jsonl` and per-subsection Markdown copies.
 
 ## Quality checklist
 
-- [ ] Every subsection has >=4 concrete comparisons.
-- [ ] `evidence_snippets` is non-empty and includes provenance.
+- [ ] Every subsection has >=8 concrete comparisons.
+- [ ] `evidence_snippets` has >=12 items and includes provenance.
 - [ ] Any bullet containing numbers/% also carries minimal protocol context (task/metric/constraint), or the number is removed and moved to `verify_fields`.
 - [ ] `claim_candidates` has >=3 snippet-derived items (no axis-driven hypotheses).
 - [ ] `blocking_missing` is empty.

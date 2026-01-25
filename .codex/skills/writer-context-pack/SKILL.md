@@ -61,6 +61,13 @@ Trim policy:
 
 Treat each pack as an executable checklist, not optional context:
 
+A150++ minima (defaults; used by gates and self-loops):
+- paragraph_plan: 10
+- anchor_facts: >=10
+- comparison_cards: >=7
+- limitation_hooks: >=3
+- allowed_bibkeys_mapped: >=28
+
 - **Plan compliance**: follow `paragraph_plan` (don’t skip planned paragraphs; merge only if you keep the same contrasts/anchors).
 - **Connector intent**: treat `paragraph_plan[].connector_phrase` as semantic guidance, not copy-paste; paraphrase and vary; avoid `Next, we ...` narration.
 - **Anchors are must-use**: include at least one `anchor_facts` item that matches your paragraph’s claim type (eval / numeric / limitation), when present.
@@ -74,7 +81,7 @@ Treat each pack as an executable checklist, not optional context:
   - avoid swapping in a new repeated stem; keep phrasing varied and paper-like
   - exception: a phrase may appear once if it is truly subsection-specific (not a reusable stem)
 - **Micro-structure**: if prose starts drifting into flat summaries, apply `grad-paragraph` repeatedly (tension → contrast → evaluation anchor → limitation).
-- **Citation scope**: prefer `allowed_bibkeys_selected` (then `allowed_bibkeys_mapped`, then `allowed_bibkeys_chapter`). `allowed_bibkeys_global` is reserved for cross-cutting works mapped across many subsections (foundations/benchmarks/surveys): use it sparingly and still keep >=2 subsection-specific citations per H3.
+- **Citation scope**: prefer `allowed_bibkeys_selected` (then `allowed_bibkeys_mapped`, then `allowed_bibkeys_chapter`). `allowed_bibkeys_global` is reserved for cross-cutting works mapped across many subsections (foundations/benchmarks/surveys): use it sparingly and still keep >=3 subsection-specific citations per H3.
 
 
 

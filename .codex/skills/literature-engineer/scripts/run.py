@@ -150,7 +150,27 @@ def main() -> int:
     # - Otherwise, when the current pool is smaller than a reasonable minimum,
     #   try online retrieval as a best-effort expansion step (so a single seed
     #   import doesn't trap the pipeline in offline-only mode).
+    # Online fallback should scale with the intended survey size.
+    # For A150++ runs (core_size=300), downstream mapping/bindings/citations need a large
+    # candidate pool, so we should attempt online expansion unless the pool is already big.
+    core_size = 0
+    try:
+        for raw in queries_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = raw.strip()
+            if not line.startswith("- core_size:"):
+                continue
+            value = line.split(chr(58), 1)[1].split(chr(35), 1)[0].strip().strip(chr(34)).strip(chr(39))
+            try:
+                core_size = int(value)
+            except Exception:
+                core_size = 0
+            break
+    except Exception:
+        core_size = 0
+
     desired_min = 200
+    if core_size > 0:
+        desired_min = max(desired_min, int(core_size) * 4)
     if max_results and max_results < desired_min:
         desired_min = max_results
 
@@ -1165,7 +1185,7 @@ def _parse_queries_md(path: Path) -> tuple[list[str], list[str], int | None, int
             mode = "time"
             continue
         if line.startswith("- max_results:"):
-            value = line.split(":", 1)[1].strip().strip('"').strip("'")
+            value = line.split(chr(58), 1)[1].split(chr(35), 1)[0].strip().strip(chr(34)).strip(chr(39))
             try:
                 max_results = int(value)
             except Exception:

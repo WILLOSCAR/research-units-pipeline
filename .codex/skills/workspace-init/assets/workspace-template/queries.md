@@ -8,16 +8,28 @@
   - ""
 - exclude:
   - ""
-- max_results: ""
-- core_size: ""              # dedupe-rank will select this many papers into papers/core_set.csv (survey target: >=150)
-- per_subsection: ""         # section-mapper target papers per H3 (arxiv-survey default: 18)
-- global_citation_min_subsections: ""  # treat citations mapped to >=N subsections as globally allowed for citation-scope checks (default: 3)
-- draft_profile: survey    # survey | deep (default: survey deliverable, >=110 unique cites; deep is stricter and pairs best with fulltext)
+
+# Retrieval + scaling knobs
+- max_results: "1800"        # retrieval cap per query bucket (A150++ default; raise if you have many buckets)
+- core_size: "300"           # dedupe-rank will select this many papers into papers/core_set.csv (A150++ default)
+- per_subsection: "28"       # section-mapper target papers per H3 (A150++ default; ensures wide in-scope cite pools)
+
+# Citation-scope flexibility
+- global_citation_min_subsections: "4"  # treat citations mapped to >=N subsections as globally allowed (tighten when per_subsection is high)
+
+# Writing contract
+- draft_profile: survey      # survey | deep (default: survey deliverable; global unique cites target >=150)
+
+# Metadata enrichment
 - enrich_metadata: ""        # true|false; optional arXiv id_list backfill for offline imports (needs network)
-- evidence_mode: "abstract"   # abstract | fulltext (abstract: metadata-only evidence; fulltext: download PDFs for stronger protocol/number anchoring)
+
+# Evidence strength
+- evidence_mode: "abstract"  # abstract | fulltext (A150++ default: abstract-only; fulltext is optional and heavier)
 - fulltext_max_papers: ""
 - fulltext_max_pages: ""
 - fulltext_min_chars: ""
+
+# Optional time window
 - time window:
   - from: ""
   - to: ""

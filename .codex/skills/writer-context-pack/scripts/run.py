@@ -359,7 +359,7 @@ def main() -> int:
         anchors_dropped_no_cites = 0
 
         raw_limit = 16
-        keep_limit = 12 if draft_profile == "deep" else 8
+        keep_limit = 12 if draft_profile == "deep" else 10
 
         for a in anchors_raw[:raw_limit]:
             anchors_considered += 1
@@ -389,8 +389,8 @@ def main() -> int:
         hl_dropped_no_cites = 0
 
         comparison_cards: list[dict[str, Any]] = []
-        comp_raw_limit = 10
-        comp_keep_limit = 6 if draft_profile == "deep" else 4
+        comp_raw_limit = 14
+        comp_keep_limit = 9 if draft_profile == "deep" else 7
 
         for comp in (raw_comparisons or [])[:comp_raw_limit]:
             if not isinstance(comp, dict):
@@ -429,7 +429,7 @@ def main() -> int:
                 "B_highlights": _hl("B_highlights"),
                 "write_prompt": _trim(comp.get("write_prompt") or "", max_len=TRIM["comparison_write_prompt"]),
             }
-            if card["axis"] and (card["A_highlights"] or card["B_highlights"]):
+            if card["axis"] and (card["A_highlights"] or card["B_highlights"] or card["citations"]):
                 comparison_cards.append(card)
             else:
                 comparisons_dropped_no_highlights += 1
@@ -490,20 +490,30 @@ def main() -> int:
             if len(lim_hooks) >= (10 if draft_profile == "deep" else 8):
                 break
 
-        # Explicit must-use minima: make the writer contract executable (and debuggable).
+        # Availability minima (used by gates and self-loops).
         if draft_profile == "deep":
-            min_anchor = 3
-            min_comp = 3
-            min_lim = 2
+            min_anchor = 12
+            min_comp = 9
+            min_lim = 3
         else:
-            min_anchor = 2
-            min_comp = 2
-            min_lim = 1
+            min_anchor = 10
+            min_comp = 7
+            min_lim = 3
+
+        # Writer-executable minima: smaller than availability minima, but still forces argument moves.
+        if draft_profile == "deep":
+            must_anchor = 5
+            must_comp = 5
+            must_lim = 3
+        else:
+            must_anchor = 4
+            must_comp = 4
+            must_lim = 2
 
         must_use = {
-            "min_anchor_facts": min_anchor,
-            "min_comparison_cards": min_comp,
-            "min_limitation_hooks": min_lim,
+            "min_anchor_facts": must_anchor,
+            "min_comparison_cards": must_comp,
+            "min_limitation_hooks": must_lim,
             "require_cited_numeric_if_available": True,
             "require_multi_cite_synthesis_paragraph": True,
             "thesis_required": True,

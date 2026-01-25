@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import re
 import sys
 from pathlib import Path
@@ -162,31 +163,55 @@ def main() -> int:
     profile = _pipeline_profile(workspace)
     draft_profile = _draft_profile(workspace)
 
-    # Compute the same global unique-citation target used by pipeline-auditor.
-    min_unique = 0
+    # Global unique-citation targets: hard minimum vs recommended target.
+    # - Hard floor (A150++ survey): >=150 unique citations.
+    # - Recommended target: encourage using a larger fraction of the bib (e.g., ~55% when bib is large).
+    min_unique_hard = 0
+    min_unique_rec = 0
     min_unique_struct = 0
     min_unique_frac = 0
     if profile == "arxiv-survey" and outline_order and bib_keys:
         h3_n = len(set(outline_order))
-        floor = 110
+        floor = 0
         if draft_profile == "deep":
-            per_h3 = 12
-            base = 30
-            frac = 0.55
+            per_h3 = 16
+            base = 40
+            frac = 0.60
+            floor = 165
         else:
-            per_h3 = 10
-            base = 30
+            per_h3 = 14
+            base = 35
+            # Hard floor: >=150 unique citations. Recommended: ~55% of bib when bib is large.
             frac = 0.50
+            floor = 150
 
         min_unique_struct = base + per_h3 * h3_n
         min_unique_frac = int(len(bib_keys) * frac)
-        min_unique = max(min_unique_struct, min_unique_frac, floor)
-        min_unique = min(min_unique, len(bib_keys))
+        min_unique_hard = max(min_unique_struct, min_unique_frac, floor)
+        min_unique_hard = min(min_unique_hard, len(bib_keys))
 
-    need_more = max(0, int(min_unique) - len(used_global))
+        min_unique_rec = min_unique_hard
+        if draft_profile != "deep" and bib_keys:
+            min_unique_rec = max(min_unique_rec, int(len(bib_keys) * 0.55))
+            min_unique_rec = min(min_unique_rec, len(bib_keys))
+
+    gap_hard = max(0, int(min_unique_hard) - len(used_global)) if min_unique_hard else 0
+    gap_rec = max(0, int(min_unique_rec) - len(used_global)) if min_unique_rec else 0
+
+    # Use the recommended gap to size the per-H3 budget (it stabilizes citation coverage),
+    # but keep the *hard* target as the blocking threshold for downstream validation.
+    desired_gap = gap_rec if gap_rec > 0 else gap_hard
+
+    # Dynamic per-H3 suggestion size so the budget can actually close the gap.
+    h3_n = max(1, len(set(outline_order))) if outline_order else 1
+    budget_per_h3 = 0
+    if desired_gap > 0:
+        budget_per_h3 = int(math.ceil(desired_gap / h3_n))
+        budget_per_h3 = max(6, min(12, budget_per_h3))
 
     # Suggest per-H3 unused keys (prefer selected -> mapped -> chapter).
     rows: list[dict[str, Any]] = []
+    suggested_anywhere: set[str] = set()
     for sid in outline_order:
         pack = packs_by_sub.get(sid) or {}
         title = str(pack.get("title") or sid_to_title.get(sid) or sid).strip()
@@ -217,13 +242,32 @@ def main() -> int:
         cand_glob = _cands([k for k in glob if k not in cand_sel and k not in cand_map and k not in cand_ch])
 
         suggest: list[str] = []
-        suggest.extend(cand_sel[:4])
-        if len(suggest) < 6:
-            suggest.extend(cand_map[: 6 - len(suggest)])
-        if len(suggest) < 6:
-            suggest.extend(cand_ch[: 6 - len(suggest)])
-        if len(suggest) < 6:
-            suggest.extend(cand_glob[: 6 - len(suggest)])
+        want = budget_per_h3 or 6
+
+        # Prefer globally-unused AND budget-unique keys first (maximize global unique lift).
+        for pool in (cand_sel, cand_map, cand_ch, cand_glob):
+            for k in pool:
+                if k in suggested_anywhere:
+                    continue
+                suggest.append(k)
+                suggested_anywhere.add(k)
+                if len(suggest) >= want:
+                    break
+            if len(suggest) >= want:
+                break
+
+        # If the local pool is too small, allow repeats across subsections as a last resort
+        # (still globally-unused in the draft).
+        if len(suggest) < want:
+            for pool in (cand_sel, cand_map, cand_ch, cand_glob):
+                for k in pool:
+                    if k in suggest:
+                        continue
+                    suggest.append(k)
+                    if len(suggest) >= want:
+                        break
+                if len(suggest) >= want:
+                    break
 
         rows.append(
             {
@@ -236,9 +280,12 @@ def main() -> int:
             }
         )
 
+    status = "PASS" if gap_hard <= 0 else "FAIL"
+
     lines: list[str] = [
         "# Citation budget report",
         "",
+        f"- Status: {status}",
         f"- Draft: `{draft_rel}`",
         f"- Bib entries: {len(bib_keys)}",
         f"- Draft unique citations: {len(used_global)}",
@@ -246,10 +293,19 @@ def main() -> int:
         "",
     ]
 
-    if min_unique:
-        details = f"(struct={min_unique_struct}, frac={min_unique_frac}, bib={len(bib_keys)})"
-        lines.append(f"- Global target (pipeline-auditor): >= {min_unique} {details}")
-        lines.append(f"- Gap: {need_more}")
+    # Canonical, parseable lines for downstream validators (citation-injector):
+    # - `Global target ... >= N` (hard, blocking)
+    # - `Gap: X` (gap-to-hard; blocking)
+    if min_unique_hard or min_unique_rec:
+        hard_details = f"(struct={min_unique_struct}, hard_frac={min_unique_frac}, bib={len(bib_keys)})"
+        lines.append(f"- Global target (hard; blocking): >= {min_unique_hard} {hard_details}")
+        lines.append(f"- Gap: {gap_hard}")
+        if min_unique_rec and min_unique_rec > min_unique_hard:
+            rec_frac = int(len(bib_keys) * 0.55)
+            lines.append(f"- Global recommended target (non-blocking): >= {min_unique_rec} (rec_frac={rec_frac}, bib={len(bib_keys)})")
+            lines.append(f"- Gap to recommended: {gap_rec}")
+        if budget_per_h3:
+            lines.append(f"- Suggested keys per H3 (sizing): {budget_per_h3}")
         lines.append("")
 
     if unknown_h3:
@@ -259,7 +315,8 @@ def main() -> int:
 
     lines.append("## Per-H3 suggestions (unused global keys, in-scope)")
     lines.append("")
-    lines.append("| H3 | title | unique cites | unused in selected | unused in mapped | suggested keys (add 3–6) |")
+    add_hint = "add 3-6" if not budget_per_h3 else f"add {max(3, min(6, budget_per_h3))}-{budget_per_h3}"
+    lines.append(f"| H3 | title | unique cites | unused in selected | unused in mapped | suggested keys ({add_hint}) |")
     lines.append("|---|---|---:|---:|---:|---|")
 
     for r in rows:
