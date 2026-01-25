@@ -151,6 +151,12 @@ This skill still owns the end state: all required `sections/*.md` files exist an
 
 ## H3 writing contract (argument moves, not templates)
 
+A150++ minima (survey deliverable):
+- >=10 paragraphs (substantive, not captions)
+- >=12 unique citation keys in the H3
+- >=3 anchored+cited paragraphs (cited + (digit OR evaluation token OR limitation token))
+- >=2 explicit A-vs-B contrast paragraphs + >=1 multi-cite synthesis paragraph (>=2 cites in one paragraph)
+
 Each H3 file should do the following work (order can vary, but all must appear):
 
 - **Thesis early**: end paragraph 1 with a clear, conclusion-first takeaway aligned to the pack\x27s `thesis`.

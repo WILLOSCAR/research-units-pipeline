@@ -100,6 +100,48 @@ def _global_citation_min_subsections(workspace: Path) -> int:
     return default
 
 
+def _query_int(workspace: Path, *, keys: set[str], default: int) -> int:
+    """Best-effort read an int value from `queries.md`."""
+    queries_path = workspace / "queries.md"
+    if not queries_path.exists():
+        return int(default)
+
+    try:
+        for raw in queries_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = raw.strip()
+            if not line.startswith("- ") or ":" not in line:
+                continue
+            key, value = line[2:].split(":", 1)
+            key = key.strip().lower().replace(" ", "_")
+            if key not in keys:
+                continue
+            value = value.split("#", 1)[0].strip().strip('"').strip("'").strip()
+            if not value:
+                return int(default)
+            try:
+                n = int(value)
+            except Exception:
+                return int(default)
+            return n if n > 0 else int(default)
+    except Exception:
+        return int(default)
+    return int(default)
+
+
+def _core_size(workspace: Path) -> int:
+    """Core set size contract (default: A150++ = 300 for arxiv-survey pipelines)."""
+    profile = _pipeline_profile(workspace)
+    default = 300 if profile == "arxiv-survey" else 0
+    return _query_int(workspace, keys={"core_size", "core_set_size", "core"}, default=default)
+
+
+def _per_subsection(workspace: Path) -> int:
+    """Per-H3 mapping contract (default: A150++ = 28 for arxiv-survey pipelines)."""
+    profile = _pipeline_profile(workspace)
+    default = 28 if profile == "arxiv-survey" else 3
+    return _query_int(workspace, keys={"per_subsection", "per-subsection", "per_h3"}, default=default)
+
+
 def _check_placeholder_markers(text: str) -> bool:
     if not text:
         return False
@@ -664,12 +706,12 @@ def _check_literature_engineer(workspace: Path, outputs: list[str]) -> list[Qual
 
     profile = _pipeline_profile(workspace)
     if profile == "arxiv-survey":
-        min_raw = 200
+        min_raw = max(200, int(_core_size(workspace)) * 4)
         if total < min_raw:
             issues.append(
                 QualityIssue(
                     code="raw_too_small",
-                    message=f"`{out_rel}` has {total} records; target >= {min_raw} for survey-quality runs (add more imports / enable online + snowball).",
+                    message=f"`{out_rel}` has {total} records; target >= {min_raw} for survey-quality runs (expand queries/imports/snowballing; raise `max_results` and add more buckets).",
                 )
             )
         if missing_stable_id / max(1, total) >= 0.2:
@@ -760,12 +802,12 @@ def _check_dedupe_rank(workspace: Path, outputs: list[str]) -> list[QualityIssue
 
     profile = _pipeline_profile(workspace)
     if profile == "arxiv-survey":
-        min_core = 150
+        min_core = int(_core_size(workspace))
         if len(rows) < min_core:
             issues.append(
                 QualityIssue(
                     code="core_set_too_small",
-                    message=f"`{core_rel}` has {len(rows)} rows; target >= {min_core} for survey-quality coverage (increase candidate pool and `core_size`).",
+                    message=f"`{core_rel}` has {len(rows)} rows; target >= {min_core} for survey-quality coverage (increase candidate pool and set `core_size`).",
                 )
             )
 
@@ -802,11 +844,12 @@ def _check_dedupe_rank(workspace: Path, outputs: list[str]) -> list[QualityIssue
                     )
         dedup_path = workspace / dedup_rel
         dedup = read_jsonl(dedup_path)
-        if len([r for r in dedup if isinstance(r, dict)]) < 200:
+        min_dedup = max(200, int(min_core) * 4) if min_core else 200
+        if len([r for r in dedup if isinstance(r, dict)]) < min_dedup:
             issues.append(
                 QualityIssue(
                     code="dedup_pool_too_small",
-                    message=f"`{dedup_rel}` has too few deduplicated records for a survey run; expand retrieval/snowballing first.",
+                    message=f"`{dedup_rel}` has too few deduplicated records for a survey run; target >= {min_dedup} (expand retrieval/snowballing first).",
                 )
             )
     return issues
@@ -842,7 +885,7 @@ def _check_citations(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
 
     profile = _pipeline_profile(workspace)
     if profile == "arxiv-survey":
-        min_bib = 150
+        min_bib = int(_core_size(workspace)) or 150
         if len(bib_keys) < min_bib:
             return [
                 QualityIssue(
@@ -1204,11 +1247,12 @@ def _check_mapping(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
                 unknown += 1
 
         profile = _pipeline_profile(workspace)
-        per_subsection = 8 if profile == "arxiv-survey" else 3
+        per_subsection = int(_per_subsection(workspace)) if profile == "arxiv-survey" else 3
 
         ok = sum(1 for _, c in counts.items() if c >= per_subsection)
         total = max(1, len(counts))
-        if ok / total < 0.8:
+        required_ratio = 1.0 if profile == "arxiv-survey" else 0.8
+        if ok / total < required_ratio:
             low = sorted([(sid, c) for sid, c in counts.items() if c < per_subsection], key=lambda kv: (kv[1], kv[0]))
             sample = ", ".join([f"{sid}({c})" for sid, c in low[:10]])
             suffix = "..." if len(low) > 10 else ""
@@ -1957,7 +2001,14 @@ def _check_evidence_drafts(workspace: Path, outputs: list[str]) -> list[QualityI
     draft_profile = _draft_profile(workspace)
     min_comparisons = 3
     if profile == "arxiv-survey":
-        min_comparisons = 5 if draft_profile == "deep" else 4
+        min_comparisons = 10 if draft_profile == "deep" else 8
+        min_snippets = 14 if draft_profile == "deep" else 12
+        min_eval = 6 if draft_profile == "deep" else 5
+        min_fail = 6 if draft_profile == "deep" else 5
+    else:
+        min_snippets = 1
+        min_eval = 1
+        min_fail = 1
 
     bad = 0
     missing_bib = 0
@@ -1965,6 +2016,8 @@ def _check_evidence_drafts(workspace: Path, outputs: list[str]) -> list[QualityI
     weak_comparisons = 0
     missing_snippets = 0
     bad_snippet_prov = 0
+    weak_eval = 0
+    weak_fail = 0
 
     for pack in packs:
         sub_id = str(pack.get("sub_id") or "").strip()
@@ -1979,7 +2032,7 @@ def _check_evidence_drafts(workspace: Path, outputs: list[str]) -> list[QualityI
             continue
 
         snippets = pack.get("evidence_snippets") or []
-        if not isinstance(snippets, list) or len([s for s in snippets if isinstance(s, dict) and str(s.get("text") or "").strip()]) < 1:
+        if not isinstance(snippets, list) or len([s for s in snippets if isinstance(s, dict) and str(s.get("text") or "").strip()]) < min_snippets:
             missing_snippets += 1
             continue
         for snip in snippets[:6]:
@@ -2007,6 +2060,15 @@ def _check_evidence_drafts(workspace: Path, outputs: list[str]) -> list[QualityI
                 bad += 1
                 break
         else:
+            eval_block = pack.get("evaluation_protocol") or []
+            if not isinstance(eval_block, list) or len([x for x in eval_block if isinstance(x, dict)]) < min_eval:
+                weak_eval += 1
+                continue
+            fail_block = pack.get("failures_limitations") or []
+            if not isinstance(fail_block, list) or len([x for x in fail_block if isinstance(x, dict)]) < min_fail:
+                weak_fail += 1
+                continue
+
             # Validate citations inside blocks.
             cited: set[str] = set()
             for name in required_blocks:
@@ -2032,7 +2094,7 @@ def _check_evidence_drafts(workspace: Path, outputs: list[str]) -> list[QualityI
         issues.append(
             QualityIssue(
                 code="evidence_drafts_missing_snippets",
-                message=f"{missing_snippets} evidence pack(s) have no usable `evidence_snippets`; add abstracts/fulltext or enrich paper notes before writing.",
+                message=f"{missing_snippets} evidence pack(s) have too few `evidence_snippets` (<{min_snippets}); enrich paper notes/evidence bank before writing.",
             )
         )
     if bad_snippet_prov:
@@ -2047,6 +2109,20 @@ def _check_evidence_drafts(workspace: Path, outputs: list[str]) -> list[QualityI
             QualityIssue(
                 code="evidence_drafts_too_few_comparisons",
                 message=f"{weak_comparisons} evidence pack(s) have <{min_comparisons} concrete comparisons; expand comparisons per subsection before writing.",
+            )
+        )
+    if weak_eval:
+        issues.append(
+            QualityIssue(
+                code="evidence_drafts_thin_evaluation_protocol",
+                message=f"{weak_eval} evidence pack(s) have <{min_eval} evaluation protocol items; add cite-backed protocol anchors (task/metric/constraint) before writing.",
+            )
+        )
+    if weak_fail:
+        issues.append(
+            QualityIssue(
+                code="evidence_drafts_thin_failures_limitations",
+                message=f"{weak_fail} evidence pack(s) have <{min_fail} failures/limitations items; add cite-backed caveats so prose does not overclaim.",
             )
         )
     if missing_bib:
@@ -2090,6 +2166,13 @@ def _check_anchor_sheet(workspace: Path, outputs: list[str]) -> list[QualityIssu
     if not items:
         return [QualityIssue(code="invalid_anchor_sheet", message=f"`{out_rel}` has no JSON objects.")]
 
+    profile = _pipeline_profile(workspace)
+    draft_profile = _draft_profile(workspace)
+    if profile == "arxiv-survey":
+        min_anchors = 12 if draft_profile == "deep" else 10
+    else:
+        min_anchors = 1
+
     bad = 0
     empty_anchors = 0
     for rec in items:
@@ -2106,7 +2189,7 @@ def _check_anchor_sheet(workspace: Path, outputs: list[str]) -> list[QualityIssu
             empty_anchors += 1
             continue
         ok = 0
-        for a in anchors[:6]:
+        for a in anchors:
             if not isinstance(a, dict):
                 continue
             if not str(a.get("text") or "").strip():
@@ -2129,7 +2212,7 @@ def _check_anchor_sheet(workspace: Path, outputs: list[str]) -> list[QualityIssu
             if not has_key:
                 continue
             ok += 1
-        if ok < 1:
+        if ok < int(min_anchors):
             bad += 1
 
     issues: list[QualityIssue] = []
@@ -2143,8 +2226,8 @@ def _check_anchor_sheet(workspace: Path, outputs: list[str]) -> list[QualityIssu
     if bad:
         issues.append(
             QualityIssue(
-                code="anchor_sheet_invalid",
-                message=f"`{out_rel}` has {bad} invalid record(s) (missing sub_id/title or missing citation-backed anchors).",
+                code="anchor_sheet_too_few_anchors",
+                message=f"`{out_rel}` has {bad} record(s) with too few cite-backed anchors (<{min_anchors}); strengthen evidence packs and regenerate anchors.",
             )
         )
 
@@ -2233,7 +2316,7 @@ def _check_writer_context_packs(workspace: Path, outputs: list[str]) -> list[Qua
     profile = _pipeline_profile(workspace)
     draft_profile = _draft_profile(workspace)
     if profile == "arxiv-survey":
-        min_plan = 10 if draft_profile == "deep" else 8
+        min_plan = 10
     else:
         min_plan = 4
 
@@ -2253,13 +2336,20 @@ def _check_writer_context_packs(workspace: Path, outputs: list[str]) -> list[Qua
     missing_must_use: list[str] = []
 
     if profile == "arxiv-survey":
-        min_comparisons = 4
-        min_lim_hooks = 2
-        min_anchors = 6
+        per_subsection = int(_per_subsection(workspace))
+        if draft_profile == "deep":
+            min_comparisons = 9
+            min_lim_hooks = 3
+            min_anchors = 12
+        else:
+            min_comparisons = 7
+            min_lim_hooks = 3
+            min_anchors = 10
     else:
         min_comparisons = 1
         min_lim_hooks = 1
         min_anchors = 1
+        per_subsection = 0
 
     for rec in items:
         sub_id = str(rec.get("sub_id") or "").strip()
@@ -2307,7 +2397,11 @@ def _check_writer_context_packs(workspace: Path, outputs: list[str]) -> list[Qua
             sparse_lim_hooks.append(sub_id)
 
         allowed = rec.get("allowed_bibkeys_mapped") or []
-        if not isinstance(allowed, list) or not any(str(k).strip() for k in allowed):
+        allowed_count = len([k for k in allowed if str(k).strip()]) if isinstance(allowed, list) else 0
+        if profile == "arxiv-survey":
+            if allowed_count < int(per_subsection):
+                missing_allowed_bib.append(sub_id)
+        elif allowed_count < 1:
             missing_allowed_bib.append(sub_id)
 
         mode = str(rec.get("chapter_synthesis_mode") or "").strip()
@@ -2461,7 +2555,7 @@ def _check_writer_context_packs(workspace: Path, outputs: list[str]) -> list[Qua
             QualityIssue(
                 code="writer_context_packs_missing_allowed_bibkeys",
                 message=(
-                    f"Some writer context packs have empty `allowed_bibkeys_mapped` ({len(missing_allowed_bib)}/{len(items)}) "
+                    f"Some writer context packs have too few `allowed_bibkeys_mapped` (<{per_subsection}) ({len(missing_allowed_bib)}/{len(items)}) "
                     f"(e.g., {', '.join(missing_allowed_bib[:10])}{'...' if len(missing_allowed_bib) > 10 else ''}); "
                     "fix `section-mapper` / `evidence-binder` so each subsection has in-scope citations."
                 ),
@@ -2542,33 +2636,63 @@ def _check_evidence_bindings(workspace: Path, outputs: list[str]) -> list[Qualit
                     bank_ids.add(eid)
 
     profile = _pipeline_profile(workspace)
-    min_ids = 10 if profile == "arxiv-survey" else 6
+    per_subsection = int(_per_subsection(workspace)) if profile == "arxiv-survey" else 0
+    # A150++ expectation: with wide per-H3 mapping, bindings should keep most of that breadth,
+    # and select a solid subset of usable bibkeys plus enough evidence IDs to write concretely.
+    min_mapped = per_subsection if per_subsection else 0
+    min_ids = max(10, per_subsection - 4) if per_subsection else (10 if profile == "arxiv-survey" else 6)
+    min_selected = max(12, int(round(per_subsection * 0.70))) if per_subsection else (12 if profile == "arxiv-survey" else 6)
+    min_distinct_papers = max(10, int(min_ids) - 6) if profile == "arxiv-survey" else 0
 
     bad = 0
     missing_bank = 0
-    bad_samples: list[tuple[str, int]] = []
+    bad_samples: list[str] = []
     for sid, rec in by_sub.items():
         title = str(rec.get("title") or "").strip()
         eids = rec.get("evidence_ids") or []
         eid_count = len([e for e in eids if str(e).strip()]) if isinstance(eids, list) else 0
-        if not title or not isinstance(eids, list) or eid_count < min_ids:
+        mapped = rec.get("mapped_bibkeys") or []
+        mapped_count = len([k for k in mapped if str(k).strip()]) if isinstance(mapped, list) else 0
+        selected = rec.get("bibkeys") or []
+        selected_count = len([k for k in selected if str(k).strip()]) if isinstance(selected, list) else 0
+
+        # Prefer explicit paper_ids when present; otherwise fall back to parsing evidence_id prefixes.
+        paper_ids = rec.get("paper_ids") or []
+        pids = set([str(p).strip() for p in paper_ids if str(p).strip()]) if isinstance(paper_ids, list) else set()
+        if isinstance(eids, list):
+            for e in eids:
+                m = re.match(r"^E-(P\\d+)-", str(e or "").strip())
+                if m:
+                    pids.add(m.group(1))
+
+        if (
+            not title
+            or not isinstance(eids, list)
+            or eid_count < int(min_ids)
+            or (min_mapped and mapped_count < int(min_mapped))
+            or (min_selected and selected_count < int(min_selected))
+            or (min_distinct_papers and len(pids) < int(min_distinct_papers))
+        ):
             bad += 1
-            bad_samples.append((sid, eid_count))
+            bad_samples.append(
+                f"{sid}(eids={eid_count}, mapped={mapped_count}, selected={selected_count}, papers={len(pids)})"
+            )
             continue
         if bank_ids and any(str(e).strip() and str(e).strip() not in bank_ids for e in eids):
             missing_bank += 1
 
     if bad:
-        bad_samples.sort(key=lambda kv: (kv[1], kv[0]))
-        sample = ", ".join([f"{sid}({n})" for sid, n in bad_samples[:10]])
+        bad_samples.sort()
+        sample = ", ".join(bad_samples[:8])
         suffix = "..." if len(bad_samples) > 10 else ""
         return [
             QualityIssue(
                 code="evidence_bindings_incomplete",
                 message=(
-                    f"`{out_rel}` has {bad} record(s) missing title or with too few evidence_ids (<{min_ids}); "
-                    f"examples: {sample}{suffix}. "
-                    "Increase binder selection or fix mapping/notes so each subsection has enough in-scope evidence."
+                    f"`{out_rel}` has {bad} record(s) failing binding density (need mapped>={min_mapped}, "
+                    f"selected>={min_selected}, evidence_ids>={min_ids}, distinct_papers>={min_distinct_papers}). "
+                    f"Examples: {sample}{suffix}. "
+                    "Fix mapping (breadth/diversity) and rerun binder; do not rely on prose to compensate for thin bindings."
                 ),
             )
         ]
@@ -3318,7 +3442,7 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
             profile = _pipeline_profile(workspace)
             draft_profile = _draft_profile(workspace)
             if profile == "arxiv-survey":
-                min_cites = 12 if draft_profile == "deep" else 10
+                min_cites = 14 if draft_profile == "deep" else 12
                 if len(cite_keys) < min_cites:
                     issues.append(
                         QualityIssue(
@@ -3329,13 +3453,13 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
 
             if profile == "arxiv-survey":
                 if draft_profile == "deep":
-                    min_paragraphs = 10
+                    min_paragraphs = 11
                     # Keep sections "thick" without forcing filler; prefer argument-move checks over raw length.
                     # This is a post-citation length floor (citations removed) used as a readability proxy.
-                    min_chars = 5500
+                    min_chars = 6000
                 else:
-                    min_paragraphs = 9
-                    min_chars = 4500
+                    min_paragraphs = 10
+                    min_chars = 5000
 
                 paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text.strip()) if p.strip()]
                 # Paper voice: block narration templates that read like outline commentary
@@ -3473,12 +3597,12 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                     min_contrast = 3
                     min_eval = 3
                     min_lim = 2
-                    min_anchor_paras = 3
+                    min_anchor_paras = 4
                 else:
                     min_contrast = 2
                     min_eval = 2
                     min_lim = 1
-                    min_anchor_paras = 2
+                    min_anchor_paras = 3
 
                 contrast_n = len(re.findall(contrast_re, text))
                 eval_n = len(re.findall(eval_re, text))
@@ -3552,13 +3676,13 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                 profile = _pipeline_profile(workspace)
                 if profile == "arxiv-survey":
                     sub_specific = {k for k in cite_keys if k in allowed_sub}
-                    if len(sub_specific) < 2:
+                    if len(sub_specific) < 3:
                         issues.append(
                             QualityIssue(
                                 code="sections_h3_sparse_subsection_cites",
                                 message=(
                                     f"`{rel}` cites too few subsection-specific papers ({len(sub_specific)}). "
-                                    "Chapter-scoped reuse is allowed, but each H3 should still ground itself in >=2 papers mapped to that subsection."
+                                    "Chapter-scoped reuse is allowed, but each H3 should still ground itself in >=3 papers mapped to that subsection."
                                 ),
                             )
                         )
@@ -3651,22 +3775,22 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                     draft_profile = _draft_profile(workspace)
                     if draft_profile == "deep":
                         if is_intro:
-                            min_cites = 18
+                            min_cites = 40
                             min_paras = 9
-                            min_chars = 3200
-                        else:
-                            min_cites = 22
-                            min_paras = 10
                             min_chars = 3600
+                        else:
+                            min_cites = 55
+                            min_paras = 11
+                            min_chars = 4200
                     else:
                         if is_intro:
-                            min_cites = 12
-                            min_paras = 6
-                            min_chars = 2200
+                            min_cites = 35
+                            min_paras = 8
+                            min_chars = 3200
                         else:
-                            min_cites = 15
-                            min_paras = 7
-                            min_chars = 2400
+                            min_cites = 50
+                            min_paras = 10
+                            min_chars = 3800
 
                     if is_intro:
                         front_fix = (
@@ -3676,7 +3800,7 @@ def _check_sections_manifest(workspace: Path, outputs: list[str]) -> list[Qualit
                     else:
                         front_fix = (
                             "Fix: expand positioning vs adjacent lines of work + survey coverage + one evidence-policy paragraph + organization preview; "
-                            "avoid a dedicated 'Prior Surveys' mini-section by default; keep paper voice (no slide-like narration)."
+                            "avoid a dedicated 'Prior Surveys' mini-section by default; keep third-person academic voice (avoid 'this/current survey' deictic phrasing)."
                         )
 
                     content = re.sub(r"\[@[^\]]+\]", "", text)
@@ -3995,7 +4119,7 @@ def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
                 )
             )
         if profile == "arxiv-survey":
-            min_bib = 150
+            min_bib = int(_core_size(workspace)) or 150
             if len(bib_keys) < min_bib:
                 issues.append(
                     QualityIssue(
@@ -4087,6 +4211,9 @@ def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
     blocks = re.split(r"\n###\s+", text)
     subsection_blocks = blocks[1:] if len(blocks) > 1 else []
     if subsection_blocks:
+        draft_profile = _draft_profile(workspace)
+        min_h3_cites = 14 if draft_profile == "deep" else 12
+        min_h3_chars = 6000 if draft_profile == "deep" else 5000
         no_cite = 0
         too_short = 0
         low_cite_density = 0
@@ -4096,7 +4223,7 @@ def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
             # Many writers use 1 line per paragraph, which makes "short section" detection brittle.
             body = "\n".join(lines[1:]).strip() if len(lines) > 1 else ""
             body = re.sub(r"\[@[^\]]+\]", "", body)
-            if len(body) < 4000:
+            if len(body) < min_h3_chars:
                 too_short += 1
             if "[@" not in block:
                 no_cite += 1
@@ -4107,7 +4234,7 @@ def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
                     for k in re.findall(r"[A-Za-z0-9:_-]+", inside):
                         if k:
                             cite_keys.add(k)
-                if len(cite_keys) < 3:
+                if len(cite_keys) < min_h3_cites:
                     low_cite_density += 1
 
         total = max(1, len(subsection_blocks))
@@ -4122,14 +4249,14 @@ def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
             issues.append(
                 QualityIssue(
                     code="draft_sections_too_short",
-                    message="Many subsections are very short (<~4000 chars sans citations); expand with concrete comparisons, evaluation anchors, synthesis paragraphs, and limitations from evidence packs/paper notes.",
+                    message=f"Many subsections are very short (<~{min_h3_chars} chars sans citations); expand with concrete comparisons, evaluation anchors, synthesis paragraphs, and limitations from evidence packs/paper notes.",
                 )
             )
         if profile == "arxiv-survey" and low_cite_density / total >= 0.2:
             issues.append(
                 QualityIssue(
                     code="draft_sparse_subsection_citations",
-                    message=f"Many subsections have <3 unique citations ({low_cite_density}/{len(subsection_blocks)}); increase section-level evidence binding and cite density.",
+                    message=f"Many subsections have <{min_h3_cites} unique citations ({low_cite_density}/{len(subsection_blocks)}); increase section-level evidence binding and cite density.",
                 )
             )
 

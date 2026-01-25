@@ -24,10 +24,20 @@ def _parse_budget_report(md: str) -> tuple[int, int, dict[str, list[str]]]:
     suggestions: dict[str, list[str]] = {}
 
     # Allow trailing context like "(struct=..., frac=..., bib=...)" after the number.
-    m = re.search(r"(?im)^\s*-\s*Global target.*>=\s*(\d+)\b", md or "")
+    #
+    # Canonical (new):
+    # - Global target (hard; blocking): >= 150 (struct=..., bib=...)
+    # - Gap: 55
+    #
+    # Back-compat (old):
+    # - Global hard minimum (A150++): >= 150 (struct=..., bib=...)
+    # - Gap to recommended: 70
+    m = re.search(r"(?im)^\s*-\s*Global\s+(?:target|hard\s+minimum).*>=\s*(\d+)\b", md or "")
     if m:
         target = int(m.group(1))
-    m = re.search(r"(?im)^\s*-\s*Gap:\s*(\d+)\s*$", md or "")
+
+    # Prefer the canonical hard-gap line; otherwise leave gap=0 and let the caller compute it.
+    m = re.search(r"(?im)^\s*-\s*Gap(?:\s*\([^)]*\))?\s*:\s*(\d+)\b", md or "")
     if m:
         gap = int(m.group(1))
 
@@ -135,13 +145,22 @@ def main() -> int:
     draft = draft_path.read_text(encoding="utf-8", errors="ignore")
     unique = len(set(_extract_cites(draft)))
 
-    # If the budget report says gap=0, treat as a no-op PASS.
-    # Otherwise, require meeting the global target when a target is present.
+    gap_from_budget = gap
+    gap_current = max(0, int(target) - int(unique)) if target > 0 else 0
+
+    # If the budget report did not include a parseable target, fail fast (no silent PASS).
     ok = True
     reason = ""
-    if gap > 0 and target > 0 and unique < target:
+    if target <= 0:
         ok = False
-        reason = f"Unique citations are still below target (unique={unique}, target>={target}, gap={gap})."
+        reason = "Could not parse a global citation target from the budget report (contract mismatch). Regenerate `output/CITATION_BUDGET_REPORT.md`."
+    else:
+        # Always report the *current* gap-to-hard for the draft.
+        gap = gap_current
+
+        if unique < target:
+            ok = False
+            reason = f"Unique citations are still below target (unique={unique}, target>={target})."
 
     status = "PASS" if ok else "FAIL"
 
@@ -153,7 +172,8 @@ def main() -> int:
         f"- Budget: `{budget_rel}`",
         f"- Unique citations (current): {unique}",
         f"- Global target (from budget): {target}",
-        f"- Gap (from budget): {gap}",
+        f"- Gap (current, to hard): {gap}",
+        f"- Gap (from budget, at report time): {gap_from_budget}",
         "",
     ]
 

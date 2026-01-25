@@ -78,8 +78,12 @@ If your draft contains these, rewrite them immediately using the patterns above 
 ## Workflow
 
 1) Read the budget report (`output/CITATION_BUDGET_REPORT.md`)
+- Treat `Global target (hard; blocking)` as the PASS line for the pipeline gate.
 - If `Gap: 0`, do nothing: write a short PASS report and move on.
-- Otherwise, for each H3 with suggested keys, pick 3-6 keys (prefer unused globally).
+- Otherwise, for each H3 with suggested keys, pick enough keys to close the hard gap:
+  - small gaps: 3-6 keys / H3
+  - A150++ gaps: often 6-12 keys / H3
+  Prefer keys that are unused globally and avoid repeating the same new keys across many H3s.
 
 2) Inject in the right subsection
 - Use `outline/outline.yml` to confirm H3 ordering and ensure the injected sentence lands inside the correct `###` subsection.

@@ -1,160 +1,148 @@
-# Pipeline / Skills Improvement Backlog (arxiv-survey-latex)
+# Pipeline / Skills Improvement Backlog (arxiv-survey-latex, A150++)
 
 Last updated: 2026-01-25
 
-本文件跟踪 **pipeline + skills 的结构性改进 backlog**（不是某次 draft 的内容修修补补）。主诊断文档见：`PIPELINE_DIAGNOSIS_AND_IMPROVEMENT.md`。
+本文件跟踪 **pipeline + skills 的结构性改进 backlog**（不是某次 draft 的内容润色）。主诊断文档见：`PIPELINE_DIAGNOSIS_AND_IMPROVEMENT.md`。
 
-定位锚点（用于复现/对标；不改 workspace 产物）：
+定位锚点（用于复现/对标；不改既有 workspace 产物）：
 - Pipeline spec：`pipelines/arxiv-survey-latex.pipeline.md`
-- 最新可倒推的 e2e verify workspace（PASS）：`workspaces/e2e-agent-survey-latex-verify-20260125-045301/`
 - 对标材料：`ref/agent-surveys/`
 
 ---
 
-## 0) 上一版内容 Summary（change log 视角；作为新起点）
+## 0) Baseline Summary（change log 视角；作为新起点）
 
-上一版 backlog 的主线是：把“写作质量差”拆成可回放的结构问题，并优先通过 **两条 self-loop** 做 prewrite routing 和局部收敛，而不是靠最后一轮润色“救回来”。
+上一版 backlog 的主线是：把“写作质量差”拆成可回放的结构问题，并把 self-loop 变成 pipeline 的结构中心，以 **prewrite routing + 局部收敛** 取代末端润色救火。
 
-已经确立且需要长期坚持的方向：
-- merge 后终稿是主要质量边界（尤其拦 `outline/transitions.md` 等高频注入源）
-- evidence-selfloop：不可写就回上游，不允许 prose 填洞
-- writer-selfloop：只修失败文件；PASS 后仍输出 style smells 并路由到微技能
-- tables 两层：index 表只做中间态；appendix 表才进入终稿
-- 默认交付对齐 survey：`draft_profile` 只保留 survey/deep，避免静默降级档位
+基线已明确/已固化的方向：
+- 默认交付对齐 A150++：`core_size=300`、`per_subsection=28`、全局 unique citations 硬门槛 `>=150`（推荐 `>=165`），并禁止静默降级（历史 lite 路径不再作为交付档位）。
+- tables 两层语义边界：`tables_index` 只做中间态（永不入文）；`tables_appendix` 才是读者表（可发表）。
+- 写作期收敛用 `writer-selfloop`：只修 FAIL 文件；PASS 也输出 style smells 并路由到微技能（opener/limitation/style）。
+- 引用补齐从“可选补救”升级为“默认交付动作”：budget → in-scope injection，避免“池子大但读者体感薄”。
 
-本轮新增的认识是：在硬模板被压住之后，影响成熟度的主要风险来自两类“软问题”：
-- 内部轴标记/术语渗透到终稿（例如 token、slash-axis）
-- 连接词/句首节奏的口癖（不是模板句，但会累积“生成器味”）
-这两类问题更适合用“写作期语义合同 + 微技能路由”解决，而不是再加硬 gate。
+本轮新增要求：把你提出的“写作四件套”（逐段自检、两级 summary、叙事骨架、段落论证动作 contract）转译为 pipeline 原生组件，进一步拦截“流畅但论证不成立/前提漂移”。
 
 ---
 
-## P0 — 必须先修（默认交付对齐 + self-loop 可收敛 + 读者感底线）
+## P0 — A150++ 默认交付：规模上调后仍可控、可验证、可写得好（阻断项）
 
-### P0-1 统一解释清楚：`draft_profile` 与 `evidence_mode` 的语义（避免把波动误判为模型不稳定）
+### P0-1 交付合同语义统一：`draft_profile` / `evidence_mode`（避免把波动误判为模型随机性）
 
-问题：
-- 用户常见困惑：“为什么有时 70 cites、有时 110+？”如果解释不清，会在错误层面调参或怀疑模型稳定性。
+设计要点：
+- `draft_profile` = 交付严格度合同（`survey` | `deep`），决定 C5 写作厚度与引用门槛。
+- `evidence_mode` = 证据强度（`abstract` | `fulltext`）；A150++ 默认 `abstract`，但要求更协议化、更克制。
+- 禁止静默降级：任何“降档/降门槛”都必须显式反映在 `queries.md`，且在报告里可解释。
 
-改造（设计）：
-- `draft_profile` = 交付形态合同（survey/deep），直接决定厚度与引用门槛（全局 unique cites 目标、每 H3 目标等）。
-- `evidence_mode` = 证据强度开关（abstract/fulltext），决定“能写多硬”的上限（abstract 模式应更克制数字与协议细节）。
-- 明确弃用 `lite`：允许 legacy 兼容解释，但不再作为推荐档位出现（避免静默降级交付标准）。
-
-验证：
-- 读者只看 `queries.md` 模板就能知道本次 run 的交付标准与证据强度，不再把 cites 波动归因到“模型随机性”。
+验证方式：
+- 读者只看 workspace 的 `queries.md` 就能知道本次 run 的交付标准与证据强度。
 
 ---
 
-### P0-2 survey 默认 citations 目标：全局 unique citations >=110（并把“消费补齐”变成默认动作）
+### P0-2 A150++ 引用合同：全局 unique citations >=150（硬）+ >=165（推荐），并把补齐作为默认步骤
 
-问题：
-- 供给侧（bib/core set）很大，但消费侧（正文 cites）偏低时，会出现“看似证据充足但读者体感薄”的假繁荣。
+问题（共性）：
+- 供给侧（bib/core）扩容后，如果消费侧（正文引用）没有被默认拉齐，会出现“池子很大但读者体感薄”的假繁荣；反向补救容易变成 citation dump。
 
-改造（设计）：
-- survey profile 固化全局 unique-citation 下限（>=110），并把 citation budget + in-scope injection 视为默认交付步骤（不是 FAIL 才补救）。
-- 供给侧联动：binder/pack 必须提供足够宽且不高度重叠的 in-scope key 集合，否则 writer 再努力也达不到 unique 目标。
+设计要点：
+- 全局 unique citations：硬门槛 `>=150`；推荐 `>=165`（不作为阻断，但必须可解释）。
+- 默认执行 “budget → injection” 的引用自循环，并保持 subsection-first scope（避免跨章 free-cite 漂移）。
+- “重复引用不能太高”的治理，不靠硬封顶，而靠：mapping 多样性 + global 可复用门槛 + 每节最低 unique 引用密度 +（可选）复用率可视化。
 
-验证：
-- survey profile 下 `output/AUDIT_REPORT.md` 的 unique citations 稳定 >=110，且不出现 citation dump 段落（段尾堆一串 key）。
-
----
-
-### P0-3 “中间态味道”治理：禁止 token / slash-axis 进入终稿（正文 + Appendix tables）
-
-问题（基线可证）：
-- “token(s)” 作为内部轴标记进入正文与表格，会显著降低读者观感（更像中间态而非论文）。
-
-改造（设计）：
-- 写作类 skills（subsection/front matter/style/polish）增加“内部术语禁区 + 推荐替换词表”（token→protocol details/assumptions/metadata）。
-- 表格路线强制两层语义合同：
-  - `tables_index`：可工程化、可压缩（中间态）
-  - `tables_appendix`：读者表合同（禁 token、禁 `->`、禁 slash-axis）
-
-验证：
-- 新 run 的终稿里 token 只在 NLP 语境出现，不再作为协议名词；Appendix tables 列名/单元格无 token/arrow/slash-axis。
+验证方式：
+- `output/AUDIT_REPORT.md`：global unique citations `>=150`；若 `<165` 则需在 warning 中给出可定位原因（供给不足/范围过窄/补齐被跳过/写作合同未执行）。
 
 ---
 
-### P0-4 连接词口癖治理：避免“硬模板消失后，软口癖替代”
+### P0-3 规模上调的联动合同（避免只把池子做大）
 
-问题：
-- 去掉 “This subsection surveys...” 后，模型很容易用句首连接词（Moreover/In addition/Overall/Therefore/As a result）来“保证逻辑”，但节奏会变得同质化。
+当 `core_size / per_subsection / evidence_bank / cites` 上调时，需要同步联动升级：
+- C2 mapping 多样性约束（避免少数 work 统治全篇）
+- C4 evidence packs 的可写密度（comparisons/eval/limitations/anchors）
+- C5 写作合同（论证动作 + 引用承载：Intro/Related Work）
 
-改造（设计）：
-- `section-logic-polisher` 的语义合同补齐：连接词是 ingredient，不是段首模板；鼓励 subject-first + mid-sentence glue；提供正反例。
-- `style-harmonizer` 增加专门条目：当连接词句首堆叠时如何改写（不改意思、不改引用）。
-- 严格 gate 策略：不要用“连接词数量阈值”阻断（会诱导 Moreover/Therefore 句首口癖）；gate 只强制 thesis/论证动作，连接词统计仅作为非阻断 smells（已落实到 quality gate 的 section-logic-polisher 检查）。
-
-本轮落地（已完成）：
-- `writer-selfloop` 的 Style Smells 改为 **读取 paper-voice palette**（workspace override / repo default），把“哪些话术算口癖”从 hard-code 迁移到语义数据层（watchlist + rewrite options），并在报告里直接给替代表达建议。
-- `writer-context-pack` 扩展了 `opener_mode`（增加 contrast-first / protocol-first）来分散小节首段节奏，降低“同一句式刷屏”的概率。
-
-验证：
-- 终稿仍有清晰逻辑关系，但段落/句子开头不以固定连接词作为重复节奏标记。
+验证方式：
+- 严格模式下，任何一个阶段的“薄合同”都会触发 self-loop 回退，而不是让 prose 掩盖上游缺口。
 
 ---
 
-### P0-5 方法学段落去“执行标签化”：Methodology 应是论文段落，而不是 run log
+### P0-4 写作合同升级：把“写作=生成文本”升级为“写作=完成论证动作”
 
-问题（基线可证）：
-- “Methodology note (evidence policy). ...” 这种标签会暴露执行痕迹，降低论文感。
+硬要求（A150++，survey）：
+- H3：>=10 段、>=12 unique cites、>=2 对比段、>=1 multi-cite synthesis 段、>=1 limitation
+- Intro/Related Work：承担高密度定位与引用承载（Intro >=35；Related >=50）
+- 口癖治理：段首禁区（overview / this survey / in this survey / we organize as follows…）必须在 self-loop 中可路由、可定位、可替换
+- 回退机制：写不出对比/协议上下文/局限就回退到 `evidence-selfloop`（而不是写 filler）
 
-改造（设计）：
-- `front-matter-writer` 强制：方法学只能以“无标签的一段 survey methodology”出现一次，并给推荐开头（We retrieved...）；禁止 “Methodology note:” 这种标签句式。
-
-验证：
-- 终稿前 2 页内方法学信息完整，但不以标签/执行语气出现。
+验证方式：
+- `output/WRITER_SELFLOOP_TODO.md`：PASS；PASS 后 style smells 显著收敛。
 
 ---
 
-## P1 — 提升 survey 形态（对标差距的主要来源）
+### P0-5 Related Work 的口吻与写法（硬要求：第三方学术表达）
 
-### P1-1 可选：补齐 “Survey Methodology” 的论文式结构（短 H2，无 H3）
+问题（共性）：
+- Related Work 最容易出现“当前 survey/overview/benchmarkxx”式占位或自指叙述，读者感会显著下降。
+
+设计要点：
+- Related Work 必须以第三方学术表达组织：以“研究脉络/范式/协议差异/评价口径”组织文献，而不是“我们 survey 了什么”。
+- 自指表达允许极少量出现，但禁止成为段首重复节奏。
+
+验证方式：
+- `writer-selfloop` 的 smells 与 `post-merge-voice-gate` 能定位到具体 opener，并给出可执行替换建议。
+
+---
+
+### P0-6 新增第三条写作 self-loop：`argument-selfloop`（论证链路 + 前提一致性）
 
 动机：
-- 对标 survey 常见 Methodology / Survey Methodology（RQ/Search/Selection/Accounting）。即便很短，也能显著提升“可复现锚点”与审稿体验。
+- 解决“文本流畅但论证断链/前提漂移”的硬伤；这类问题仅靠风格润色很难捕获。
 
-设计草案：
-- 在不增加 H3 的前提下，允许一个短 H2：RQ（3–7）+ time window + candidate/core accounting + evidence_mode。
-- 保持短、克制、论文式，不做 PRISMA 化执行细节。
+设计要点：
+- 引入三件套中间态（永不入文）：
+  - `output/SECTION_ARGUMENT_SUMMARIES.jsonl`（逐段 moves + 产出）
+  - `output/ARGUMENT_SKELETON.md`（全篇依赖/功能位骨架）
+  - `output/ARGUMENT_SELFLOOP_TODO.md`（PASS/FAIL + 修订动作）
+- 在 C5 中作为 merge 前 gate，与 `writer-selfloop` / `section-logic-polisher` 分工互补：
+  - writer-selfloop：合规/范围/口吻/最小论证动作
+  - section-logic-polisher：单节 thesis + bridges
+  - argument-selfloop：跨节依赖、前提一致性、断链/冗余/漂移定位
 
-风险：
-- 过度结构化可能引入模板化；需要在 skills 里明确“短而论文式”的表达方式。
+验证方式：
+- `output/ARGUMENT_SELFLOOP_TODO.md` 为 PASS；summaries 覆盖全部 H3（moves 非空）。
 
 ---
 
-### P1-2 Appendix tables 的“可发表外观”再提升一档
+## P1 — 表格：只保留可发表表（Appendix），索引表永不入文
+
+### P1-1 两层语义边界（必须长期坚持）
+
+合同：
+- `outline/tables_index.md`：中间态/索引表（用于规划/审计/调试），永不进入正文/Appendix。
+- `outline/tables_appendix.md`：读者表（Appendix），必须“像成熟 survey 的表”，而不是内部记录。
+
+读者表最小外观合同（建议写成长期质量门）：
+- 列数 <=4；列名读者友好；单元格短语化；每行 cite-backed；禁止轴标签/中间态字段名（axes/blocking_missing/token 等）
+
+验证方式：
+- `output/TABLES_APPENDIX_REPORT.md`：PASS，且能指出具体违例（列名/单元格/行组织）。
+
+---
+
+## P2 — 后续可选（不阻断 A150++ 主链路）
+
+### P2-1 引用复用率的“软约束”可视化（不做硬封顶）
 
 动机：
-- 目前表格已进入 Appendix，但仍可能显得像“内部索引表”。需要在 schema 与写作合同层进一步约束。
+- 读者不介意关键 work 被多次引用，但会反感“少数 work 统治全篇”。
 
 设计草案：
-- 固化默认两张表主题（可替换但需同等读者价值）：
-  - A1：代表性方法/系统（loop + interface assumptions）
-  - A2：评测协议/benchmark（task+metric + protocol constraints）
-- 要求每张表是“决策压缩”而不是“论文罗列”。
-
----
-
-## P2 — 长期演进（增强“会带人/带模型做事”的体验）
-
-### P2-1 self-loop 输出升级为“诊断树路由”（PASS 也给可选路由）
-
-目标：
-- FAIL 时能快速定位责任层（证据薄/论证动作缺失/风格同质化/术语渗透/表格读者化不足）。
-- PASS 时也能输出非阻断的 “smells + 下一步技能路由”，让质量持续收敛。
-
-### P2-2 角色化能力进一步内化进写作 skills（更细粒度、更可组合）
-
-方向：
-- 把“写作阶段=完成论证动作”拆成更可复用的角色卡：section author / evidence steward / style editor / table curator 等。
-- 每张卡都有明确 Do/Don’t + 正反例，减少靠脚本门槛逼迫达标。
+- 输出 top reused keys 占比作为 warning（非阻断），并提供路由建议：扩 mapping / 增加 budget / 调整 global 门槛。
 
 ---
 
 ## 需要你拍板的问题（产品/策略）
 
-1) survey profile 是否将 “>=110 unique citations + >=2 Appendix tables” 作为默认交付门槛？（建议：是）
-2) 是否引入独立 H2 “Survey Methodology”（短、无 H3）作为默认结构？还是坚持只在 Introduction/Related Work 放一段 method paragraph？（需要你定）
-3) 连接词口癖治理：先作为非阻断 smells（推荐），还是升级为阻断 gate？（建议：先 smells，稳定后再升级）
+1) A150++ 是否固定为默认交付（core=300 + global unique>=150 hard + >=165 rec）？（建议：是）
+2) Related Work 是否允许少量自指表达（this survey/in this survey）？（建议：允许极少量，但禁止作为段首节奏）
+3) `argument-selfloop` 是否作为 C5 默认 gate（survey/deep 都启用）？（建议：是；否则“流畅但断链”会反复回归）
+

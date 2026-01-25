@@ -40,7 +40,7 @@ This is a deterministic “curation” step: it should be stable and repeatable.
 ### Quick Start
 
 - `python .codex/skills/dedupe-rank/scripts/run.py --help`
-- `python .codex/skills/dedupe-rank/scripts/run.py --workspace <workspace_dir> --core-size 50`
+- `python .codex/skills/dedupe-rank/scripts/run.py --workspace <workspace_dir> --core-size 300`
 
 ### All Options
 
@@ -49,7 +49,7 @@ This is a deterministic “curation” step: it should be stable and repeatable.
 
 ### Examples
 
-- Smaller core set for fast iteration:
+- Smaller core set for fast iteration (non-A150++):
   - `python .codex/skills/dedupe-rank/scripts/run.py --workspace <ws> --core-size 25`
 
 ### Notes

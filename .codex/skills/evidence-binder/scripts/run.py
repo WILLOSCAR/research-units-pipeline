@@ -51,6 +51,37 @@ def _need_tag(field: str) -> str | None:
     return None
 
 
+
+
+def _per_subsection_from_queries(path: Path) -> int:
+    """Read per-subsection mapping width from queries.md (best-effort).
+
+    Keeps binder density aligned with section-mapper as we scale up.
+    """
+
+    if not path.exists():
+        return 0
+
+    for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw.strip()
+        if not line.startswith("- "):
+            continue
+        if "\:" not in line:
+            continue
+        key, value = line[2:].split(":", 1)
+        key = key.strip().lower().replace(" ", "_")
+        if key not in {"per_subsection", "mapping_per_subsection", "section_mapper_per_subsection"}:
+            continue
+
+        value = value.split("#", 1)[0].strip().strip("\"").strip(chr(39))
+        try:
+            n = int(value)
+        except Exception:
+            return 0
+        return n if n > 0 else 0
+
+    return 0
+
 def _score_item(item: dict[str, Any], *, want: set[str]) -> float:
     kind = str(item.get('claim_type') or '').strip().lower()
     tags = set([str(t).strip().lower() for t in (item.get('tags') or []) if str(t).strip()])
@@ -164,14 +195,23 @@ def main() -> int:
     records: list[dict[str, Any]] = []
 
     # Selection params.
+    per_subsection = _per_subsection_from_queries(workspace / "queries.md")
+    if profile == "arxiv-survey" and per_subsection <= 0:
+        per_subsection = 28
+
     k = 14
+    min_selected_bibkeys = 10
     max_per_paper = 3
 
     if profile == "arxiv-survey":
         if draft_profile == "deep":
-            k = 24
+            k = max(28, per_subsection)
+            min_selected_bibkeys = max(22, int(round(per_subsection * 0.80)))
         else:
-            k = 18
+            k = max(24, max(1, per_subsection - 4))
+            min_selected_bibkeys = max(20, int(round(per_subsection * 0.70)))
+        # Encourage breadth: keep many distinct papers so C5 has wider in-scope cite pools.
+        max_per_paper = 2
 
     flags: list[str] = []
     for brief in briefs:
@@ -245,25 +285,31 @@ def main() -> int:
         selected: list[dict[str, Any]] = []
         used_paper: dict[str, int] = {}
         used_kind: dict[str, int] = {}
+        used_bibkeys: set[str] = set()
 
-        def pick(it: dict[str, Any]) -> None:
-            pid = str(it.get('paper_id') or '').strip()
-            kind = str(it.get('claim_type') or '').strip().lower()
-            if not pid:
+        def pick(it: dict[str, Any], *, allow_dup_bibkey: bool = False) -> None:
+            pid = str(it.get("paper_id") or "").strip()
+            kind = str(it.get("claim_type") or "").strip().lower()
+            bk = str(it.get("bibkey") or "").strip()
+            if not pid or not bk:
                 return
             if used_paper.get(pid, 0) >= max_per_paper:
                 return
-            # Avoid too many limitations (often boilerplate).
-            if kind == 'limitation' and used_kind.get(kind, 0) >= 3:
+            # Prefer breadth early: keep adding new bibkeys until we hit the subsection budget.
+            if (not allow_dup_bibkey) and len(used_bibkeys) < min_selected_bibkeys and bk in used_bibkeys:
                 return
-            eid = str(it.get('evidence_id') or '').strip()
+            # Avoid too many limitations (often boilerplate).
+            if kind == "limitation" and used_kind.get(kind, 0) >= 3:
+                return
+            eid = str(it.get("evidence_id") or "").strip()
             if not eid:
                 return
-            if any(e.get('evidence_id') == eid for e in selected):
+            if any(e.get("evidence_id") == eid for e in selected):
                 return
             selected.append(it)
             used_paper[pid] = used_paper.get(pid, 0) + 1
             used_kind[kind] = used_kind.get(kind, 0) + 1
+            used_bibkeys.add(bk)
 
         # Seed: keep a minimal "writeable" mix (contrast + mechanism + limitation),
         # but let subsection-specific tag targets shape the rest.
@@ -295,6 +341,14 @@ def main() -> int:
             if len(selected) >= k:
                 break
             pick(it)
+
+
+        # If breadth constraints prevent reaching k, do a relaxed fill pass to hit evidence_id count.
+        if len(selected) < k:
+            for _, _, it in scored:
+                if len(selected) >= k:
+                    break
+                pick(it, allow_dup_bibkey=True)
 
         eids = [str(it.get('evidence_id') or '').strip() for it in selected if str(it.get('evidence_id') or '').strip()]
         bibkeys = []
