@@ -78,9 +78,9 @@ If your draft contains these, rewrite them immediately using the patterns above 
 ## Workflow
 
 1) Read the budget report (`output/CITATION_BUDGET_REPORT.md`)
-- Treat `Global target (hard; blocking)` as the PASS line for the pipeline gate.
+- Treat `Global target (policy; blocking)` as the PASS line for the pipeline gate (derived from `queries.md:citation_target`; A150++ default: `recommended`).
 - If `Gap: 0`, do nothing: write a short PASS report and move on.
-- Otherwise, for each H3 with suggested keys, pick enough keys to close the hard gap:
+- Otherwise, for each H3 with suggested keys, pick enough keys to close the gap to target:
   - small gaps: 3-6 keys / H3
   - A150++ gaps: often 6-12 keys / H3
   Prefer keys that are unused globally and avoid repeating the same new keys across many H3s.

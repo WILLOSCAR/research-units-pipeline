@@ -130,6 +130,10 @@ Avoid \"narrating the outline\":
 - Don\x27t write: `This section surveys...`, `In this section, we...`, `Next, we move...`, `We now turn to...`
 - Do write: content-bearing claims + argument bridges (why the next lens follows).
 
+Avoid self-referential survey narration (a common automation tell):
+- Don't default to: `This survey ...` / `Our survey ...` / `In this survey ...` as the sentence opener.
+- Do write: direct, content-bearing claims (optionally with \"We\"), or use third-person (\"This work\") sparingly.
+
 Avoid \"pipeline voice\":
 - Don\x27t write: `evidence pack(s)`, `writer context pack(s)`, `quality gate`, `workspace`, `stage C2/C3...`
 - Do write: \"survey methodology\" phrasing (what was collected, what was prioritized, what is uncertain).
@@ -163,6 +167,7 @@ Include (in ~5-8 sentences):
 Anti-patterns:
 - generic \"This paper surveys...\"
 - \"we organize as follows\" without content
+- self-referential survey framing (\"This survey ...\") that narrates structure instead of stating a claim
 
 ### `sections/S<sec_id>.md` — Introduction (body-only)
 

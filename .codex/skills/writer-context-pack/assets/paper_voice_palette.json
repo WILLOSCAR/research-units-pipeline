@@ -77,9 +77,9 @@
       "A recurring constraint is"
     ],
     "decision-first": [
-      "For system builders, the crux is",
       "A practical decision is",
-      "One design choice is"
+      "One design choice is",
+      "For system builders, the crux is"
     ],
     "lens-first": [
       "Seen through the lens of",
@@ -98,11 +98,14 @@
     ]
   },
   "synthesis_stems": [
-    "Across these studies,",
+    "Stepping back,",
+    "Viewed across reported protocols,",
+    "Across reported settings,",
+    "A consistent theme is that",
     "Collectively,",
     "In summary,",
     "The evidence suggests that",
-    "A consistent theme is that"
+    "Across these studies,"
   ],
   "rewrite_rules": [
     {
@@ -131,11 +134,11 @@
     },
     {
       "avoid_stem": "Two limitations",
-      "prefer_stem": "A caveat is that"
+      "prefer_stem": "These results hinge on"
     },
     {
       "avoid_stem": "Three limitations",
-      "prefer_stem": "One limitation is that"
+      "prefer_stem": "A key limitation is that"
     },
     {
       "avoid_stem": "In this survey",
@@ -155,6 +158,11 @@
     }
   ],
   "discourse_stem_watchlist": [
+    "Across these studies,",
+    "For practitioners,",
+    "For system builders,",
+    "For builders,",
+    "A caveat is",
     "Additionally,",
     "Moreover,",
     "Furthermore,",
@@ -247,6 +255,41 @@
       "This in turn means that",
       "Consequently,",
       "A practical implication is that"
+    ],
+    "Across these studies,": [
+      "Collectively,",
+      "Stepping back,",
+      "Across reported protocols,",
+      "Viewed across settings,",
+      "One way to read this evidence is that"
+    ],
+    "For practitioners,": [
+      "In deployed settings,",
+      "Operationally,",
+      "From a systems perspective,",
+      "Under typical budget constraints,",
+      "In practice,"
+    ],
+    "For system builders,": [
+      "From a system-design perspective,",
+      "In system design,",
+      "When building tool-using agents,",
+      "A practical design implication is that",
+      "In practice,"
+    ],
+    "For builders,": [
+      "From a system-design perspective,",
+      "In system design,",
+      "When building agents,",
+      "A practical design implication is that",
+      "In practice,"
+    ],
+    "A caveat is": [
+      "Interpretation depends on",
+      "Generalization is unclear when",
+      "These results hinge on",
+      "Evidence is thin when",
+      "A key boundary is that"
     ]
   },
   "role_cards": {

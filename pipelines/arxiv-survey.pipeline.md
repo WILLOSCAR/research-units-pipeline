@@ -1,6 +1,6 @@
 ---
 name: arxiv-survey
-version: 3.5
+version: 3.6
 target_artifacts:
   - STATUS.md
   - UNITS.csv
@@ -69,7 +69,7 @@ units_template: templates/UNITS.arxiv-survey.csv
 # Pipeline: arXiv survey / review (MD-first)
 
 Default contract (survey-grade, A150++):
-- `queries.md` defaults are set for a *survey deliverable* (no silent downgrade): `core_size=300`, `per_subsection=28`, global unique citations target `>=150`.
+- `queries.md` defaults are set for a *survey deliverable* (no silent downgrade): `core_size=300`, `per_subsection=28`, global unique citations hard floor `>=150` (recommended `>=165` when `core_size=300`; default `citation_target=recommended`).
 - `draft_profile` controls **writing strictness** (`survey` vs `deep`), not “speed mode”.
 - `evidence_mode` controls **evidence strength** (`abstract` default; `fulltext` optional and heavier).
 
@@ -203,9 +203,9 @@ required_skills:
 - chapter-lead-writer
 - subsection-writer
 - writer-selfloop
-- style-harmonizer
 - section-logic-polisher
 - argument-selfloop
+- style-harmonizer
 - transition-weaver
 - section-merger
 - post-merge-voice-gate
@@ -275,10 +275,11 @@ Notes:
 - Citation scope policy: citations are subsection-first (from `outline/evidence_bindings.jsonl`), with limited reuse allowed within the same H2 chapter to reduce brittleness; avoid cross-chapter “free cite” drift.
   - Controlled flexibility: bibkeys mapped to >= `queries.md:global_citation_min_subsections` subsections (A150++ default: 4) are treated as cross-cutting/global; see `allowed_bibkeys_global` in writer packs / `sections_manifest.jsonl`.
 - If global unique citations are low, run `citation-diversifier` → `citation-injector` *before* `draft-polisher` (the polisher treats citation keys as immutable).
+- `queries.md` can set `citation_target: recommended|hard` to control whether the recommended target is enforced as blocking (default: `recommended` for A150++).
 - If you intentionally add/remove citations after an earlier polish run, reset the citation-anchoring baseline before rerunning `draft-polisher`:
   - delete `output/citation_anchors.prepolish.jsonl` (workspace-local), then rerun `draft-polisher`.
 - Recommended skills (toolkit, not a rigid one-shot chain):
-  - Modular drafting: `subsection-writer` → `writer-selfloop` → `style-harmonizer` → `section-logic-polisher` → `argument-selfloop` → `transition-weaver` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor`.
+  - Modular drafting: `subsection-writer` → `writer-selfloop` → `section-logic-polisher` → `argument-selfloop` → `style-harmonizer` → `transition-weaver` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor`.
   - Legacy one-shot drafting: `prose-writer` (kept for quick experiments; less debuggable).
   - If the draft reads like “paragraph islands”, run `section-logic-polisher` and patch only failing `sections/S*.md` until PASS, then merge.
 - Add `pipeline-auditor` after `global-reviewer` as a regression test (blocks on ellipsis, repeated boilerplate, and citation hygiene).
@@ -288,5 +289,5 @@ Notes:
 - Citation coverage: expect a large, verifiable bibliography (A150++ default: `core_size=300` → `ref.bib` ~300) and high cite density:
   - Per-H3: `survey` profile expects >=12 unique citations per H3 (and deeper profiles may require more).
   - Front matter: `survey` profile expects Introduction>=35 and Related Work>=50 unique citations (dense positioning; no cite dumps).
-  - Global: `pipeline-auditor` gates on **global unique citations across the full draft** (A150++ hard target: >=150; recommended: 165). If it fails, prefer `citation-diversifier` → `citation-injector` (in-scope, NO NEW FACTS) using each H3’s `allowed_bibkeys_selected` / `allowed_bibkeys_mapped` from `outline/writer_context_packs.jsonl`.
+  - Global: `pipeline-auditor` gates on **global unique citations across the full draft**. A150++ defaults: hard `>=150`; recommended `>=165` (when bib=300). `queries.md:citation_target` controls which is blocking (default: `recommended`). If it fails, prefer `citation-diversifier` → `citation-injector` (in-scope, NO NEW FACTS) using each H3’s `allowed_bibkeys_selected` / `allowed_bibkeys_mapped` from `outline/writer_context_packs.jsonl`.
 - Anti-template: drafts containing ellipsis placeholders (`…`) or leaked scaffold instructions (e.g., "enumerate 2-4 ...") should block and be regenerated from improved outline/mapping/evidence artifacts.

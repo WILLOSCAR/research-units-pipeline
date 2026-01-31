@@ -233,9 +233,12 @@ Meta \"survey should\" -> literature-facing observation:
 - Bad: `Therefore, survey comparisons should control for tool access.`
 - Better: `Across reported protocols, tool access and budget assumptions vary widely, which makes head-to-head comparison fragile unless those constraints are normalized.`
 
-Count-based limitation slot -> content-bearing caveat:
+Count-based limitation slot -> content-bearing caveat (vary across H3s; don't reuse the same opener):
 - Bad: `Two limitations stand out. First, ...`
-- Better: `A caveat is that ...; this matters because it changes how results transfer across protocols.`
+- Better options (pick one; rotate across H3s):
+  - `Interpretation depends on ...; this matters because it changes how results transfer across protocols.`
+  - `These results hinge on ...; under different budgets/protocols, the reported gap may not transfer.`
+  - `Evidence is thin when ...; claims should be scoped to the reported protocol.`
 
 ## Script
 

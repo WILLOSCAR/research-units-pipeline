@@ -28,6 +28,8 @@ Optional (helps you stay in-scope while rewriting):
 
 ## Output
 
+Note: this is intentionally an *openers-last* pass. Run it only after the section bodies and argument chain are stable (e.g., after `section-logic-polisher` + `argument-selfloop`). If major edits happened since the last `writer-selfloop`, rerun `writer-selfloop` first so `## Style Smells` reflects the current text.
+
 - Updated `sections/*.md` files (same filenames; still body-only; no headings)
 - Re-running `writer-selfloop` is the audit trail (Style Smells should shrink).
 - Create `sections/style_harmonized.refined.ok` (empty file) when you are done (pipeline contract signal; required if this unit is marked DONE).
@@ -64,12 +66,12 @@ Why it is high-signal: it creates a reusable sentence slot that repeats across H
 
 Rewrite moves (choose one):
 - Integrate the caveat into a contrast paragraph (last sentence): state the boundary that changes interpretation.
-- Use a single caveat sentence opener (no counting): "A caveat is that ..." / "These results hinge on ..." / "Evidence is thin when ...".
+- Use a single caveat sentence opener (no counting), but rotate across H3s (avoid repeating the same stem): "These results hinge on ..." / "Interpretation depends on ..." / "Evidence is thin when ..." / "A caveat is that ..." (use sparingly).
 - If enumeration is truly needed, hide the count: use two coordinated clauses in one sentence, or vary the syntax (do not repeat across sections).
 
 Mini example (paraphrase only):
 - Bad: `Two limitations stand out. First, ...`
-- Better: `A caveat is that ...; this matters because it changes how results transfer across protocols.`
+- Better: `These results hinge on ...; this matters because it changes how results transfer across protocols.`
 
 ### 2) Reused discourse stems (The key point is that ...)
 

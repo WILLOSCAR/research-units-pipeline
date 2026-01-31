@@ -67,7 +67,7 @@ def main() -> int:
     sys.path.insert(0, str(repo_root))
 
     from tooling.common import atomic_write_text, load_yaml, parse_semicolon_list, read_jsonl
-    from tooling.quality_gate import _draft_profile, _pipeline_profile
+    from tooling.quality_gate import _citation_target, _draft_profile, _pipeline_profile
 
     workspace = Path(args.workspace).resolve()
 
@@ -162,6 +162,7 @@ def main() -> int:
 
     profile = _pipeline_profile(workspace)
     draft_profile = _draft_profile(workspace)
+    citation_target = _citation_target(workspace)
 
     # Global unique-citation targets: hard minimum vs recommended target.
     # - Hard floor (A150++ survey): >=150 unique citations.
@@ -198,9 +199,15 @@ def main() -> int:
     gap_hard = max(0, int(min_unique_hard) - len(used_global)) if min_unique_hard else 0
     gap_rec = max(0, int(min_unique_rec) - len(used_global)) if min_unique_rec else 0
 
-    # Use the recommended gap to size the per-H3 budget (it stabilizes citation coverage),
-    # but keep the *hard* target as the blocking threshold for downstream validation.
-    desired_gap = gap_rec if gap_rec > 0 else gap_hard
+    target_policy = min_unique_hard
+    gap_policy = gap_hard
+    if citation_target == "recommended" and min_unique_rec:
+        target_policy = min_unique_rec
+        gap_policy = gap_rec
+
+    # Size the per-H3 budget against the *policy target* so the report can be used
+    # as an execution contract (not just a diagnostic).
+    desired_gap = gap_policy
 
     # Dynamic per-H3 suggestion size so the budget can actually close the gap.
     h3_n = max(1, len(set(outline_order))) if outline_order else 1
@@ -280,7 +287,7 @@ def main() -> int:
             }
         )
 
-    status = "PASS" if gap_hard <= 0 else "FAIL"
+    status = "PASS" if gap_policy <= 0 else "FAIL"
 
     lines: list[str] = [
         "# Citation budget report",
@@ -290,19 +297,23 @@ def main() -> int:
         f"- Bib entries: {len(bib_keys)}",
         f"- Draft unique citations: {len(used_global)}",
         f"- Draft profile: `{draft_profile}`",
+        f"- Citation target policy: `{citation_target}`",
         "",
     ]
 
     # Canonical, parseable lines for downstream validators (citation-injector):
-    # - `Global target ... >= N` (hard, blocking)
-    # - `Gap: X` (gap-to-hard; blocking)
+    # - `Global target ... >= N` (policy target; blocking)
+    # - `Gap: X` (gap-to-target; blocking)
     if min_unique_hard or min_unique_rec:
         hard_details = f"(struct={min_unique_struct}, hard_frac={min_unique_frac}, bib={len(bib_keys)})"
-        lines.append(f"- Global target (hard; blocking): >= {min_unique_hard} {hard_details}")
-        lines.append(f"- Gap: {gap_hard}")
-        if min_unique_rec and min_unique_rec > min_unique_hard:
+        lines.append(f"- Global target (policy; blocking): >= {target_policy} {hard_details}")
+        lines.append(f"- Gap: {gap_policy}")
+
+        # Preserve both numbers for transparency/debugging.
+        lines.append(f"- Global hard minimum: >= {min_unique_hard} {hard_details}")
+        if min_unique_rec and min_unique_rec >= min_unique_hard:
             rec_frac = int(len(bib_keys) * 0.55)
-            lines.append(f"- Global recommended target (non-blocking): >= {min_unique_rec} (rec_frac={rec_frac}, bib={len(bib_keys)})")
+            lines.append(f"- Global recommended target: >= {min_unique_rec} (rec_frac={rec_frac}, bib={len(bib_keys)})")
             lines.append(f"- Gap to recommended: {gap_rec}")
         if budget_per_h3:
             lines.append(f"- Suggested keys per H3 (sizing): {budget_per_h3}")
