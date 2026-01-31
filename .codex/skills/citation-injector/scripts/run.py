@@ -172,7 +172,7 @@ def main() -> int:
         f"- Budget: `{budget_rel}`",
         f"- Unique citations (current): {unique}",
         f"- Global target (from budget): {target}",
-        f"- Gap (current, to hard): {gap}",
+        f"- Gap (current, to target): {gap}",
         f"- Gap (from budget, at report time): {gap_from_budget}",
         "",
     ]

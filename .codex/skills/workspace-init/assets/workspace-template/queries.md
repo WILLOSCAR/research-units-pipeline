@@ -18,7 +18,10 @@
 - global_citation_min_subsections: "4"  # treat citations mapped to >=N subsections as globally allowed (tighten when per_subsection is high)
 
 # Writing contract
-- draft_profile: survey      # survey | deep (default: survey deliverable; global unique cites target >=150)
+- draft_profile: survey      # survey | deep (default: survey deliverable; hard>=150, rec>=165 when core_size=300)
+
+# Global citation target policy
+- citation_target: "recommended"  # recommended | hard (A150++ default: recommended; forces injection to close the rec gap)
 
 # Metadata enrichment
 - enrich_metadata: ""        # true|false; optional arXiv id_list backfill for offline imports (needs network)

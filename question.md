@@ -1,6 +1,6 @@
 # Pipeline / Skills Improvement Backlog (arxiv-survey-latex, A150++)
 
-Last updated: 2026-01-25
+Last updated: 2026-01-31
 
 本文件跟踪 **pipeline + skills 的结构性改进 backlog**（不是某次 draft 的内容润色）。主诊断文档见：`PIPELINE_DIAGNOSIS_AND_IMPROVEMENT.md`。
 
@@ -15,7 +15,7 @@ Last updated: 2026-01-25
 上一版 backlog 的主线是：把“写作质量差”拆成可回放的结构问题，并把 self-loop 变成 pipeline 的结构中心，以 **prewrite routing + 局部收敛** 取代末端润色救火。
 
 基线已明确/已固化的方向：
-- 默认交付对齐 A150++：`core_size=300`、`per_subsection=28`、全局 unique citations 硬门槛 `>=150`（推荐 `>=165`），并禁止静默降级（历史 lite 路径不再作为交付档位）。
+- 默认交付对齐 A150++：`core_size=300`、`per_subsection=28`、全局 unique citations 硬门槛 `>=150`（推荐 `>=165`；默认 `citation_target=recommended`），并禁止静默降级（历史 lite 路径不再作为交付档位）。
 - tables 两层语义边界：`tables_index` 只做中间态（永不入文）；`tables_appendix` 才是读者表（可发表）。
 - 写作期收敛用 `writer-selfloop`：只修 FAIL 文件；PASS 也输出 style smells 并路由到微技能（opener/limitation/style）。
 - 引用补齐从“可选补救”升级为“默认交付动作”：budget → in-scope injection，避免“池子大但读者体感薄”。
@@ -165,16 +165,16 @@ Last updated: 2026-01-25
 
 ### P0-8 citation self-loop 是否默认追到 recommended（>=165）？
 
-现状：
-- A150++ 下 hard=150 可 PASS，但 recommended=165 仍可能留下 gap（例如 gap=11），且默认不会自动收敛。
+状态：DONE（已落地为语义合同）
 
-可选方案：
-- A）将 recommended 提升为默认收敛目标（仍保留 hard 口径用于解释/容错）。
-- B）增加 `queries.md` 语义化开关：`citation_target: hard|recommended`（默认 recommended）。
-- C）新增 profile：`draft_profile: survey_plus`（语义承诺“默认追到 recommended”）。
+落地内容：
+- 在 `queries.md` 增加 `citation_target: recommended|hard`，并将 A150++ 默认设为 `recommended`（默认追到 >=165）。
+- `citation-diversifier` 把 `Global target (policy; blocking)` 绑定到 policy target（不再只写 hard）。
+- `citation-injector` 与 `pipeline-auditor` 以 policy target 为阻断条件：hard 已满足但仍低于 recommended 时不再 no-op。
 
-风险：
-- 目标上调可能诱发 citation dump；需要把“注入风格合同”（短句嵌入、按轴对比、避免段尾 dump）作为硬约束共同升级。
+风险与验证：
+- 风险：目标上调可能诱发 citation dump；因此把“注入风格合同”（短句嵌入、按轴对比、避免段尾 dump）作为硬约束共同升级。
+- 验证：复现历史 gap=11 样例时，应稳定触发注入并收敛到 >=165；若 in-scope unused keys 不足，应稳定失败并路由回上游（扩大 mapping 多样性 / 扩 core / 调整 scope）。
 
 ### P1-2 保留 slash-list（>=3 token）作为高信号口吻污染拦截项
 

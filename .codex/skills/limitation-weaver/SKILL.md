@@ -65,10 +65,11 @@ Why it hurts: it creates a reusable template slot that repeats across H3s and re
 - Shape: “However, …; this matters because …”
 
 2) **Single caveat paragraph without counting**
-- Start with a natural opener:
-  - “A caveat is that …”
+- Start with a natural opener (rotate across H3s; avoid repeating the same stem):
   - “These results hinge on …”
+  - “Interpretation depends on …”
   - “Evidence is thin when …”
+  - “A caveat is that …” (use sparingly)
 - Then add one sentence that explains why it changes interpretation.
 
 3) **Verification-target framing (when evidence is abstract-only / underspecified)**
@@ -85,7 +86,7 @@ Better (folded into contrast):
 - `...; however, reported budgets and retry policies vary widely, which makes head-to-head comparisons fragile unless those constraints are normalized.`
 
 Better (single caveat paragraph):
-- `A caveat is that many studies under-specify verification and retry policies; this matters because success rates can shift substantially along the success–cost frontier.`
+- `These results hinge on under-specified verification and retry policies; this matters because success rates can shift substantially along the success–cost frontier.`
 
 ## Done checklist
 

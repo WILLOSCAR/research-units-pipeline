@@ -110,7 +110,7 @@ C5: sections/*.md → output/DRAFT.md → latex/main.tex → latex/main.pdf     
 ```
 你：给我写一个 agent 的 latex-survey
 
-↓ [C0-C1] 检索 1200+ 候选论文（目标 1500+）→ core set=300（最终文献150++ 默认；arXiv 可补全 meta）
+↓ [C0-C1] 检索 1200+ 候选论文（目标 1500+）→ core set=300（A150++ 默认；目标全局 unique citations >=165；arXiv 可补全 meta）
 ↓ [C2] 构建 taxonomy + outline + mapping（NO PROSE）→ 停在 C2 等审批
 
 你：C2 check 关键文件，看没有问题回复同意，继续
@@ -130,7 +130,7 @@ C5: sections/*.md → output/DRAFT.md → latex/main.tex → latex/main.pdf     
 ## 示例产物（v0.1，包含完整中间产物）
 该版本由 codex 中的 gpt-5.2-xhigh 运行约 2 小时 生成，过程中仅进行过 一次 human-in-the-loop（C2 阶段） 介入。
 路径：`example/e2e-agent-survey-latex-verify-****时间戳/`（pipeline：`pipelines/arxiv-survey-latex.pipeline.md`）。
-配置摘要（A150++ 默认）：`draft_profile: survey` / `evidence_mode: abstract` / `core_size: 300` / `per_subsection: 28`（详见 `queries.md`）。
+配置摘要（A150++ 默认）：`draft_profile: survey` / `citation_target: recommended` / `evidence_mode: abstract` / `core_size: 300` / `per_subsection: 28`（详见 `queries.md`；全局 unique citations：hard>=150，默认收敛到推荐值 >=165）。
 推荐默认（对齐最终交付）：`draft_profile: survey`（默认）或 `draft_profile: deep`（更严格）。
 
 目录速览（每个文件夹干嘛用）：

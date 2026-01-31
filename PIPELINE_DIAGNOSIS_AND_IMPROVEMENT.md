@@ -1,6 +1,6 @@
 # Pipeline Diagnosis & Improvement (skills-first LaTeX survey)
 
-Last updated: 2026-01-25
+Last updated: 2026-01-31
 
 本文件只覆盖 **pipeline + skills 的结构设计**（不是对某次 draft 的逐句润色），目标是让整条链路更像一条“会带人 / 会带模型做事”的工作流：能自检、能自纠偏、能把写作质量前置到中间态合同，而不是依赖末端补救。
 
@@ -68,9 +68,9 @@ Last updated: 2026-01-25
 
 默认位置（写作链路中）：
 - `writer-selfloop` PASS（写作合规/范围/口吻/最小动作）
-- `style-harmonizer`（去槽位句式，减少软口癖）
 - `section-logic-polisher` PASS（局部 thesis + bridges）
 - **`argument-selfloop` PASS（全篇论证连续性 + 前提一致性）**
+- `style-harmonizer`（openers-last：去槽位句式、减少软口癖；在论证链路稳定后再统一改写开头）
 - `transition-weaver` → `section-merger` → `post-merge-voice-gate`
 
 职责边界（避免重复劳动）：
@@ -146,17 +146,17 @@ Last updated: 2026-01-25
 - 输出：`output/WRITER_SELFLOOP_TODO.md`（PASS/FAIL + 精确到文件的可执行修复）
 - 关键作用：把“口癖/范围/占位符/章节缺失/引用范围”前置为可路由问题
 
-5) Style harmonizer（PASS 后处理软口癖；不改事实/不改引用）
-- 输入：`output/WRITER_SELFLOOP_TODO.md`（Style Smells）
-- 输出：更新 `sections/*.md` + `sections/style_harmonized.refined.ok`
-
-6) Section logic polisher（局部 thesis + bridges；防段落孤岛）
+5) Section logic polisher（局部 thesis + bridges；防段落孤岛）
 - 输入：`sections/*.md`, `outline/subsection_briefs.jsonl`, `outline/writer_context_packs.jsonl`
 - 输出：`output/SECTION_LOGIC_REPORT.md`（PASS/FAIL）
 
-7) Argument self-loop（全篇论证连续性 + 前提一致性；三件套 ledger）
+6) Argument self-loop（全篇论证连续性 + 前提一致性；三件套 ledger）
 - 输入：`sections/*.md`, `outline/outline.yml`（以及前述 packs 作为对照）
 - 输出：`output/ARGUMENT_SELFLOOP_TODO.md`（PASS/FAIL）+ 两级 ledger
+
+7) Style harmonizer（openers-last：在论证链路稳定后统一降口癖；不改事实/不改引用）
+- 输入：`output/WRITER_SELFLOOP_TODO.md`（Style Smells；必要时先 rerun 一次 writer-selfloop 刷新）
+- 输出：更新 `sections/*.md` + `sections/style_harmonized.refined.ok`
 
 8) Transitions（过渡句；不新增事实/不引入引用）
 - 输入：`outline/subsection_briefs.jsonl`
@@ -192,6 +192,7 @@ Last updated: 2026-01-25
 2) **范围宽度参数**（决定每节可写空间）：`per_subsection`（每个 H3 的可用引用池宽度）
 3) **写作严格度合同**（决定门槛）：`draft_profile`（survey/deep）
 4) **证据强度合同**（决定可写主张硬度）：`evidence_mode`（abstract/fulltext）
+5) **引用收敛策略合同**（决定“默认追到哪里”）：`citation_target`（recommended/hard；A150++ 默认 recommended）
 
 写作约束如何落到文本里：
 - 通过 packs 把“必须出现的论证动作”落成 `must_use`（anchors/comparisons/limitations），writer 不再凭感觉扩写。
@@ -339,19 +340,17 @@ Appendix 表格的最小 publishable 合同（建议作为长期质量门）：
 - C1：检索/去重池 `1800`；core set `300`；BibTeX entries `300`
 - C2：H3=8；每小节映射 `per_subsection=28`
 - C5：`post-merge-voice-gate` PASS；PDF `32` 页；Appendix tables `2`
-- Audit：global unique citations `154`（hard>=150 PASS；recommended>=165 仍有 gap=11）
+- Audit（修复前样例）：global unique citations `154`（hard>=150 PASS；recommended>=165 gap=11；用于定位 citation self-loop 的收敛缺陷）
 
-仍存在的结构性“波动源”（不是模型随机性）：
-- 当前 `citation-injector` 以 hard target（>=150）为通过条件；当 unique 已 >=150 时，即便仍低于 recommended（>=165），默认也会 no-op。
-- 结果是：在 A150++ 档位下，最终 unique citations 会稳定落在 150–165 区间，但“是否追到推荐目标”并不会自动收敛。
-
-可选改造方向（供你拍板；都是设计层语义合同的选择）：
-- 选项 A（更像默认交付）：将 recommended（>=165）提升为默认 citation self-loop 的目标（仍保留 hard>=150 的解释口径，但把推荐目标变成默认收敛点）。
-- 选项 B（显式开关）：在 `queries.md` 增加一个语义化开关（例如 `citation_target: hard|recommended`），默认 recommended；从而避免“看似同一档位但目标不同”的隐性差异。
-- 选项 C（档位拆分）：引入 `draft_profile: survey_plus`（或 A165）作为稳定交付档：profile 语义上承诺“默认追到 recommended”。
+修复（已落地为语义合同，而非“末端补救”）：
+- 引入 `queries.md:citation_target: recommended|hard`，并将 A150++ 默认设为 `recommended`（默认收敛到 >=165）。
+- `citation-diversifier` 报告中的 `Global target (policy; blocking)` 以 policy target 为准（而不是只写 hard）。
+- `citation-injector` 以 policy target 为通过条件：当 hard 已满足但仍低于 recommended 时，不再 no-op，而是会被阻断并要求补齐。
+- `pipeline-auditor` 的 gating 也对齐 policy：默认把 recommended 作为阻断目标，hard 仅作为解释口径与容错下限。
 
 风险评估：
 - 更高的 citation target 可能诱发“引用堆砌”风险；因此必须绑定 `citation-diversifier`→`citation-injector` 的注入风格合同（短句嵌入、按轴对比、避免段尾 cite dump）。
 
 验证方式：
-- A/B/C 任一方案都应能通过同一回放样例验证：让 `output/AUDIT_REPORT.md` 稳定达到目标区间，且不引入新的 voice smells（尤其是 `Representative works include...` 这种 citation dump 口吻）。
+- 回放同一失败样例（154/165）：现在应触发 citation injection（而不是 no-op），并在不引入 cite-dump 口吻的前提下把 `output/AUDIT_REPORT.md` 拉到 >=165。
+- 负例：如果补齐空间不足（in-scope unused keys 枯竭），应稳定失败并路由回上游（扩大 mapping 多样性 / 扩 core / 调整 scope），而不是跨章 free-cite 或段尾堆砌。

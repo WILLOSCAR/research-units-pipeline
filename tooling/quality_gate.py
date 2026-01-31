@@ -61,6 +61,48 @@ def _draft_profile(workspace: Path) -> str:
     return default
 
 
+def _citation_target(workspace: Path) -> str:
+    """Return the global citation target policy from `queries.md` (best-effort).
+
+    Supported values:
+    - `recommended`: converge to the recommended unique-citation target (A150++ default)
+    - `hard`: only enforce the hard minimum target
+
+    Config (queries.md):
+    - `- citation_target: recommended|hard`
+
+    Notes:
+    - This is a *policy switch* that affects the citation self-loop behavior:
+      `citation-diversifier` (budget sizing) + `citation-injector` (target enforced).
+    """
+    profile = _pipeline_profile(workspace)
+    default = "recommended" if profile == "arxiv-survey" else "hard"
+
+    queries_path = workspace / "queries.md"
+    if not queries_path.exists():
+        return default
+
+    keys = {"citation_target", "citation_policy", "citation_goal"}
+    try:
+        for raw in queries_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = raw.strip()
+            if not line.startswith("- ") or ":" not in line:
+                continue
+            key, value = line[2:].split(":", 1)
+            key = key.strip().lower().replace(" ", "_")
+            if key not in keys:
+                continue
+            value = value.split("#", 1)[0].strip().strip('"').strip("'").strip().lower()
+            if value in {"recommended", "rec"}:
+                return "recommended"
+            if value in {"hard", "min", "minimum"}:
+                return "hard"
+            return default
+    except Exception:
+        return default
+    return default
+
+
 def _global_citation_min_subsections(workspace: Path) -> int:
     """Return the minimum subsection-mapping count for treating a bibkey as globally in-scope.
 
@@ -70,22 +112,22 @@ def _global_citation_min_subsections(workspace: Path) -> int:
     This threshold lets the pipeline stay strict by default while allowing controlled flexibility.
     """
 
-    default = 3
-    queries_path = workspace / 'queries.md'
+    default = 4
+    queries_path = workspace / "queries.md"
     if not queries_path.exists():
         return default
 
-    keys = {'global_citation_min_subsections', 'global_citation_threshold'}
+    keys = {"global_citation_min_subsections", "global_citation_threshold"}
     try:
-        for raw in queries_path.read_text(encoding='utf-8', errors='ignore').splitlines():
+        for raw in queries_path.read_text(encoding="utf-8", errors="ignore").splitlines():
             line = raw.strip()
-            if not line.startswith('- ') or ':' not in line:
+            if not line.startswith("- ") or ":" not in line:
                 continue
-            key, value = line[2:].split(':', 1)
-            key = key.strip().lower().replace(' ', '_')
+            key, value = line[2:].split(":", 1)
+            key = key.strip().lower().replace(" ", "_")
             if key not in keys:
                 continue
-            value = value.split('#', 1)[0].strip().strip('\"').strip("'").strip()
+            value = value.split("#", 1)[0].strip().strip('"').strip("'").strip()
             if not value:
                 return default
             try:

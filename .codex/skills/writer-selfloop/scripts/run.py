@@ -223,18 +223,16 @@ def _style_smells_for_h3(*, workspace: Path, h3_paths: list[str]) -> list[str]:
             "  - fix: rewrite openers into a content-bearing lens/tension (avoid \"overview\" narration); keep meaning and citation keys unchanged."
         )
 
-    # Discourse stems (comma starters): report the most reused one if it appears across >=3 H3s.
-    worst_comma: tuple[int, str, list[str]] | None = None
+    # Discourse stems (comma starters): report the most reused ones if they appear across >=3 H3s.
+    rep_comma: list[tuple[int, str, list[str]]] = []
     for stem, files in comma_stem_files.items():
         uniq = sorted(set(files))
         if len(uniq) < 3:
             continue
-        cand = (len(uniq), stem, uniq)
-        if worst_comma is None or cand[0] > worst_comma[0] or (cand[0] == worst_comma[0] and cand[1] < worst_comma[1]):
-            worst_comma = cand
+        rep_comma.append((len(uniq), stem, uniq))
 
-    if worst_comma:
-        n, stem, files = worst_comma
+    rep_comma.sort(key=lambda t: (-t[0], t[1]))
+    for n, stem, files in rep_comma[:3]:
         lines.append(f"- repeated paragraph-starter stem across H3s ({n} files): `{stem}`")
         sample = ", ".join(f"`{f}`" for f in files[:8])
         if len(files) > 8:
@@ -249,18 +247,16 @@ def _style_smells_for_h3(*, workspace: Path, h3_paths: list[str]) -> list[str]:
             "  - fix: rewrite to subject-first sentences and move the relation mid-sentence (keep citations unchanged); `style-harmonizer` has safe rewrite recipes."
         )
 
-    # Discourse stems (inline): report the most reused one if it appears across >=2 H3s.
-    worst_inline: tuple[int, str, list[str]] | None = None
+    # Discourse stems (inline): report the most reused ones if they appear across >=2 H3s.
+    rep_inline: list[tuple[int, str, list[str]]] = []
     for stem, files in inline_stem_files.items():
         uniq = sorted(set(files))
         if len(uniq) < 2:
             continue
-        cand = (len(uniq), stem, uniq)
-        if worst_inline is None or cand[0] > worst_inline[0] or (cand[0] == worst_inline[0] and cand[1] < worst_inline[1]):
-            worst_inline = cand
+        rep_inline.append((len(uniq), stem, uniq))
 
-    if worst_inline:
-        n, stem, files = worst_inline
+    rep_inline.sort(key=lambda t: (-t[0], t[1]))
+    for n, stem, files in rep_inline[:3]:
         lines.append(f"- repeated discourse stem across H3s ({n} files): `{stem}`")
         sample = ", ".join(f"`{f}`" for f in files[:8])
         if len(files) > 8:
@@ -288,8 +284,7 @@ def _style_smells_for_h3(*, workspace: Path, h3_paths: list[str]) -> list[str]:
 
     rep_openers = [(s, c) for s, c in opener_stems.items() if c >= 3]
     rep_openers.sort(key=lambda kv: (-kv[1], kv[0]))
-    if rep_openers:
-        stem, c = rep_openers[0]
+    for stem, c in rep_openers[:3]:
         lines.append(
             f"- repeated H3 opener stem ({c}x): `{stem}` (use different opener modes: tension/decision/failure/protocol/contrast)"
         )

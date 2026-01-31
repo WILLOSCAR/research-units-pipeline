@@ -105,7 +105,7 @@ def main() -> int:
     sys.path.insert(0, str(repo_root))
 
     from tooling.common import atomic_write_text, load_yaml, parse_semicolon_list, read_jsonl
-    from tooling.quality_gate import _draft_profile, _pipeline_profile
+    from tooling.quality_gate import _citation_target, _draft_profile, _pipeline_profile
 
     workspace = Path(args.workspace).resolve()
 
@@ -149,6 +149,7 @@ def main() -> int:
 
     profile = _pipeline_profile(workspace)
     draft_profile = _draft_profile(workspace)
+    citation_target = _citation_target(workspace)
 
     min_h3_cites = 14 if draft_profile == "deep" else 12
 
@@ -423,37 +424,40 @@ def main() -> int:
             floor = 165
         else:
             per_h3 = 14
-            # Survey deliverable expectation (A150++): keep global unique citations high enough
-            # that the draft does not look under-cited relative to the available bib.
             base = 35
             # Hard floor: >=150 unique citations (A150++). Recommended target: ~55% of bib,
-            # which is 165 when bib=300. We enforce the hard floor and report the recommended
-            # target as a non-blocking warning.
+            # which is 165 when bib=300.
             frac = 0.50
             floor = 150
 
         min_unique_struct = base + per_h3 * h3_n
         min_unique_frac = int(len(bib_keys) * frac) if bib_keys else 0
-        min_unique = max(min_unique_struct, min_unique_frac, floor)
+        min_unique_hard = max(min_unique_struct, min_unique_frac, floor)
         if bib_keys:
-            min_unique = min(min_unique, len(bib_keys))
+            min_unique_hard = min(min_unique_hard, len(bib_keys))
 
-        # Recommended (non-blocking) target: encourage using more of the available bibliography.
-        rec_unique = min_unique
+        # Recommended target: encourage using more of the available bibliography.
+        rec_unique = min_unique_hard
         if draft_profile != "deep" and bib_keys:
             rec_frac = 0.55
             rec_unique = max(rec_unique, int(len(bib_keys) * rec_frac))
             rec_unique = min(rec_unique, len(bib_keys))
 
-        if len(cited) < min_unique:
+        target = rec_unique if citation_target == "recommended" else min_unique_hard
+
+        if len(cited) < target:
             blocking.append(
-                f"unique citations too low ({len(cited)}; target >= {min_unique} for {draft_profile} profile)"
-                + (f" [struct={min_unique_struct}, frac={min_unique_frac}, bib={len(bib_keys)}]" if bib_keys else "")
+                f"unique citations too low ({len(cited)}; target >= {target} for {draft_profile} profile; policy={citation_target})"
+                + (
+                    f" [struct={min_unique_struct}, hard_frac={min_unique_frac}, hard={min_unique_hard}, rec={rec_unique}, bib={len(bib_keys)}]"
+                    if bib_keys
+                    else ""
+                )
             )
-        elif rec_unique > min_unique and len(cited) < rec_unique:
+        elif citation_target != "recommended" and rec_unique > min_unique_hard and len(cited) < rec_unique:
             warnings.append(
                 f"unique citations below recommended target ({len(cited)}; recommend >= {rec_unique} for {draft_profile} profile)"
-                + (f" [hard={min_unique}, rec_frac={int(len(bib_keys) * 0.55)}, bib={len(bib_keys)}]" if bib_keys else "")
+                + (f" [hard={min_unique_hard}, rec_frac={int(len(bib_keys) * 0.55)}, bib={len(bib_keys)}]" if bib_keys else "")
             )
 
     # Paragraph-level no-citation rate (content-only; ignore headings/tables/short transitions).
@@ -551,6 +555,8 @@ def main() -> int:
         f"- Status: {status}",
         f"- Draft: `{draft_rel}` (sha1={_sha1(draft)[:10]})",
         f"- Bib: `{bib_rel}` (entries={len(bib_keys)})",
+        f"- Draft profile: `{draft_profile}`",
+        f"- Citation target policy: `{citation_target}`",
         "",
         "## Summary",
         f"- Unique citations in draft: {len(cited)}",
