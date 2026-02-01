@@ -75,7 +75,7 @@ codex --sandbox workspace-write --ask-for-approval never
 
 2) 在对话里说一句你要什么（例子）：
 
-> 给我写一篇关于 LLM agents 的 LaTeX survey（先停在大纲让我确认）
+> 给我写一篇关于 LLM agents 的 LaTeX survey
 
 它会自动：新建一个 `workspaces/<时间戳>/` → 先检索/整理论文 → 生成大纲 → **停在大纲确认点（C2）** 等你回复 “同意继续” → 再写草稿并生成 PDF。
 
