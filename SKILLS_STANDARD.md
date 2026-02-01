@@ -109,7 +109,7 @@ Why:
 
 - **Outline Architect** (C2, 规划专家): designs a paper-like ToC (few, thick sections) and ensures every H3 is *writeable* (has a real comparison lens, not a topic bucket).
 - **Evidence Curator** (C3/C4, 证据策展): turns papers/notes into *contrastable evidence* (claims, evaluation anchors, limitations) and exposes gaps early (so writing does not become padding).
-- **Section Author** (C5, 小节内容专家): executes argument moves (tension -> contrast -> evaluation -> limitation) with in-scope citations; avoids “outline narration”.
+- **Section Author** (C5, 小节内容专家): executes argument coverage (thesis + contrasts + protocol/evaluation anchoring + limitations) with in-scope citations; avoids “outline narration” and any fixed paragraph macro.
 - **Coherence Editor** (C5, 章节衔接/结构编辑): connects sections (chapter leads, transitions) and removes generator voice without changing claims/citations.
 - **Consistency Reviewer** (C5, 审稿视角/一致性审计): audits for scope drift, citation hygiene, and claim->evidence plausibility; routes upstream instead of “writing around” missing evidence.
 
@@ -133,7 +133,7 @@ When a skill writes/edits prose (C5), prefer a "paper voice" contract over britt
 - **No count-based opener slots**: avoid repeatedly starting sections with "Two limitations..." / "Three takeaways..." (reads templated); integrate caveats naturally or vary syntax.
 - **Soft academic tone**: calm, understated; avoid hype (`clearly`, `obviously`, `breakthrough`) and "PPT speaker notes".
 - **Coherence without rigidity**: use connectors (contrast/causal/extension) as needed, but don't force every paragraph to start with `However/Moreover`.
-- **Controlled citation scope**: subsection-first by default; allow chapter-scoped reuse; treat bibkeys mapped to >= `queries.md:global_citation_min_subsections` subsections (default 3) as cross-cutting/global (`allowed_bibkeys_global`) to reduce brittle writer BLOCKED loops.
+- **Controlled citation scope**: subsection-first by default; allow chapter-scoped reuse; treat bibkeys mapped to >= `queries.md:global_citation_min_subsections` subsections (A150++ default 4) as cross-cutting/global (`allowed_bibkeys_global`) to reduce brittle writer BLOCKED loops.
 
 ### Generator voice anti-patterns (forbidden)
 

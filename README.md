@@ -16,36 +16,36 @@
 
 ## 核心设计：Skills-First + 拆解链路 + 证据先行
 
-**传统问题**：研究流水线要么是黑盒脚本（不知道怎么改），要么是松散文档（执行时靠人肉判断）。
+传统的研究流水线常见两种极端：
+- 只有脚本：能跑，但过程黑盒，失败了不知道改哪里。
+- 只有文档：看起来都对，真正执行时全靠“人肉判断”和经验。
 
-**本设计的解法**：
+这套 repo 的做法是三句话（看完就能上手）：
 
-1. **Skills 语义化**：每个 skill 不是函数，而是**带引导的执行单元**——
-   - `inputs / outputs`：明确依赖和产物
-   - `acceptance`：验收标准（如"每小节映射 >=8 篇论文"）
-   - `notes`：怎么做、边界条件、常见错误
-   - `guardrail`：不能做什么（如 C2-C4 阶段 **NO PROSE**）
+1) **Skill 是“可执行的说明书”**（不是函数名）
+- 每个 skill 都写清楚：要用什么输入、必须产出什么文件、什么算 DONE、哪些行为禁止（例如 C2–C4 禁止写正文）。
 
-2. **拆解链路**：6 个 checkpoint（C0→C5），约 40+ 个原子 units（不同 pipeline 略有差异；LaTeX 版本会多几个），依赖关系显式写在 `UNITS.csv`
-3. **证据先行**：C2-C4 强制先建证据底座（taxonomy → mapping → evidence packs），C5 才写作
+2) **把流程拆成可恢复的小步（Units）**
+- 整体分成 C0→C5 这 6 个 checkpoint。
+- 每一步是一个 unit，依赖关系写在 `UNITS.csv`：失败了只修这一小步对应的产物，然后从这里继续。
 
-**设计目标**：
-- **可复用**：同一个 skill（如 `subsection-writer`）可被多个 pipeline 复用，换个 pipeline 不用重写逻辑
-- **可引导**：新手/模型按 skill 的 `acceptance` + `notes` 执行，不需要"猜"该做到什么程度
-- **可约束**：`guardrail` 防止执行者（尤其是模型）越界（如在 C3 阶段偷偷写正文）
-- **可定位**：失败时报告指向具体 skill + 中间产物，修复后从失败点继续
+3) **先证据、后写作**
+- C2–C4 先把“可写的证据底座”建出来（结构 + 映射 + 证据包 + 引用），C5 才进入写作与合并。
 
----
+你会因此得到：
+- **可复用**：同一个 skill 能在多个 pipeline 里复用（换交付方式不必重写逻辑）。
+- **可引导**：执行者（人/模型）不用猜“该做到什么程度”，照着验收标准做即可。
+- **可约束**：有明确禁区（guardrails），减少越界与漂移（尤其是提前写正文）。
+- **可定位**：失败会落到具体“哪个 unit + 哪个中间产物”，便于定点修复而不是全量重跑。
 
-**为什么这样设计？**
+一眼看懂：你遇到的问题 vs 这里怎么解决
 
-| 特性 | 传统做法 | 本设计 |
-|------|----------|--------|
-| **可见** | 黑盒脚本 | 每个 unit 产出中间文件（`papers/`、`outline/`、`citations/`、`sections/`） |
-| **可审计** | 日志散落 | `UNITS.csv` 记录执行历史与验收标准，`DECISIONS.md` 记录人类检查点 |
-| **可自循环** | 失败全部重跑 | 质量门 FAIL → 报告告诉你改哪个中间产物 → 修复后从失败 unit 继续 |
-| **可复用** | 每个项目重写 | skills 模块化，跨 pipeline 复用（如 `taxonomy-builder`、`evidence-binder`） |
-| **可引导** | 靠人肉判断 | 每个 skill 带 `acceptance` + `notes`，执行者知道"做到什么程度" |
+| 你遇到的问题 | 这里的机制 | 你会去看/去改哪里 |
+|---|---|---|
+| 流程黑盒：失败了不知道改哪里 | unit 合同 + 质量门报告（FAIL 指向具体中间产物） | `UNITS.csv` / `output/*REPORT*.md` / `output/*TODO*.md` |
+| 文档松散：执行靠经验 | skill 语义化（inputs/outputs/acceptance/guardrail） | `.codex/skills/*/SKILL.md` |
+| 写作空洞/模板话 | evidence-first（C2–C4）+ 写作自循环（C5） | `outline/*` / `sections/*` / `output/WRITER_SELFLOOP_TODO.md` |
+| 想换交付但不想重写流程 | pipeline 只负责编排，能力沉淀在 skills | `pipelines/*.pipeline.md` |
 
 
 English version: [`README.en.md`](README.en.md).
@@ -65,73 +65,111 @@ steer = true
 ```
 
 
-## 一句话启用（推荐：对话里跑 Pipeline）
-启动 codex
-> codex --sandbox workspace-write --ask-for-approval never 
+## 一句话启用（推荐：对话式跑一篇 survey）
 
-把下面这句话丢给 Codex（或 Claude Code）即可：
+1) 在本仓库目录启动 Codex：
 
-> 给我写一个 agent 的 latex-survey
+```bash
+codex --sandbox workspace-write --ask-for-approval never
+```
 
-这句话会触发 repo 内的 skills 自动路由并执行 pipeline（按 `UNITS.csv` 合同落盘中间产物）。
+2) 在对话里说一句你要什么（例子）：
 
-（可选：指定 pipeline 文件：`pipelines/arxiv-survey-latex.pipeline.md`（或 `research-units-pipeline-skills/pipelines/arxiv-survey-latex.pipeline.md`）；不想自动同意 C2：把“C2 自动同意”删掉即可。C2 是一个 human in the loop 的介入点）
+> 给我写一篇关于 LLM agents 的 LaTeX survey（先停在大纲让我确认）
 
-你也可以更明确一点（避免 router 选错）：
+它会自动：新建一个 `workspaces/<时间戳>/` → 先检索/整理论文 → 生成大纲 → **停在大纲确认点（C2）** 等你回复 “同意继续” → 再写草稿并生成 PDF。
 
-> 用 `pipelines/arxiv-survey-latex.pipeline.md` 给我写一个 agent 的 latex-survey（启用 strict 质量门；C2 自动同意）
+可选：你也可以直接指定“用哪条流程”（需要 PDF 就选 latex 版本）：
+
+> 用 `pipelines/arxiv-survey-latex.pipeline.md` 给我写一个 agent 的 survey（启用 strict；先停在 C2 等我确认）
+
+术语解释（读到这里就够用）：
+- workspace：一次运行的输出目录（在 `workspaces/<name>/`）
+- pipeline：一条“从检索→结构→证据→写作→输出”的步骤清单（在 `pipelines/*.pipeline.md`）
+- skill：某一步的执行说明书/能力模块（在 `.codex/skills/*/SKILL.md`）
+- unit：流程中的一步（`UNITS.csv` 一行）
+- checkpoint / C2：会暂停等人确认的节点；C2=确认大纲后才写正文
+- strict：开启严格质量门；失败会停下来并写报告（在 `output/`）
 
 ## 你会得到什么（分层产物 + 自循环入口）
 
-**执行层**：
-- `UNITS.csv`：39+（还在增加） 个原子 unit 的执行合约（依赖 → 输入 → 输出 → 验收标准）
-- `DECISIONS.md`：人类检查点（**C2 必须审批大纲**后才进入写作）
+一个 workspace 里主要是两类东西：**运行清单** + **分阶段产物**。
 
-**中间产物层**（按 checkpoint 分层）：
+**运行清单（看进度/看卡点）**：
+- `UNITS.csv`：一行一个步骤（依赖/输入/输出/验收），卡住就看当前哪个 unit 是 `BLOCKED`
+- `DECISIONS.md`：需要你确认的点（最重要的是 **C2：确认大纲后才写正文**）
+- `STATUS.md`：运行日志（当前跑到哪一步）
+
+**分阶段产物（你真正关心的内容）**：
 ```
-C1: papers/papers_raw.jsonl → papers/papers_dedup.jsonl → papers/core_set.csv (+ papers/retrieval_report.md)                  # 检索 + 去重/精选
-C2: outline/taxonomy.yml → outline/outline.yml → outline/mapping.tsv (+ outline/coverage_report.md; outline/outline_state.jsonl) # 结构（NO PROSE）
-C3: papers/fulltext_index.jsonl → papers/paper_notes.jsonl + papers/evidence_bank.jsonl → outline/subsection_briefs.jsonl (+ outline/chapter_briefs.jsonl) # 证据底座（NO PROSE）
-C4: citations/ref.bib + citations/verified.jsonl → outline/evidence_bindings.jsonl → outline/evidence_drafts.jsonl → outline/anchor_sheet.jsonl → outline/writer_context_packs.jsonl (+ outline/claim_evidence_matrix.md) # 引用 + 证据包（NO PROSE）
-C5: sections/*.md → output/DRAFT.md → latex/main.tex → latex/main.pdf                                                       # 写作 + 编译
+C1（找论文）:
+  papers/papers_raw.jsonl → papers/papers_dedup.jsonl → papers/core_set.csv
+  + papers/retrieval_report.md   # 这次检索/筛选的说明
+
+C2（搭骨架；不写正文）:
+  outline/outline.yml + outline/mapping.tsv
+  (+ outline/taxonomy.yml / outline/coverage_report.md)  # 可选：更结构化/更可审计
+
+C3（做“可写”的证据底座；不写正文）:
+  papers/paper_notes.jsonl + papers/evidence_bank.jsonl → outline/subsection_briefs.jsonl
+  (+ papers/fulltext_index.jsonl)  # 只有你启用 fulltext 才会出现
+
+C4（把每小节写作包准备好；不写正文）:
+  citations/ref.bib + citations/verified.jsonl
+  + outline/evidence_bindings.jsonl / outline/evidence_drafts.jsonl / outline/anchor_sheet.jsonl
+  → outline/writer_context_packs.jsonl
+
+C5（写作与输出）:
+  sections/*.md → output/DRAFT.md
+  (+ latex/main.pdf)  # 只有 LaTeX pipeline 才会有
 ```
 
-**质量门 + 自循环入口**：
-- `--strict` 模式才会持续写入质量门结论：unit 被 BLOCKED 时看 `output/QUALITY_GATE.md`（最新条目）定位需要修的中间产物；脚本/缺产物等运行问题看 `output/RUN_ERRORS.md`
-- 非 `--strict` 跑法：不会做 unit-level 质量门拦截（`output/QUALITY_GATE.md` 可能只有模板/历史记录）；以 `output/AUDIT_REPORT.md`（全局审计）+ `output/RUN_ERRORS.md` 为主
-- 写作层自循环（只修复失败小节）：
-  - `output/WRITER_SELFLOOP_TODO.md`（写作门：PASS/FAIL + 需要修复的 sections 列表）
-  - `output/SECTION_LOGIC_REPORT.md`（thesis + 连接词密度）
-  - `output/ARGUMENT_SELFLOOP_TODO.md`（论证链路 + 前提/口径一致性；ledger 为中间态，不进终稿）
-  - `output/CITATION_BUDGET_REPORT.md`（引用增密建议）
+**质量门 + 自循环入口（失败先看这里，按报告定点修）**：
+- 跑不动/脚本报错：`output/RUN_ERRORS.md`
+- 开了 strict 且被拦住：`output/QUALITY_GATE.md`（最后一条就是当前卡住原因 + 下一步）
+- 写作质量（只修列出的文件）：`output/WRITER_SELFLOOP_TODO.md`
+- 段落“跳步/孤岛”：`output/SECTION_LOGIC_REPORT.md`
+- 论证链路 + 口径一致性：`output/ARGUMENT_SELFLOOP_TODO.md`（口径单一真源在 `output/ARGUMENT_SKELETON.md# Consistency Contract`）
+- 引用密度不够：`output/CITATION_BUDGET_REPORT.md`
+- 全局体检：`output/AUDIT_REPORT.md`（最终审计）
 
 ## 简单的对话式执行（从 0 到 PDF）
 
 ```
-你：给我写一个 agent 的 latex-survey
+你：写一篇关于 LLM agents 的 LaTeX survey
 
-↓ [C0-C1] 检索 1200+ 候选论文（目标 1500+）→ core set=300（A150++ 默认；目标全局 unique citations >=165；arXiv 可补全 meta）
-↓ [C2] 构建 taxonomy + outline + mapping（NO PROSE）→ 停在 C2 等审批
+↓ [C0-C1] 找论文：拉取候选论文 → 去重 → 精选“核心论文列表”（默认 300 篇：`papers/core_set.csv`）
+↓ [C2] 生成“大纲 + 每小节参考论文列表”（不写正文）：`outline/outline.yml` + `outline/mapping.tsv`
+   → 停在 C2 等你确认 （自动触发的行为，也可以在开头说默认跳过）
 
-你：C2 check 关键文件，看没有问题回复同意，继续
+你：看过没问题，回复「同意继续」
 
-↓ [C3-C4] 构建证据底座（paper notes + evidence packs + citations）（NO PROSE）
-↓ [C5] 基于 evidence 开始写作 → 质量门检查
+↓ [C3-C4] 把论文整理成“可写材料”（不写正文）：
+   - `papers/paper_notes.jsonl`：每篇论文的要点/结果/局限
+   - `citations/ref.bib`：参考文献表（可引用的 key 集合）
+   - `outline/writer_context_packs.jsonl`：每个小节的写作包（允许引用哪些论文 + 该写哪些对比点）
+↓ [C5] 写作与输出：
+   - 先写分小节文件：`sections/*.md`
+   - 再合并成草稿：`output/DRAFT.md`
+   - LaTeX pipeline 会额外生成：`latex/main.pdf`
 
-【如果 PASS】→ output/DRAFT.md + latex/main.pdf ✓
-【如果 FAIL】→ output/QUALITY_GATE.md 告诉你改哪个中间产物
+【如果卡住】按报告定点修：
+- 开了 strict：看 `output/QUALITY_GATE.md`（最后一条就是当前原因 + 下一步）
+- 最终总审计：看 `output/AUDIT_REPORT.md`
 
-你（如果 FAIL）：按报告修复对应文件（如 outline/evidence_drafts.jsonl），然后说"继续"
-→ 从失败 unit 恢复执行，不需要全部重跑
+你：按报告修复对应文件后说「继续」
+→ 从卡住的那一步继续跑，不需要全部重跑
 ```
 
 **关键原则**：C2-C4 强制 NO PROSE，先建证据底座；C5 才写作，失败时可定点修复中间产物。
 
 ## 示例产物（v0.1，包含完整中间产物）
-该版本由 codex 中的 gpt-5.2-xhigh 运行约 2 小时 生成，过程中仅进行过 一次 human-in-the-loop（C2 阶段） 介入。
-路径：`example/e2e-agent-survey-latex-verify-****时间戳/`（pipeline：`pipelines/arxiv-survey-latex.pipeline.md`）。
-配置摘要（A150++ 默认）：`draft_profile: survey` / `citation_target: recommended` / `evidence_mode: abstract` / `core_size: 300` / `per_subsection: 28`（详见 `queries.md`；全局 unique citations：hard>=150，默认收敛到推荐值 >=165）。
-推荐默认（对齐最终交付）：`draft_profile: survey`（默认）或 `draft_profile: deep`（更严格）。
+这是一个“完整跑通”的示例 workspace：从找论文 → 出大纲 → 整理证据 → 写草稿 → 编译 PDF，所有中间产物都在里面，方便你对照理解整条链路。
+
+- 示例路径：`example/e2e-agent-survey-latex-verify-<时间戳>/`（对应流程：`pipelines/arxiv-survey-latex.pipeline.md`）
+- 过程中会在 **C2（大纲）** 停下来等你确认；确认后才会写正文
+- 默认配置（A150++）：核心论文 300 篇、每个小节映射 28 篇、证据模式用 abstract（摘要级）；目标是全局引用足够密（全局 unique citations 默认收敛到推荐值）
+- 一般建议：`draft_profile: survey`（默认交付）；想更严格再用 `draft_profile: deep`
 
 目录速览（每个文件夹干嘛用）：
 
@@ -165,16 +203,12 @@ flowchart LR
   OUT --> TEX["latex/<br/>main.tex → main.pdf"]
 ```
 
-最终交付只关注最新版本，测试完成后如有改进直接纳入示例路径中，默认以最新时间戳标记的文件夹即表示最新版本，视情况保留 2-3 个版本：
+最终交付只看“最新一次跑通”的示例目录（按时间戳命名）。有改进就更新最新目录，历史版本一般保留 2–3 个用于对比回归。
 
-- Markdown 草稿：
-example/e2e-agent-survey-latex-verify-<最新时间戳>/output/DRAFT.md
-
-- PDF 输出：
-example/e2e-agent-survey-latex-verify-<最新时间戳>/latex/main.pdf
-
-- QA 审计报告：
-example/e2e-agent-survey-latex-verify-<最新时间戳>/output/AUDIT_REPORT.md
+你最常打开的三个文件：
+- 草稿（Markdown）：`example/e2e-agent-survey-latex-verify-<最新时间戳>/output/DRAFT.md`
+- PDF：`example/e2e-agent-survey-latex-verify-<最新时间戳>/latex/main.pdf`
+- 体检报告（QA/Audit）：`example/e2e-agent-survey-latex-verify-<最新时间戳>/output/AUDIT_REPORT.md`
 
 
 ## 欢迎提出各类 issue，一起改进写作流程

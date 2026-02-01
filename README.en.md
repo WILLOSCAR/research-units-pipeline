@@ -12,36 +12,31 @@
 
 ## Core Design: Skills-First + Decomposed Pipeline + Evidence-First
 
-**The traditional problem**: Research pipelines are either black-box scripts (hard to debug) or loose documentation (requires human judgment at runtime).
+Research pipelines often fall into two extremes:
+- scripts only: they run, but the process is a black box (hard to debug and iterate)
+- docs only: they read well, but execution relies on human judgment and ad‑hoc decisions
 
-**Our solution**:
+This repo keeps it simple:
 
-1. **Semantic Skills**: Each skill is not a function, but a **guided execution unit**—
-   - `inputs / outputs`: explicit dependencies and artifacts
-   - `acceptance`: completion criteria (e.g., "each subsection maps to >=8 papers")
-   - `notes`: how to do it, edge cases, common mistakes
-   - `guardrail`: what NOT to do (e.g., **NO PROSE** in C2-C4)
+1) **A skill is an executable playbook** (not a function name)
+- Each skill states what it needs, what it must produce, what “DONE” means, and what is forbidden (e.g., no prose in the structure/evidence stages).
 
-2. **Decomposed Pipeline**: 6 checkpoints (C0→C5), ~40+ atomic units (varies by pipeline; LaTeX adds a few), dependencies explicit in `UNITS.csv`
-3. **Evidence-First**: C2-C4 enforce building evidence substrate first (taxonomy → mapping → evidence packs), C5 writes prose
+2) **A pipeline is a chain of small resumable steps**
+- The whole run is split into checkpoints (C0→C5).
+- Each step is a unit (one row in `UNITS.csv`). If it fails, you fix the specific artifact and resume from that step.
 
-**Design Goals**:
-- **Reusable**: Same skill (e.g., `subsection-writer`) works across pipelines—no rewriting logic
-- **Guided**: Newcomers/models follow `acceptance` + `notes`—no guessing "how much is enough"
-- **Constrained**: `guardrail` prevents executors (especially models) from going off-rails (e.g., writing prose in C3)
-- **Locatable**: Failures point to specific skill + artifact—fix and resume from failure point
+3) **Evidence first, writing later**
+- C2–C4 build a “write-ready evidence base” (structure + per‑section paper lists + evidence packs + references).
+- C5 writes and compiles.
 
----
+At a glance: problems vs what to look at
 
-**Why this design?**
-
-| Property | Traditional | This Design |
-|----------|-------------|-------------|
-| **Visible** | Black-box scripts | Each unit produces intermediate files (`papers/`, `outline/`, `citations/`, `sections/`) |
-| **Auditable** | Scattered logs | `UNITS.csv` records execution history + acceptance criteria; `DECISIONS.md` records human checkpoints |
-| **Self-healing** | Failure = full restart | Quality gate FAIL → report tells you what to fix → resume from failed unit |
-| **Reusable** | Rewrite per project | Skills are modular, reusable across pipelines (e.g., `taxonomy-builder`, `evidence-binder`) |
-| **Guided** | Human judgment | Each skill has `acceptance` + `notes`—executor knows "what done looks like" |
+| What goes wrong | What this repo uses | Where you look / what you fix |
+|---|---|---|
+| Black box: failures are opaque | Unit contract + reports that point to artifacts | `UNITS.csv` / `output/*REPORT*.md` / `output/*TODO*.md` |
+| Docs aren’t executable | Skills are explicit playbooks | `.codex/skills/*/SKILL.md` |
+| Hollow / templated writing | Evidence-first + writing self-loops | `outline/*` / `sections/*` / `output/WRITER_SELFLOOP_TODO.md` |
+| Want a different deliverable | Pipelines only orchestrate; skills hold the capability | `pipelines/*.pipeline.md` |
 
 Chinese version: [`README.md`](README.md).
 
@@ -58,83 +53,117 @@ shell_snapshot = true
 steer = true
 ```
 
-## One-line Activation (recommended: run pipelines in chat)
+## One-line Activation (recommended: run it in chat)
 
-Start Codex:
+1) Start Codex in this repo directory:
 
-> codex --sandbox workspace-write --ask-for-approval never
+```bash
+codex --sandbox workspace-write --ask-for-approval never
+```
 
-Send this to Codex (or Claude Code):
+2) Tell it what you want (example):
 
-> Write me an agent LaTeX survey
+> Write a LaTeX survey about LLM agents (pause at the outline for my review)
 
-This triggers the repo skills to auto-route and execute the pipeline (artifacts written per the `UNITS.csv` contract).
+It will: create `workspaces/<timestamp>/` → retrieve and curate papers → draft an outline → **pause at C2 (outline review)** → then write the draft and compile the PDF.
 
-Optional:
-- Specify pipeline file: `pipelines/arxiv-survey-latex.pipeline.md` (or `research-units-pipeline-skills/pipelines/arxiv-survey-latex.pipeline.md`)
-- No auto-approval at C2: remove "auto-approve C2" from your prompt
+Optional: specify which pipeline to use (choose the LaTeX one if you want a PDF):
 
-More explicit (less routing errors):
+> Use `pipelines/arxiv-survey-latex.pipeline.md` to write a survey on LLM agents (strict; pause at C2 for my review)
 
-> Use `pipelines/arxiv-survey-latex.pipeline.md` to write me an agent LaTeX survey (strict quality gates; auto-approve C2)
+Glossary (only what you need here):
+- workspace: one run’s output folder under `workspaces/<name>/`
+- pipeline: the stage plan (retrieval → structure → evidence → writing → outputs), in `pipelines/*.pipeline.md`
+- skill: a step playbook in `.codex/skills/*/SKILL.md`
+- unit: one step (one row in `UNITS.csv`)
+- checkpoint / C2: a pause-for-human-review point; C2 = approve the outline before any prose
+- strict: enables quality gates; failures stop and write reports under `output/`
 
 ## What You Get (Layered Artifacts + Self-Healing Entry Points)
 
-**Execution Layer**:
-- `UNITS.csv`: ~40+ atomic units as execution contract (dependencies → inputs → outputs → acceptance)
-- `DECISIONS.md`: Human checkpoints (**C2 requires outline approval** before prose)
+In a workspace, there are two things you will use most: a run checklist, and stage artifacts.
 
-**Artifact Layer** (by checkpoint):
+**Run checklist (progress + where it got stuck)**:
+- `UNITS.csv`: one row per step (deps/inputs/outputs/acceptance); look for units marked `BLOCKED`
+- `DECISIONS.md`: human review points (most importantly **C2: outline approval before prose**)
+- `STATUS.md`: the run log (what ran, and when)
+
+**Stage artifacts (the actual content)**:
 ```
-C1: papers/papers_raw.jsonl → papers/core_set.csv                         # Retrieval + dedupe
-C2: outline/taxonomy.yml → outline/outline.yml → outline/mapping.tsv      # Structure (NO PROSE)
-C3: papers/paper_notes.jsonl → outline/subsection_briefs.jsonl            # Evidence substrate (NO PROSE)
-C4: citations/ref.bib → outline/evidence_drafts.jsonl                     # Citations + evidence packs (NO PROSE)
-C5: sections/*.md → output/DRAFT.md → latex/main.pdf                      # Writing + compile
+C1 (find papers):
+  papers/papers_raw.jsonl → papers/papers_dedup.jsonl → papers/core_set.csv
+  + papers/retrieval_report.md
+
+C2 (outline, no prose):
+  outline/outline.yml + outline/mapping.tsv
+  (+ outline/taxonomy.yml / outline/coverage_report.md)
+
+C3 (build a write-ready evidence base, no prose):
+  papers/paper_notes.jsonl + papers/evidence_bank.jsonl → outline/subsection_briefs.jsonl
+  (+ papers/fulltext_index.jsonl)  # only if you enable fulltext
+
+C4 (prepare per-section writing packs, no prose):
+  citations/ref.bib + citations/verified.jsonl
+  + outline/evidence_bindings.jsonl / outline/evidence_drafts.jsonl / outline/anchor_sheet.jsonl
+  → outline/writer_context_packs.jsonl
+
+C5 (writing and outputs):
+  sections/*.md → output/DRAFT.md
+  (+ latex/main.pdf)  # LaTeX pipeline only
 ```
 
-**Quality Gates + Self-Healing Entry Points**:
-- `output/QUALITY_GATE.md`: tells you which artifact to fix
-- Writing self-loop (fix failing subsections only):
-  - `output/WRITER_SELFLOOP_TODO.md`: strict writing gate (PASS/FAIL + which `sections/*.md` to rewrite)
-  - `output/SECTION_LOGIC_REPORT.md`: thesis + connector density
-  - `output/ARGUMENT_SELFLOOP_TODO.md`: argument chain + premise/definition consistency (ledgers are intermediate; never merged)
-  - `output/CITATION_BUDGET_REPORT.md`: citation density suggestions
+**Quality gates / where to start when something fails**:
+- script/run errors: `output/RUN_ERRORS.md`
+- strict mode blocks: `output/QUALITY_GATE.md` (the last entry is the current reason + next step)
+- writing quality (fix only listed files): `output/WRITER_SELFLOOP_TODO.md`
+- paragraph “jump cuts”: `output/SECTION_LOGIC_REPORT.md`
+- argument continuity + consistency: `output/ARGUMENT_SELFLOOP_TODO.md` (the single source of truth lives in `output/ARGUMENT_SKELETON.md# Consistency Contract`)
+- low citation coverage: `output/CITATION_BUDGET_REPORT.md`
+- final audit: `output/AUDIT_REPORT.md`
 
 ## Conversational Execution (0 to PDF)
 
 ```
-You: Write me an agent LaTeX survey
+You: Write a LaTeX survey about LLM agents (pause at the outline for my review)
 
-↓ [C0-C1] Retrieve 1200+ candidates (target 1500+) → core set=300 (A150++ default; target global unique citations >=165; arXiv can backfill metadata)
-↓ [C2] Build taxonomy + outline + mapping (NO PROSE) → pause at C2 for approval
+↓ [C0-C1] Find papers: retrieve candidates → dedupe → select a core reading list (default 300 in `papers/core_set.csv`)
+↓ [C2] Produce an outline + per-section reading lists (no prose): `outline/outline.yml` + `outline/mapping.tsv`
+   → pause at C2 for your approval
 
-You: Approve C2, continue
+You: Looks good. Continue.
 
-↓ [C3-C4] Build evidence substrate (paper notes + evidence packs + citations) (NO PROSE)
-↓ [C5] Evidence-based writing → quality gate check
+↓ [C3-C4] Turn papers into write-ready material (no prose):
+   - `papers/paper_notes.jsonl` (what each paper did / found / limitations)
+   - `citations/ref.bib` (the reference list you can cite)
+   - `outline/writer_context_packs.jsonl` (per-section writing packs: what to compare + which papers are in scope)
+↓ [C5] Write and output:
+   - write per-section files: `sections/*.md`
+   - merge into the draft: `output/DRAFT.md`
+   - LaTeX pipeline also compiles: `latex/main.pdf`
 
-【PASS】→ output/DRAFT.md + latex/main.pdf ✓
-【FAIL】→ output/QUALITY_GATE.md points to artifact needing fix
+If it gets blocked:
+- strict mode: read `output/QUALITY_GATE.md`
+- final audit: read `output/AUDIT_REPORT.md`
 
-You (if FAIL): Fix the file (e.g., outline/evidence_drafts.jsonl), say "continue"
-→ Resume from failed unit, no full restart needed
+You: fix the referenced file, say “continue”
+→ resume from the blocked step (no full restart)
 ```
 
-**Key principle**: C2-C4 enforce NO PROSE—build evidence substrate first; C5 writes prose; failures are point-fixable.
+**Key principle**: C2–C4 enforce NO PROSE—build the evidence base first; C5 writes prose; failures are point-fixable.
 
 ## Example Artifacts (v0.1, full intermediate outputs)
 
-This version was generated by `gpt-5.2-xhigh` in Codex in ~2 hours, with only one human-in-the-loop intervention (at C2).
+This is a fully-run example workspace: find papers → draft outline → build evidence → write → compile PDF. It includes all intermediate artifacts so you can learn the workflow by inspection.
 
-Path: `example/e2e-agent-survey-latex-verify-****TIMESTAMP/` (pipeline: `pipelines/arxiv-survey-latex.pipeline.md`).
-Config (A150++ default): `draft_profile: survey` / `citation_target: recommended` / `evidence_mode: abstract` / `core_size: 300` / `per_subsection: 28` (see `queries.md`; global unique citations: hard>=150, default converge to recommended >=165).
-Recommended default (align with the final deliverable): `draft_profile: survey` (default) or `draft_profile: deep` (stricter).
+- Example path: `example/e2e-agent-survey-latex-verify-<TIMESTAMP>/` (pipeline: `pipelines/arxiv-survey-latex.pipeline.md`)
+- It pauses at **C2 (outline review)** before writing any prose
+- Default posture (A150++): 300 core papers, 28 mapped papers per subsection, abstract-level evidence by default; the goal is to keep citation coverage high across the full draft
+- Recommended: `draft_profile: survey` (default deliverable) or `draft_profile: deep` (stricter)
 
 Directory quick glance (what each folder is for):
 
 ```text
-example/e2e-agent-survey-latex-verify-20260118-182656/
+example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/
   STATUS.md            # progress + run log (current checkpoint)
   UNITS.csv            # execution contract (deps / acceptance / outputs)
   DECISIONS.md         # human checkpoints (Approve C*)
@@ -142,8 +171,8 @@ example/e2e-agent-survey-latex-verify-20260118-182656/
   PIPELINE.lock.md     # selected pipeline (single source of truth)
   GOAL.md              # goal/scope seed
   queries.md           # retrieval + writing profile config
-  papers/              # C1/C3: retrieval outputs and paper "substrate"
-  outline/             # C2/C3/C4: taxonomy/outline/mapping + briefs + evidence packs
+  papers/              # C1/C3: retrieval outputs + paper notes/evidence base
+  outline/             # C2/C3/C4: outline/mapping + briefs + evidence packs
   citations/           # C4: BibTeX + verification records
   sections/            # C5: per-H2/H3 writing units (incl. chapter leads)
   output/              # C5: merged DRAFT + reports
@@ -154,18 +183,21 @@ Pipeline view (how folders connect):
 
 ```mermaid
 flowchart LR
-  C0["Contract files<br/>(STATUS/UNITS/DECISIONS)"] --> C1["papers/ (retrieval + core set)"]
-  C1 --> C2["outline/ (taxonomy/outline/mapping)"]
-  C2 --> C4["citations/ (ref.bib + verified)"]
-  C4 --> C5s["sections/ (per-H3 writing units)"]
-  C5s --> OUT["output/ (DRAFT + reports)"]
-  OUT --> TEX["latex/ (main.tex + main.pdf)"]
+  C0["C0 Workspace<br/>STATUS/UNITS/DECISIONS/queries"] --> C1["C1 papers/<br/>papers_raw → papers_dedup → core_set<br/>(+ retrieval_report)"]
+  C1 --> C2["C2 outline/ (NO PROSE)<br/>outline + mapping<br/>(+ coverage_report)"]
+  C2 --> C3["C3 evidence base (NO PROSE)<br/>paper_notes + evidence_bank<br/>subsection_briefs / chapter_briefs"]
+  C3 --> C4["C4 evidence packs + citations (NO PROSE)<br/>ref.bib + verified<br/>evidence_bindings / evidence_drafts<br/>anchor_sheet / writer_context_packs"]
+  C4 --> C5["C5 sections/<br/>front matter + per-H3 writing units<br/>(+ transitions)"]
+  C5 --> OUT["output/<br/>DRAFT + QA reports"]
+  OUT --> TEX["latex/<br/>main.tex → main.pdf"]
 ```
 
-Final deliverables only:
-- Draft (Markdown): `example/e2e-agent-survey-latex-verify-最新时间戳/output/DRAFT.md`
-- PDF: `example/e2e-agent-survey-latex-verify-最新时间戳/latex/main.pdf`
-- QA report: `example/e2e-agent-survey-latex-verify-最新时间戳/output/AUDIT_REPORT.md`
+For delivery, only the latest successfully-run example directory matters (timestamped). Keep 2–3 older runs for regression comparisons.
+
+The three files you will open most often:
+- Draft (Markdown): `example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/output/DRAFT.md`
+- PDF: `example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/latex/main.pdf`
+- QA / Audit report: `example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/output/AUDIT_REPORT.md`
 
 ## Feel Free to Open Issues (Help Improve the Writing Workflow)
 
