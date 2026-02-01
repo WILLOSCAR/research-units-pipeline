@@ -15,7 +15,8 @@ Purpose: produce a paper-like draft by writing **small, inspectable files** unde
 
 This skill is semantic:
 - you are not \"generating text\"
-- you are executing **argument moves** (tension -> contrast -> evaluation -> limitation) under a citation-scope contract
+- you are executing **argument coverage** (thesis + contrasts + protocol/evaluation anchoring + limitations) under a citation-scope contract
+- you avoid a fixed paragraph macro; the required moves must appear, but order and paragraph shapes should vary across H3s
 
 Use `writer-selfloop` as the strict gate (PASS/FAIL + actionable TODO). Use `evidence-selfloop` to route upstream when packs are too thin.
 
@@ -33,7 +34,7 @@ Treat this skill as a writing playbook first, and as an automation wrapper secon
 Mission: draft H3 bodies that execute argument moves under citation scope.
 
 Do:
-- Start with a tension and end paragraph 1 with a thesis.
+- Choose an opener mode (tension/contrast/protocol/failure/decision/lens) and end paragraph 1 with a thesis.
 - Make explicit A-vs-B contrasts grounded in in-scope citations.
 - Include a protocol-aware evaluation anchor (task/metric/constraint).
 - State at least one subsection-specific limitation.
@@ -201,6 +202,7 @@ Write (privately) a 4-line plan for the subsection:
 - Limitation sentence (what would falsify / when it doesn\x27t transfer)
 
 If you cannot write this plan without guessing, stop and route upstream (run `evidence-selfloop` and fix packs) instead of writing filler.
+If the opener starts sounding slot-like, draft the middle paragraphs first (contrasts + protocol anchors + limitations), then rewrite paragraph 1 last so the opener reflects the section content.
 
 ## Workflow (minimal, high leverage)
 

@@ -7,7 +7,7 @@
 ## WIP
 1. 在 Appendix 增加了表格
 2. 持续打磨写作技巧，提升写作上下限（已经尝试了增加 role playing 的 soft 约束）
-
+3. 去除模板话描述
 ## Todo
 1. 加入多 cli 协作，multi-agent design （在合适的环节接入 API，替代或者分担 codex 执行过程中的压力）
 2. 完善剩余的Pipeline，example 新增例子

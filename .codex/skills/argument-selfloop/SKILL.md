@@ -144,9 +144,19 @@ Notes:
 A compact narrative/dependency map (not a retelling of the paper).
 
 It should include:
-- each H2/H3’s **necessity** (what gap it fills)
+- each H2/H3's **necessity** (what gap it fills)
 - explicit **dependencies** (premises consumed, outputs produced)
-- a global **consistency contract**: terms/protocol assumptions that must not drift
+- a global **Consistency Contract** section (single source of truth) that must not drift across edits:
+  - canonical terminology + synonym policy (what to call the same thing)
+  - task/environment/threat-model boundary (what counts as in-scope)
+  - evaluation protocol fields that make numbers interpretable (task + metric + constraint/budget/tool access)
+  - comparison set naming policy (baseline families; avoid drifting labels)
+
+Minimum format requirement:
+- `output/ARGUMENT_SKELETON.md` must contain a heading line: `## Consistency Contract`
+
+Change rule (regression trigger):
+- If you change any definition/protocol assumption/term naming, update the Consistency Contract first, then revise the affected `sections/*.md` to match, and rerun this self-loop until PASS.
 
 Keep it "writer-facing": no reader signposting, no “in this section we…”.
 

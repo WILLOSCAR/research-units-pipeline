@@ -55,6 +55,14 @@ Front matter is where many \"automation tells\" originate (method-note spam, sli
 
 4) Write the files (see the section-specific contracts below)
 
+## Openers-last (front matter)
+
+Front matter is where template voice often originates. To keep it authorial without adding new machinery:
+
+- Draft the middle paragraphs first (lens paragraphs + gap statement + the single methodology paragraph) with real citations.
+- Rewrite paragraph 1 last so it reflects the file's real claim (avoid "This survey..." / "This section provides an overview..." stems).
+- If later C5 edits change the paper's lens/structure, do one final pass rewriting only the first 1-2 paragraphs of Introduction and Related Work (no new facts/citations).
+
 ## Role cards (use explicitly)
 
 ### Positioner (scope + boundary)

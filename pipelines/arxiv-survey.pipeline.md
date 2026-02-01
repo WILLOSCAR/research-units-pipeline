@@ -245,6 +245,14 @@ produces:
 - output/CONTRACT_REPORT.md
 
 Notes:
+- C5 writing system (semantic + minimal artifacts; no extra machinery):
+  - **Unit of work**: `sections/*.md` (front matter, H2 leads, H3 bodies). Avoid editing `output/DRAFT.md` directly until after merge.
+  - **Single source of truth (口径锁定)**: `output/ARGUMENT_SKELETON.md` → `## Consistency Contract` (terminology, scope boundary, evaluation protocol fields, baseline naming).
+  - **Write → check → fix (three gates)**:
+    1) `writer-selfloop` → `output/WRITER_SELFLOOP_TODO.md`: file existence, depth, citation scope, paper voice.
+    2) `section-logic-polisher` → `output/SECTION_LOGIC_REPORT.md`: paragraph linkage (no jump cuts / “paragraph islands”).
+    3) `argument-selfloop` → `output/ARGUMENT_SELFLOOP_TODO.md` + `output/ARGUMENT_SKELETON.md` + `output/SECTION_ARGUMENT_SUMMARIES.jsonl`: section-level closure + premise/definition stability.
+  - **Openers-last**: draft the middle first; rewrite paragraph 1 last so it reflects real content (front matter + H3).
 - Writing self-loop gate: `subsection-writer` ensures the full `sections/` file set exists (and emits `sections/sections_manifest.jsonl`); `writer-selfloop` blocks until depth/citation-scope/paper-voice checks pass, writing `output/WRITER_SELFLOOP_TODO.md` (PASS/FAIL).
 - Argument self-loop gate: `argument-selfloop` blocks “smooth but hollow” sections by making the argument chain explicit (per-section paragraph moves + a global dependency skeleton). Its ledgers are intermediate artifacts and must never be merged into the paper.
 - Style hygiene (non-blocking): even on PASS, read `output/WRITER_SELFLOOP_TODO.md`'s `## Style Smells (non-blocking)` section. If it flags repeated slot phrases (e.g., `Two limitations ...`) or overused stems, run `style-harmonizer` on the listed files and re-run `writer-selfloop`.
