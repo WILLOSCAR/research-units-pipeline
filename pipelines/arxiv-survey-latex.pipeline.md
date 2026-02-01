@@ -252,6 +252,17 @@ produces:
 - output/CONTRACT_REPORT.md
 
 Notes:
+- C5 writing system (semantic + minimal artifacts; no extra machinery):
+  - **Unit of work**: `sections/*.md` (front matter, H2 leads, H3 bodies). Avoid editing `output/DRAFT.md` directly until after merge.
+  - **Single source of truth (口径锁定)**: `output/ARGUMENT_SKELETON.md` → `## Consistency Contract` (terminology, scope boundary, evaluation protocol fields, baseline naming).
+  - **Write → check → fix (three gates)**:
+    1) `writer-selfloop` → `output/WRITER_SELFLOOP_TODO.md`: file existence, depth, citation scope, paper voice.
+       - Fix actions: rewrite openers/bridges, add thesis/contrast/eval/limitation, delete narration/pipeline voice; keep citation keys fixed.
+    2) `section-logic-polisher` → `output/SECTION_LOGIC_REPORT.md`: paragraph linkage (no jump cuts / “paragraph islands”).
+       - Fix actions: add bridge sentences, reorder paragraphs, move connectors into mid-sentence glue (avoid repetitive “Moreover/Overall” openers).
+    3) `argument-selfloop` → `output/ARGUMENT_SELFLOOP_TODO.md` + `output/ARGUMENT_SKELETON.md` + `output/SECTION_ARGUMENT_SUMMARIES.jsonl`: section-level closure + premise/definition stability.
+       - Fix actions: update the Consistency Contract first, then revise affected `sections/*.md`; ensure each paragraph has a move+output in the ledger.
+  - **Openers-last**: draft the middle (contrasts + protocol anchors + limitations) first; rewrite paragraph 1 last so it reflects real content (front matter + H3).
 - Writing self-loop gate: `subsection-writer` ensures the full `sections/` file set exists (and emits `sections/sections_manifest.jsonl`); `writer-selfloop` blocks until depth/citation-scope/paper-voice checks pass, writing `output/WRITER_SELFLOOP_TODO.md` (PASS/FAIL).
 - Argument self-loop gate: `argument-selfloop` blocks “smooth but hollow” writing by enforcing argument continuity + premise/definition stability via intermediate ledgers (`output/SECTION_ARGUMENT_SUMMARIES.jsonl`, `output/ARGUMENT_SKELETON.md`). These ledgers must never be merged into the paper.
 - Style hygiene (non-blocking): even on PASS, read `output/WRITER_SELFLOOP_TODO.md`'s `## Style Smells (non-blocking)` section. If it flags repeated slot phrases (e.g., `Two limitations ...`) or overused stems, run `style-harmonizer` on the listed files and re-run `writer-selfloop`.
