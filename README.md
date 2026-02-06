@@ -52,7 +52,7 @@ English version: [`README.en.md`](README.en.md).
 
 
 ## codex 参考配置
-
+配置可能会根据 codex 的更新有变化
 ```toml
 
 [sandbox_workspace_write]
