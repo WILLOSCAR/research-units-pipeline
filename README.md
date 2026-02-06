@@ -59,9 +59,7 @@ English version: [`README.en.md`](README.en.md).
 network_access = true
 
 [features]
-unified_exec = true
 shell_snapshot = true
-steer = true
 ```
 
 
