@@ -14,29 +14,24 @@
 3. 精简Pipeline中冗余的中间内容，遵循优雅的奥卡姆剃刀原则，如无必要，勿增实体。
 
 
-## 核心设计：Skills-First + 拆解链路 + 证据先行
+## 核心思路：把写 Survey 拆成“可恢复的小步”
 
-传统的研究流水线常见两种极端：
+传统做 research / 写 survey 的流水线常见两种极端：
 - 只有脚本：能跑，但过程黑盒，失败了不知道改哪里。
-- 只有文档：看起来都对，真正执行时全靠“人肉判断”和经验。
+- 只有文档：看起来都对，执行时还是靠人肉判断，容易漂移。
 
-这套 repo 的做法是三句话（看完就能上手）：
+这套 repo 的做法很简单：把整条链路拆成**一串能验收、能恢复的小步**，每一步都落盘中间产物。
 
-1) **Skill 是“可执行的说明书”**（不是函数名）
-- 每个 skill 都写清楚：要用什么输入、必须产出什么文件、什么算 DONE、哪些行为禁止（例如 C2–C4 禁止写正文）。
+1) **Skill = 可执行的说明书（带验收）**
+- 每个 skill 都写清楚：需要什么输入、必须产出哪些文件、什么算完成、哪些行为禁止（例如 C2–C4 禁止写正文）。
+- 你不用记“该做到什么程度”：照着验收标准做，做不到就会被质量门拦住并写报告。
 
-2) **把流程拆成可恢复的小步（Units）**
-- 整体分成 C0→C5 这 6 个 checkpoint。
-- 每一步是一个 unit，依赖关系写在 `UNITS.csv`：失败了只修这一小步对应的产物，然后从这里继续。
+2) **Unit = 可恢复的小任务**
+- 一次运行被拆成 C0→C5 六个 checkpoint，每一步是 `UNITS.csv` 里的一行。
+- 失败时不需要全部重跑：修对那一个中间产物，然后从卡住的 unit 继续。
 
-3) **先证据、后写作**
-- C2–C4 先把“可写的证据底座”建出来（结构 + 映射 + 证据包 + 引用），C5 才进入写作与合并。
-
-你会因此得到：
-- **可复用**：同一个 skill 能在多个 pipeline 里复用（换交付方式不必重写逻辑）。
-- **可引导**：执行者（人/模型）不用猜“该做到什么程度”，照着验收标准做即可。
-- **可约束**：有明确禁区（guardrails），减少越界与漂移（尤其是提前写正文）。
-- **可定位**：失败会落到具体“哪个 unit + 哪个中间产物”，便于定点修复而不是全量重跑。
+3) **先证据、后写作（防空洞/防模板）**
+- C1 找论文 → C2 定结构（outline+每小节论文池）→ C3/C4 把证据整理成“可写材料” → C5 才写正文并出 PDF。
 
 一眼看懂：你遇到的问题 vs 这里怎么解决
 
@@ -75,23 +70,29 @@ codex --sandbox workspace-write --ask-for-approval never
 
 > 给我写一篇关于 LLM agents 的 LaTeX survey
 
-它会自动：新建一个 `workspaces/<时间戳>/` → 先检索/整理论文 → 生成大纲 → **停在大纲确认点（C2）** 等你回复 “同意继续” → 再写草稿并生成 PDF。
+它会自动：新建一个 `workspaces/<时间戳>/` → 找论文 → 生成大纲 → **停在 C2（大纲确认）** 等你确认 → 再写草稿并编译 PDF。
 
-可选：你也可以直接指定“用哪条流程”（需要 PDF 就选 latex 版本）：
+可选：你也可以直接指定“用哪条流程”（需要 PDF 就选 LaTeX 版本）：
 
 > 用 `pipelines/arxiv-survey-latex.pipeline.md` 给我写一个 agent 的 survey（启用 strict；先停在 C2 等我确认）
 
-术语解释（读到这里就够用）：
+如果你想“不要停在 C2”，可以在开头明确说：`C2 自动同意`（适合你已经很熟悉这条链路的情况）。
+
+术语解释（只保留你会遇到的几个）：
 - workspace：一次运行的输出目录（在 `workspaces/<name>/`）
-- pipeline：一条“从检索→结构→证据→写作→输出”的步骤清单（在 `pipelines/*.pipeline.md`）
-- skill：某一步的执行说明书/能力模块（在 `.codex/skills/*/SKILL.md`）
-- unit：流程中的一步（`UNITS.csv` 一行）
-- checkpoint / C2：会暂停等人确认的节点；C2=确认大纲后才写正文
+- skill：一个步骤的“可执行说明书”（写清输入/输出/验收/禁区）
+- unit：一次运行里的一个小任务（`UNITS.csv` 一行）
+- C2：大纲确认点；**没确认就不会写正文**
 - strict：开启严格质量门；失败会停下来并写报告（在 `output/`）
 
 ## 你会得到什么（分层产物 + 自循环入口）
 
 一个 workspace 里主要是两类东西：**运行清单** + **分阶段产物**。
+
+默认配置（A150++，对齐“成熟 survey”交付）：
+- 核心论文：`core_size=300`（对应 `papers/core_set.csv` / `citations/ref.bib`）
+- 每个 H3 的可选论文池：`per_subsection=28`（对应 `outline/mapping.tsv`）
+- 全局 unique citations：硬门槛 `>=150`，推荐目标 `>=165`（由 `draft_profile` + `citation_target` 控制）
 
 **运行清单（看进度/看卡点）**：
 - `UNITS.csv`：一行一个步骤（依赖/输入/输出/验收），卡住就看当前哪个 unit 是 `BLOCKED`
@@ -110,12 +111,13 @@ C2（搭骨架；不写正文）:
 
 C3（做“可写”的证据底座；不写正文）:
   papers/paper_notes.jsonl + papers/evidence_bank.jsonl → outline/subsection_briefs.jsonl
-  (+ papers/fulltext_index.jsonl)  # 只有你启用 fulltext 才会出现
+  + papers/fulltext_index.jsonl  # 永远存在；abstract 模式只记录 skip，fulltext 模式才会下载/抽取
 
 C4（把每小节写作包准备好；不写正文）:
   citations/ref.bib + citations/verified.jsonl
   + outline/evidence_bindings.jsonl / outline/evidence_drafts.jsonl / outline/anchor_sheet.jsonl
   → outline/writer_context_packs.jsonl
+  + outline/tables_appendix.md  # 面向读者的 Appendix 表格（索引表只作为中间产物保留）
 
 C5（写作与输出）:
   sections/*.md → output/DRAFT.md
@@ -136,8 +138,8 @@ C5（写作与输出）:
 ```
 你：写一篇关于 LLM agents 的 LaTeX survey
 
-↓ [C0-C1] 找论文：拉取候选论文 → 去重 → 精选“核心论文列表”（默认 300 篇：`papers/core_set.csv`）
-↓ [C2] 生成“大纲 + 每小节参考论文列表”（不写正文）：`outline/outline.yml` + `outline/mapping.tsv`
+↓ [C0-C1] 找论文：检索候选（默认最多 1800）→ 去重 → 得到 core set（默认 300 篇：`papers/core_set.csv`）
+↓ [C2] 生成“大纲 + 每小节论文池”（不写正文）：`outline/outline.yml` + `outline/mapping.tsv`（默认每个 H3 映射 28 篇）
    → 停在 C2 等你确认 （自动触发的行为，也可以在开头说默认跳过）
 
 你：看过没问题，回复「同意继续」
@@ -150,6 +152,7 @@ C5（写作与输出）:
    - 先写分小节文件：`sections/*.md`
    - 再合并成草稿：`output/DRAFT.md`
    - LaTeX pipeline 会额外生成：`latex/main.pdf`
+   - 目标：全局 unique citations 推荐 `>=165`（不足会触发“引用预算/注入”步骤补齐）
 
 【如果卡住】按报告定点修：
 - 开了 strict：看 `output/QUALITY_GATE.md`（最后一条就是当前原因 + 下一步）

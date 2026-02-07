@@ -10,24 +10,24 @@
 3. Complete the remaining pipelines; add more examples under `example/`.
 4. Remove redundant intermediate content in pipelines, following Occam's razor: do not add entities unless necessary.
 
-## Core Design: Skills-First + Decomposed Pipeline + Evidence-First
+## Core Idea: Break “Write a Survey” into Small Resumable Steps
 
-Research pipelines often fall into two extremes:
-- scripts only: they run, but the process is a black box (hard to debug and iterate)
-- docs only: they read well, but execution relies on human judgment and ad‑hoc decisions
+Most research pipelines drift toward one of two extremes:
+- scripts only: they run, but the process is opaque (hard to debug or improve)
+- docs only: they read well, but execution still relies on ad‑hoc human judgment
 
-This repo keeps it simple:
+This repo takes a simple approach: turn the whole workflow into a sequence of **small, auditable, resumable steps**, and write artifacts to disk at every step.
 
-1) **A skill is an executable playbook** (not a function name)
-- Each skill states what it needs, what it must produce, what “DONE” means, and what is forbidden (e.g., no prose in the structure/evidence stages).
+1) **A skill = an executable playbook (with acceptance criteria)**
+- Each skill states: required inputs, required outputs, what counts as DONE, and what is forbidden (e.g., NO PROSE in C2–C4).
 
-2) **A pipeline is a chain of small resumable steps**
-- The whole run is split into checkpoints (C0→C5).
-- Each step is a unit (one row in `UNITS.csv`). If it fails, you fix the specific artifact and resume from that step.
+2) **A unit = one resumable task**
+- A run is split into checkpoints C0→C5; each unit is one row in `UNITS.csv`.
+- When something fails, you fix the specific artifact and resume from the blocked unit (no full restart).
 
 3) **Evidence first, writing later**
-- C2–C4 build a “write-ready evidence base” (structure + per‑section paper lists + evidence packs + references).
-- C5 writes and compiles.
+- C1–C4 build a write‑ready evidence base (outline + per‑section paper pools + evidence packs + references).
+- C5 writes, merges, polishes, audits, and compiles a PDF (LaTeX pipeline).
 
 At a glance: problems vs what to look at
 
@@ -71,6 +71,8 @@ Optional: specify which pipeline to use (choose the LaTeX one if you want a PDF)
 
 > Use `pipelines/arxiv-survey-latex.pipeline.md` to write a survey on LLM agents (strict; pause at C2 for my review)
 
+If you do *not* want to pause at C2, say it explicitly up front (recommended only once you trust the workflow), e.g. “auto‑approve C2”.
+
 Glossary (only what you need here):
 - workspace: one run’s output folder under `workspaces/<name>/`
 - pipeline: the stage plan (retrieval → structure → evidence → writing → outputs), in `pipelines/*.pipeline.md`
@@ -82,6 +84,11 @@ Glossary (only what you need here):
 ## What You Get (Layered Artifacts + Self-Healing Entry Points)
 
 In a workspace, there are two things you will use most: a run checklist, and stage artifacts.
+
+Default posture (A150++, aligned with a “real survey” deliverable):
+- core set: `core_size=300` (→ `papers/core_set.csv` / `citations/ref.bib`)
+- per‑H3 paper pool: `per_subsection=28` (→ `outline/mapping.tsv`)
+- global unique citations: hard floor `>=150`, recommended target `>=165` (controlled by `draft_profile` + `citation_target`)
 
 **Run checklist (progress + where it got stuck)**:
 - `UNITS.csv`: one row per step (deps/inputs/outputs/acceptance); look for units marked `BLOCKED`
@@ -100,12 +107,13 @@ C2 (outline, no prose):
 
 C3 (build a write-ready evidence base, no prose):
   papers/paper_notes.jsonl + papers/evidence_bank.jsonl → outline/subsection_briefs.jsonl
-  (+ papers/fulltext_index.jsonl)  # only if you enable fulltext
+  + papers/fulltext_index.jsonl  # always present; in abstract mode it records “skip”, fulltext mode downloads/extracts
 
 C4 (prepare per-section writing packs, no prose):
   citations/ref.bib + citations/verified.jsonl
   + outline/evidence_bindings.jsonl / outline/evidence_drafts.jsonl / outline/anchor_sheet.jsonl
   → outline/writer_context_packs.jsonl
+  + outline/tables_appendix.md  # reader-facing Appendix tables (index tables stay intermediate)
 
 C5 (writing and outputs):
   sections/*.md → output/DRAFT.md
@@ -126,8 +134,8 @@ C5 (writing and outputs):
 ```
 You: Write a LaTeX survey about LLM agents (pause at the outline for my review)
 
-↓ [C0-C1] Find papers: retrieve candidates → dedupe → select a core reading list (default 300 in `papers/core_set.csv`)
-↓ [C2] Produce an outline + per-section reading lists (no prose): `outline/outline.yml` + `outline/mapping.tsv`
+↓ [C0-C1] Find papers: retrieve candidates (default cap: 1800) → dedupe → select a core set (default 300 in `papers/core_set.csv`)
+↓ [C2] Produce an outline + per‑H3 paper pools (no prose): `outline/outline.yml` + `outline/mapping.tsv` (default 28 papers per H3)
    → pause at C2 for your approval
 
 You: Looks good. Continue.
@@ -140,6 +148,7 @@ You: Looks good. Continue.
    - write per-section files: `sections/*.md`
    - merge into the draft: `output/DRAFT.md`
    - LaTeX pipeline also compiles: `latex/main.pdf`
+   - target: global unique citations recommended `>=165` (the workflow includes a “citation budget/injection” step if needed)
 
 If it gets blocked:
 - strict mode: read `output/QUALITY_GATE.md`
