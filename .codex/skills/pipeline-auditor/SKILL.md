@@ -19,7 +19,7 @@ It answers:
 - did the draft fall back to generator voice (navigation/narration templates)?
 - is citation density/health sufficient for a survey-like draft?
 
-This skill is analysis-only. It does not edit content.
+This skill is analysis-only. It does not edit content. For `survey`/`deep`, style/citation-shape violations are blocking by default.
 
 ## Inputs
 
@@ -51,6 +51,7 @@ A150++ citation targets (used by the auditor):
 - Synthesis stem repetition: repeated `Taken together, ...` and similar high-signal generator stems.
 - Numeric claim context: numbers without minimal evaluation context tokens (benchmark/dataset/metric/budget/cost).
 - Citation health (if `citations/ref.bib` exists): undefined keys, duplicates, basic formatting red flags.
+- Citation-shape hard gate (`survey`/`deep`): no adjacent citation blocks (`[@a] [@b]`), no duplicate keys inside one block (`[@a; @a]`), and per-H3 mid-sentence citation ratio >=30%.
 - Citation scope (if `outline/evidence_bindings.jsonl` exists): citations used per H3 should stay within the bound evidence set.
 
 ## How to use the report (routing table)

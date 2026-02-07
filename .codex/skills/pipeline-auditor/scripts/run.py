@@ -92,6 +92,19 @@ def _stem(text: str, *, n_words: int = 4) -> str:
     words = [w for w in re.findall(r"[A-Za-z0-9']+", (text or "").lower()) if w]
     return " ".join(words[: int(n_words)])
 
+
+def _cite_keys_in_block(block: str) -> list[str]:
+    return [k for k in re.findall(r"[A-Za-z0-9:_-]+", (block or "").strip()) if k]
+
+
+def _has_mid_sentence_cite(para: str, *, tail_chars: int = 45) -> bool:
+    # True when at least one citation appears before the trailing tail region.
+    cites = list(re.finditer(r"\[@[^\]]+\]", para or ""))
+    if not cites:
+        return False
+    n = len(para or "")
+    return any(m.start() < max(0, n - int(tail_chars)) for m in cites)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", required=True)
@@ -317,13 +330,15 @@ def main() -> int:
 
 
 
-    # Template phrase family stats (non-blocking; helps de-templating without brittle hard blocks).
+    # Template phrase family stats (reported always; selected families become hard blocks for survey/deep).
     template_family_details: list[tuple[str, int, list[str]]] = []
+    family_counts: dict[str, int] = {}
 
     def _add_family(label: str, pat: str, *, warn_at: int) -> None:
         n = len(re.findall(pat, draft))
         if not n:
             return
+        family_counts[label] = n
         exs = _examples(draft, pat, max_examples=3)
         template_family_details.append((label, n, exs))
         if n >= int(warn_at):
@@ -396,6 +411,35 @@ def main() -> int:
         stem0, n0 = rep_stems[0]
         warnings.append(f"repeated H3 opener stem across subsections ({n0}×): '{stem0} ...' (vary openers)")
 
+    # Final paper-voice hard gate for survey/deep runs.
+    if draft_profile in {"survey", "deep"}:
+        narr_n = family_counts.get("subsection narration ('This subsection …')", 0)
+        nav_n = family_counts.get("PPT-like navigation ('We now turn to …' / 'In the next section …')", 0)
+        taken_together_n = family_counts.get("synthesis opener (Taken together, ...)", 0)
+        meta_guidance_n = family_counts.get("meta survey-guidance phrasing (survey ... should ...)", 0)
+
+        if narr_n > 0:
+            blocking.append(
+                f"template narration opener remains ({narr_n}×, e.g., 'This subsection ...'); rewrite openers to content-bearing claims"
+            )
+        if nav_n > 0:
+            blocking.append(
+                f"slide-like navigation phrasing remains ({nav_n}×, e.g., 'We now turn to ...'); rewrite as argument bridges"
+            )
+        if taken_together_n >= 2:
+            blocking.append(
+                f"repeated synthesis stem 'Taken together,' ({taken_together_n}×); vary synthesis cadence across H3"
+            )
+        if meta_guidance_n > 0:
+            blocking.append(
+                f"meta guidance phrasing remains ({meta_guidance_n}×, e.g., 'survey ... should ...'); rewrite as literature-facing observations"
+            )
+        if rep_stems and rep_stems[0][1] >= 3:
+            stem0, n0 = rep_stems[0]
+            blocking.append(
+                f"repeated H3 opener stem still high ({n0}×: '{stem0} ...'); de-template subsection openings"
+            )
+
     missing_h3 = []
     if expected:
         for _, sid in expected.items():
@@ -459,6 +503,51 @@ def main() -> int:
                 f"unique citations below recommended target ({len(cited)}; recommend >= {rec_unique} for {draft_profile} profile)"
                 + (f" [hard={min_unique_hard}, rec_frac={int(len(bib_keys) * 0.55)}, bib={len(bib_keys)}]" if bib_keys else "")
             )
+
+    # Citation-shape hard gate (reader-facing citation quality):
+    # 1) no adjacent citation blocks like `... [@a] [@b]`
+    # 2) no duplicate keys inside one citation block like `[@a; @a]`
+    # 3) each H3 should keep a minimum ratio of mid-sentence citations to avoid tail-dump style
+    adj_cite_pat = r"\[@[^\]]+\]\s*\[@[^\]]+\]"
+    adj_hits = list(re.finditer(adj_cite_pat, draft))
+    if adj_hits:
+        blocking.append(
+            f"adjacent citation blocks detected ({len(adj_hits)}×, e.g., `[@a] [@b]`); merge same-sentence citations into one block"
+        )
+        template_family_details.append(("adjacent citation blocks", len(adj_hits), _examples(draft, adj_cite_pat)))
+
+    dup_in_block = 0
+    for m in re.finditer(r"\[@([^\]]+)\]", draft):
+        keys = _cite_keys_in_block(m.group(1))
+        if keys and len(set(keys)) != len(keys):
+            dup_in_block += 1
+    if dup_in_block:
+        blocking.append(
+            f"citation blocks with duplicate keys detected ({dup_in_block}×, e.g., `[@x; @x]`); deduplicate keys inside each citation block"
+        )
+
+    mid_ratio_floor = 0.30 if draft_profile in {"survey", "deep"} else 0.20
+    low_mid_ratio: list[str] = []
+    for sid, rec in found.items():
+        body = str(rec.get("body") or "")
+        paras = _split_paragraphs(body)
+        cited_paras = 0
+        mid_cited_paras = 0
+        for para in paras:
+            if "[@" not in para:
+                continue
+            cited_paras += 1
+            if _has_mid_sentence_cite(para):
+                mid_cited_paras += 1
+        if cited_paras < 4:
+            continue
+        ratio = mid_cited_paras / max(1, cited_paras)
+        if ratio < mid_ratio_floor:
+            low_mid_ratio.append(f"{sid}({mid_cited_paras}/{cited_paras}={ratio:.0%})")
+    if low_mid_ratio:
+        blocking.append(
+            f"mid-sentence citation ratio below {int(mid_ratio_floor * 100)}% in some H3: {', '.join(low_mid_ratio[:10])}"
+        )
 
     # Paragraph-level no-citation rate (content-only; ignore headings/tables/short transitions).
     paras_all = _split_paragraphs(draft)

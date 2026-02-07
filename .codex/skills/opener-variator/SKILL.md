@@ -34,7 +34,7 @@ Optional (helps you stay aligned):
 
 ## Workflow (route from the self-loop report)
 
-1) Open `output/WRITER_SELFLOOP_TODO.md` and locate `## Style Smells (non-blocking)`.
+1) Open `output/WRITER_SELFLOOP_TODO.md` and locate `## Style Smells`.
 2) Treat the flagged `sections/S*.md` list as the *only* scope for this pass.
 3) For each flagged file:
    - Optional: look up its entry in `outline/writer_context_packs.jsonl` and read `opener_mode` / `tension_statement` / `thesis` to stay aligned.

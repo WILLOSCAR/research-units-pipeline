@@ -111,7 +111,7 @@ def _load_voice_palette(*, workspace: Path) -> dict[str, Any]:
 
 
 def _style_smells_for_h3(*, workspace: Path, h3_paths: list[str]) -> list[str]:
-    # Non-blocking style-smell hints (deterministic, conservative).
+    # Style-smell hints (deterministic, conservative).
     # These are not hard gates: they exist to surface high-signal paper-voice drift
     # that can persist even when structural quality checks pass.
 
@@ -355,7 +355,7 @@ def main() -> int:
             ]
         )
 
-        # Non-blocking style smells: surface high-signal generator-voice drift even when hard checks pass.
+        # Style-smell diagnostics: surface high-signal generator-voice drift for mandatory C5 cleanup.
         manifest = _read_jsonl(workspace / manifest_rel)
         h3_paths: list[str] = []
         for rec in manifest:
@@ -371,7 +371,7 @@ def main() -> int:
         h3_paths = sorted(set(h3_paths))
 
         style_lines = _style_smells_for_h3(workspace=workspace, h3_paths=h3_paths)
-        lines.extend(["## Style Smells (non-blocking)", ""])
+        lines.extend(["## Style Smells", ""])
         if style_lines:
             lines.extend(style_lines)
         else:
