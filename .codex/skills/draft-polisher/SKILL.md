@@ -95,11 +95,16 @@ Working style:
 - If a sentence sounds stronger than the evidence level (abstract-only), rewrite it into a qualified statement.
 - When in doubt, check the subsection’s evidence pack in `outline/evidence_drafts.jsonl` and keep claims aligned to snippets.
 
-4) **Quantitative claim hygiene**
+4) **Citation shape normalization**
+- Merge adjacent citation blocks in the same sentence (avoid `[@a] [@b]`).
+- Deduplicate keys inside one block (avoid `[@a; @a]`).
+- Avoid tail-only citation dumps: keep some citations in the claim sentence itself (mid-sentence), not only paragraph end.
+
+5) **Quantitative claim hygiene**
 - If you keep a number, ensure the sentence also states (without guessing): task type + metric definition + relevant constraint (budget/cost/tool access), and the citation is embedded in that sentence.
 - Avoid ambiguous model naming (e.g., “GPT-5”) unless the cited paper uses that exact label; otherwise use the paper’s naming or a neutral description.
 
-5) **No pipeline voice**
+6) **No pipeline voice**
 - Remove scaffolding phrases like:
   - “We use the following working claim …”
   - “The main axes we track are …”

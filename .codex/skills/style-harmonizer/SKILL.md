@@ -14,7 +14,7 @@ description: |
 Purpose: remove subtle generator-voice signals that can survive structural gates.
 
 This skill is not a full rewrite. It is a targeted rewrite queue:
-- only touch the specific `sections/*.md` files flagged under `## Style Smells (non-blocking)`
+- only touch the specific `sections/*.md` files flagged under `## Style Smells`
 - keep facts and citation keys unchanged
 
 ## Inputs
@@ -128,7 +128,7 @@ Mini example (paraphrase only):
 ## Workflow (minimal)
 
 1) Read `output/WRITER_SELFLOOP_TODO.md`
-- Find `## Style Smells (non-blocking)` and the file list.
+- Find `## Style Smells` and the file list.
 
 2) Rewrite only the flagged files
 - Make small edits: opener/closer stems, sentence shape, connector variety.

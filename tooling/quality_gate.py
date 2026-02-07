@@ -4186,6 +4186,72 @@ def _check_draft(workspace: Path, outputs: list[str]) -> list[QualityIssue]:
                     )
                 )
 
+    # Citation-shape hygiene (reader-facing quality):
+    # - disallow adjacent citation blocks like `... [@a] [@b]`
+    # - disallow duplicate keys inside one citation block like `[@a; @a]`
+    # - keep a minimum mid-sentence citation ratio per subsection (avoid tail-only cite style)
+    adj_cite_pat = r"\[@[^\]]+\]\s*\[@[^\]]+\]"
+    adj_hits = len(re.findall(adj_cite_pat, text))
+    if adj_hits:
+        issues.append(
+            QualityIssue(
+                code="draft_adjacent_citation_blocks",
+                message=(
+                    f"Draft contains adjacent citation blocks ({adj_hits}×, e.g., `[@a] [@b]`); "
+                    "merge same-sentence citations into a single citation block."
+                ),
+            )
+        )
+
+    dup_in_block = 0
+    for m in re.finditer(r"\[@([^\]]+)\]", text):
+        keys = [k for k in re.findall(r"[A-Za-z0-9:_-]+", (m.group(1) or "")) if k]
+        if keys and len(set(keys)) != len(keys):
+            dup_in_block += 1
+    if dup_in_block:
+        issues.append(
+            QualityIssue(
+                code="draft_duplicate_keys_in_citation_block",
+                message=(
+                    f"Draft contains citation blocks with duplicate keys ({dup_in_block}×, e.g., `[@x; @x]`); "
+                    "deduplicate keys inside each citation block."
+                ),
+            )
+        )
+
+    if profile == "arxiv-survey":
+        h3_blocks = _split_h3_blocks(text)
+        floor = 0.30 if _draft_profile(workspace) in {"survey", "deep"} else 0.20
+        low_ratio: list[str] = []
+        for title, body in h3_blocks:
+            paras = [p.strip() for p in re.split(r"\n\s*\n", body or "") if p.strip()]
+            cited = 0
+            mid = 0
+            for para in paras:
+                if "[@" not in para:
+                    continue
+                cited += 1
+                cites = list(re.finditer(r"\[@[^\]]+\]", para))
+                if any(m.start() < max(0, len(para) - 45) for m in cites):
+                    mid += 1
+            if cited < 4:
+                continue
+            ratio = mid / max(1, cited)
+            if ratio < floor:
+                short = title[:48] + ("..." if len(title) > 48 else "")
+                low_ratio.append(f"{short} ({mid}/{cited}={ratio:.0%})")
+        if low_ratio:
+            issues.append(
+                QualityIssue(
+                    code="draft_low_mid_sentence_citation_ratio",
+                    message=(
+                        f"Some subsections have low mid-sentence citation ratio (<{int(floor * 100)}%): "
+                        + "; ".join(low_ratio[:8])
+                        + ". Move some citations into the claim sentences they support (not only paragraph tails)."
+                    ),
+                )
+            )
+
     # Detect repeated "open problems" boilerplate across subsections.
     open_lines = [ln.strip() for ln in text.splitlines() if ln.strip().lower().startswith(("open problems:", "开放问题："))]
     if open_lines:
@@ -4654,6 +4720,39 @@ def _check_tutorial_spec(workspace: Path, outputs: list[str]) -> list[QualityIss
             )
         )
     return issues
+
+
+
+
+def _split_h3_blocks(text: str) -> list[tuple[str, str]]:
+    """Split Markdown draft into H3 blocks: [(title, body)]."""
+
+    out: list[tuple[str, str]] = []
+    cur_title = ""
+    cur_lines: list[str] = []
+
+    def _flush() -> None:
+        nonlocal cur_title, cur_lines
+        if not cur_title:
+            return
+        out.append((cur_title, "\n".join(cur_lines).strip()))
+
+    for raw in (text or "").splitlines():
+        if raw.startswith("### "):
+            _flush()
+            cur_title = raw[4:].strip()
+            cur_lines = []
+            continue
+        if raw.startswith("## "):
+            _flush()
+            cur_title = ""
+            cur_lines = []
+            continue
+        if cur_title:
+            cur_lines.append(raw)
+
+    _flush()
+    return out
 
 
 def _extract_section_body(text: str, *, heading_re: str) -> str | None:

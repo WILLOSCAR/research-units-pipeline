@@ -38,6 +38,7 @@ target_artifacts:
   - sections/sections_manifest.jsonl
   - sections/h3_bodies.refined.ok
   - sections/style_harmonized.refined.ok
+  - sections/opener_varied.refined.ok
   - sections/abstract.md
   - sections/S1.md
   - sections/S2.md
@@ -206,6 +207,7 @@ required_skills:
 - section-logic-polisher
 - argument-selfloop
 - style-harmonizer
+- opener-variator
 - transition-weaver
 - section-merger
 - post-merge-voice-gate
@@ -220,7 +222,6 @@ optional_skills:
 - subsection-polisher
 - redundancy-pruner
 - terminology-normalizer
-- opener-variator
 - limitation-weaver
 - evaluation-anchor-checker
 - latex-scaffold
@@ -255,7 +256,7 @@ Notes:
   - **Openers-last**: draft the middle first; rewrite paragraph 1 last so it reflects real content (front matter + H3).
 - Writing self-loop gate: `subsection-writer` ensures the full `sections/` file set exists (and emits `sections/sections_manifest.jsonl`); `writer-selfloop` blocks until depth/citation-scope/paper-voice checks pass, writing `output/WRITER_SELFLOOP_TODO.md` (PASS/FAIL).
 - Argument self-loop gate: `argument-selfloop` blocks “smooth but hollow” sections by making the argument chain explicit (per-section paragraph moves + a global dependency skeleton). Its ledgers are intermediate artifacts and must never be merged into the paper.
-- Style hygiene (non-blocking): even on PASS, read `output/WRITER_SELFLOOP_TODO.md`'s `## Style Smells (non-blocking)` section. If it flags repeated slot phrases (e.g., `Two limitations ...`) or overused stems, run `style-harmonizer` on the listed files and re-run `writer-selfloop`.
+- Style hygiene (C5 hard gate for `survey`/`deep`): treat `output/WRITER_SELFLOOP_TODO.md` Style Smells as mandatory fixes. Run `style-harmonizer` + `opener-variator` on flagged files, then rerun `writer-selfloop` before merge.
 - Micro-fix routing (preferred over broad rewrites): if Style Smells are specific, use targeted micro-skills before a general harmonize pass:
   - opener cadence / “overview” narration → `opener-variator`
   - count-based limitation slots (“Two limitations…”) → `limitation-weaver`
@@ -278,6 +279,7 @@ Notes:
   - Tone target: calm, academic, understated; delete hype words (`clearly`, `obviously`) and “PPT speaker notes”.
   - Keep evidence-policy disclaimers **once** in front matter (not repeated across H3s).
   - If you cite numbers, include minimal evaluation context (task + metric + constraint/budget/cost) in the same paragraph.
+  - Citation shape must be reader-facing: no adjacent citation blocks (e.g., `[@a] [@b]`), no duplicate keys in one block (e.g., `[@a; @a]`), and avoid tail-only citation style by keeping mid-sentence citations in each H3.
 - `section-merger` merges `sections/*.md` plus `outline/transitions.md` (within-chapter H3→H3 by default). Between-H2 transition insertion is optional: create `outline/transitions.insert_h2.ok` in the workspace if you want narrator-style handoffs included.
 - Tables are part of the default deliverable: `outline/tables_appendix.md` is inserted into the draft by `section-merger` as a single Appendix block (index tables in `outline/tables_index.md` remain intermediate) unless `outline/tables.insert.off` exists. Other visuals (`outline/timeline.md`, `outline/figures.md`) remain intermediate by default.
 - Citation scope policy: citations are subsection-first (from `outline/evidence_bindings.jsonl`), with limited reuse allowed within the same H2 chapter to reduce brittleness; avoid cross-chapter “free cite” drift.
@@ -287,7 +289,7 @@ Notes:
 - If you intentionally add/remove citations after an earlier polish run, reset the citation-anchoring baseline before rerunning `draft-polisher`:
   - delete `output/citation_anchors.prepolish.jsonl` (workspace-local), then rerun `draft-polisher`.
 - Recommended skills (toolkit, not a rigid one-shot chain):
-  - Modular drafting: `subsection-writer` → `writer-selfloop` → `section-logic-polisher` → `argument-selfloop` → `style-harmonizer` → `transition-weaver` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor`.
+  - Modular drafting: `subsection-writer` → `writer-selfloop` → `section-logic-polisher` → `argument-selfloop` → `style-harmonizer` → `opener-variator` → `transition-weaver` → `section-merger` → `draft-polisher` → `global-reviewer` → `pipeline-auditor`.
   - Legacy one-shot drafting: `prose-writer` (kept for quick experiments; less debuggable).
   - If the draft reads like “paragraph islands”, run `section-logic-polisher` and patch only failing `sections/S*.md` until PASS, then merge.
 - Add `pipeline-auditor` after `global-reviewer` as a regression test (blocks on ellipsis, repeated boilerplate, and citation hygiene).
@@ -299,3 +301,4 @@ Notes:
   - Front matter: `survey` profile expects Introduction>=35 and Related Work>=50 unique citations (dense positioning; no cite dumps).
   - Global: `pipeline-auditor` gates on **global unique citations across the full draft**. A150++ defaults: hard `>=150`; recommended `>=165` (when bib=300). `queries.md:citation_target` controls which is blocking (default: `recommended`). If it fails, prefer `citation-diversifier` → `citation-injector` (in-scope, NO NEW FACTS) using each H3’s `allowed_bibkeys_selected` / `allowed_bibkeys_mapped` from `outline/writer_context_packs.jsonl`.
 - Anti-template: drafts containing ellipsis placeholders (`…`) or leaked scaffold instructions (e.g., "enumerate 2-4 ...") should block and be regenerated from improved outline/mapping/evidence artifacts.
+- Final polish hard gates (`survey`/`deep`): block on narration-template openers (e.g., `This subsection ...`), slide navigation phrasing, repeated opener stems/口癖, adjacent citation blocks (`[@a] [@b]`), duplicate keys in one block (`[@a; @a]`), and low H3 mid-sentence citation ratio (<30%).
