@@ -172,6 +172,17 @@ Paper voice (keep it natural):
 - Avoid count-based paragraph openers as a reusable slot ("Two limitations...", "Three takeaways..."); vary phrasing and embed caveats inside contrast paragraphs instead.
 - Never leak pipeline words (workspace/unit/evidence pack/quality gate) into the draft.
 
+
+## Write For Curation (avoid 'only gets longer')
+
+This pipeline includes a C5 curation pass (`paragraph-curator`). Draft H3 paragraphs so they are easy to keep/merge:
+
+- One primary move per paragraph (claim/setup/contrast/eval/boundary/conclusion). End with a reusable output sentence.
+- Avoid kitchen-sink paragraphs (many axes + many cites). Curation works by fusing 2-3 clean paragraphs.
+- If a paragraph is high-leverage (paragraph-1 thesis sentence, synthesis paragraph, evaluation anchor), draft 2 candidate versions in parallel (different angle), then keep the better one (or fuse two winners). Do not leave both candidates in the final text.
+- Stay near the paragraph budget (survey: 10-12, deep: 11-13). If you need more coverage, replace weak paragraphs rather than appending.
+- Keep citation keys stable within the subsection (no cross-subsection moves). If you need more citations later, rely on `citation-diversifier`/`citation-injector` (in-scope, NO NEW FACTS).
+
 ## Opener palette (avoid \"same first sentence everywhere\")
 
 Every H3 needs an opener, but openers must not look like a generated table-of-contents.

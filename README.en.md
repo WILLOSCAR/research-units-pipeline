@@ -10,33 +10,33 @@
 3. Complete the remaining pipelines; add more examples under `example/`.
 4. Remove redundant intermediate content in pipelines, following Occam's razor: do not add entities unless necessary.
 
-## Core Idea: Break “Write a Survey” into Small Resumable Steps
+## Core Design: Skills-First + Resumable Units + Evidence First
 
-Most research pipelines drift toward one of two extremes:
-- scripts only: they run, but the process is opaque (hard to debug or improve)
-- docs only: they read well, but execution still relies on ad‑hoc human judgment
+Research workflows often drift toward one of two extremes:
+- **scripts only**: it runs, but it is a black box (hard to debug or improve)
+- **docs only**: it reads well, but execution still relies on ad-hoc judgment (easy to drift)
 
-This repo takes a simple approach: turn the whole workflow into a sequence of **small, auditable, resumable steps**, and write artifacts to disk at every step.
+This repo turns “write a survey” into **small, auditable, resumable steps**, and writes intermediate artifacts to disk at every step.
 
-1) **A skill = an executable playbook (with acceptance criteria)**
-- Each skill states: required inputs, required outputs, what counts as DONE, and what is forbidden (e.g., NO PROSE in C2–C4).
+1) **Skill = an executable playbook**
+- Each skill states `inputs / outputs / acceptance / guardrails` (e.g., C2–C4 are **NO PROSE**).
 
-2) **A unit = one resumable task**
-- A run is split into checkpoints C0→C5; each unit is one row in `UNITS.csv`.
-- When something fails, you fix the specific artifact and resume from the blocked unit (no full restart).
+2) **Unit = one resumable step**
+- Each unit is one row in `UNITS.csv` (deps + inputs/outputs + DONE criteria).
+- If a unit is BLOCKED, you fix the referenced artifact and resume from that unit (no full restart).
 
-3) **Evidence first, writing later**
-- C1–C4 build a write‑ready evidence base (outline + per‑section paper pools + evidence packs + references).
-- C5 writes, merges, polishes, audits, and compiles a PDF (LaTeX pipeline).
+3) **Evidence first**
+- C1 retrieves papers; C2 builds an outline and per-section paper pools; C3/C4 turn them into write-ready evidence + references; C5 writes and produces the final draft/PDF.
 
-At a glance: problems vs what to look at
+At a glance (what to look at first):
 
-| What goes wrong | What this repo uses | Where you look / what you fix |
+| If you need to... | Look at | Typical fix |
 |---|---|---|
-| Black box: failures are opaque | Unit contract + reports that point to artifacts | `UNITS.csv` / `output/*REPORT*.md` / `output/*TODO*.md` |
-| Docs aren’t executable | Skills are explicit playbooks | `.codex/skills/*/SKILL.md` |
-| Hollow / templated writing | Evidence-first + writing self-loops | `outline/*` / `sections/*` / `output/WRITER_SELFLOOP_TODO.md` |
-| Want a different deliverable | Pipelines only orchestrate; skills hold the capability | `pipelines/*.pipeline.md` |
+| expand coverage / get more papers | `queries.md` + `papers/retrieval_report.md` | add keyword buckets, raise `max_results`, import offline sets, snowball |
+| fix outline or weak section pools | `outline/outline.yml` + `outline/mapping.tsv` | merge/reorder sections, raise `per_subsection`, rerun mapping |
+| fix “evidence-thin” writing | `papers/paper_notes.jsonl` + `outline/evidence_drafts.jsonl` | improve notes/packs first, then write |
+| reduce templated voice / redundancy | `output/WRITER_SELFLOOP_TODO.md` + `output/PARAGRAPH_CURATION_REPORT.md` + `sections/*` | targeted rewrites + best-of-N candidates + paragraph fusion, then rerun gates |
+| boost global unique citations | `output/CITATION_BUDGET_REPORT.md` + `citations/ref.bib` | in-scope injection (NO NEW FACTS) |
 
 Chinese version: [`README.md`](README.md).
 
@@ -86,12 +86,13 @@ Glossary (only what you need here):
 In a workspace, there are two things you will use most: a run checklist, and stage artifacts.
 
 Default posture (A150++, aligned with a “real survey” deliverable):
+- retrieval cap: `max_results=1800` (per query bucket)
 - core set: `core_size=300` (→ `papers/core_set.csv` / `citations/ref.bib`)
 - per‑H3 paper pool: `per_subsection=28` (→ `outline/mapping.tsv`)
-- global unique citations: hard floor `>=150`, recommended target `>=165` (controlled by `draft_profile` + `citation_target`)
+- global unique citations: hard floor `>=150`, recommended target `>=165` (by default the workflow tries to close the recommended gap)
 
 **Run checklist (progress + where it got stuck)**:
-- `UNITS.csv`: one row per step (deps/inputs/outputs/acceptance); look for units marked `BLOCKED`
+- `UNITS.csv`: ~43–45 units depending on pipeline (LaTeX/PDF pipelines have a few extra); look for units marked `BLOCKED`
 - `DECISIONS.md`: human review points (most importantly **C2: outline approval before prose**)
 - `STATUS.md`: the run log (what ran, and when)
 
@@ -126,6 +127,7 @@ C5 (writing and outputs):
 - writing quality (fix only listed files): `output/WRITER_SELFLOOP_TODO.md`
 - paragraph “jump cuts”: `output/SECTION_LOGIC_REPORT.md`
 - argument continuity + consistency: `output/ARGUMENT_SELFLOOP_TODO.md` (the single source of truth lives in `output/ARGUMENT_SKELETON.md# Consistency Contract`)
+- redundancy/convergence (select -> best-of-N -> fuse): `output/PARAGRAPH_CURATION_REPORT.md`
 - low citation coverage: `output/CITATION_BUDGET_REPORT.md`
 - final audit: `output/AUDIT_REPORT.md`
 
@@ -134,7 +136,7 @@ C5 (writing and outputs):
 ```
 You: Write a LaTeX survey about LLM agents (pause at the outline for my review)
 
-↓ [C0-C1] Find papers: retrieve candidates (default cap: 1800) → dedupe → select a core set (default 300 in `papers/core_set.csv`)
+↓ [C0-C1] Find papers: retrieve candidates (`max_results=1800` per bucket; dedup target >=1200) → select a core set (default 300 in `papers/core_set.csv`)
 ↓ [C2] Produce an outline + per‑H3 paper pools (no prose): `outline/outline.yml` + `outline/mapping.tsv` (default 28 papers per H3)
    → pause at C2 for your approval
 
@@ -146,6 +148,7 @@ You: Looks good. Continue.
    - `outline/writer_context_packs.jsonl` (per-section writing packs: what to compare + which papers are in scope)
 ↓ [C5] Write and output:
    - write per-section files: `sections/*.md`
+   - iterate inside C5: writing/logic/argument + paragraph curation (all still C5)
    - merge into the draft: `output/DRAFT.md`
    - LaTeX pipeline also compiles: `latex/main.pdf`
    - target: global unique citations recommended `>=165` (the workflow includes a “citation budget/injection” step if needed)
@@ -201,12 +204,11 @@ flowchart LR
   OUT --> TEX["latex/<br/>main.tex → main.pdf"]
 ```
 
-For delivery, only the latest successfully-run example directory matters (timestamped). Keep 2–3 older runs for regression comparisons.
+For delivery, focus on the **latest timestamped** example directory (keep 2–3 older runs for regression):
 
-The three files you will open most often:
 - Draft (Markdown): `example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/output/DRAFT.md`
-- PDF: `example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/latex/main.pdf`
-- QA / Audit report: `example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/output/AUDIT_REPORT.md`
+- PDF output: `example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/latex/main.pdf`
+- QA / audit report: `example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/output/AUDIT_REPORT.md`
 
 ## Feel Free to Open Issues (Help Improve the Writing Workflow)
 

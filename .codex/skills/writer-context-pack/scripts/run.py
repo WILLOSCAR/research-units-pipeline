@@ -500,15 +500,17 @@ def main() -> int:
             min_comp = 7
             min_lim = 3
 
-        # Writer-executable minima: smaller than availability minima, but still forces argument moves.
+        # Writer-executable minima: smaller than availability minima, but still forces real argument moves.
+        # A150++ (survey deliverable) expects denser packs; keep the writer minima non-trivial so drafting
+        # does not collapse into per-paper summaries.
         if draft_profile == "deep":
+            must_anchor = 6
+            must_comp = 6
+            must_lim = 3
+        else:
             must_anchor = 5
             must_comp = 5
             must_lim = 3
-        else:
-            must_anchor = 4
-            must_comp = 4
-            must_lim = 2
 
         must_use = {
             "min_anchor_facts": must_anchor,

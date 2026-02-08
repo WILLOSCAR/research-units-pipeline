@@ -123,7 +123,7 @@ Rewrite locally when:
 6) Rerun the gate until PASS
 
 After PASS (merge-aware voice safety):
-- Proceed to `section-logic-polisher` -> `argument-selfloop` -> `style-harmonizer` -> `opener-variator` -> `transition-weaver` -> `section-merger` -> `post-merge-voice-gate`.
+- Proceed to `section-logic-polisher` -> `argument-selfloop` -> `paragraph-curator` -> `style-harmonizer` -> `opener-variator` -> `transition-weaver` -> `section-merger` -> `post-merge-voice-gate`.
 - If `post-merge-voice-gate` FAILs with `source: transitions`, fix `outline/transitions.md` via `transition-weaver` and re-merge (do not patch the merged draft).
 
 After PASS (mandatory style hygiene for `survey`/`deep`):

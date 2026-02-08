@@ -30,6 +30,8 @@ Optional (helps you stay aligned):
 
 ## Outputs
 
+Note: keep this as an openers-last pass. Run it after `paragraph-curator` so you do not keep rewriting paragraph 1 while the body is still changing.
+
 - Updated `sections/S<sub_id>.md` files (still body-only; no headings)
 
 ## Workflow (route from the self-loop report)
@@ -39,6 +41,7 @@ Optional (helps you stay aligned):
 3) For each flagged file:
    - Optional: look up its entry in `outline/writer_context_packs.jsonl` and read `opener_mode` / `tension_statement` / `thesis` to stay aligned.
    - Rewrite only the opener paragraph (or first 2-4 sentences). Preserve meaning and citation keys.
+   - Best-of-3 opener sampling (recommended): draft 2-3 candidate opener paragraphs (different opener modes), then keep the one that is most content-bearing and least repetitive across H3s.
 4) Rerun `writer-selfloop` and confirm the Style Smells list shrinks.
 
 ## Role prompt: Opener Editor (paper voice)

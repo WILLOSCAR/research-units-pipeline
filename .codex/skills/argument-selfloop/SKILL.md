@@ -36,6 +36,10 @@ Outputs:
 
 These files are *not* reader-facing and must never be merged into `output/DRAFT.md`.
 
+Downstream:
+- `paragraph-curator` uses `output/SECTION_ARGUMENT_SUMMARIES.jsonl` (moves/outputs) + the `## Consistency Contract` to run a controlled select->evaluate->subset->fuse pass without changing citation keys.
+
+
 
 ## What this self-loop enforces (your 3 invariants)
 

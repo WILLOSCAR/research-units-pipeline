@@ -15,6 +15,9 @@ Goal: turn a first-pass draft into readable survey prose **without breaking the 
 
 This is a local polish pass: de-template + coherence + terminology + redundancy pruning.
 
+Note: if the main issue is structural redundancy from section accumulation, push the change upstream to `sections/` and use `paragraph-curator` before merge. `draft-polisher` should not be the primary place where you decide which paragraphs to keep.
+
+
 
 ## Role cards (use explicitly)
 
@@ -124,6 +127,11 @@ Working style:
 ## Three passes (recommended)
 
 ### Pass 1 — Subsection polish (structure + de-template)
+
+Best-of-2 micro-polish (recommended):
+- For any sentence/paragraph you touch, draft 2 candidate rewrites, then keep the better one.
+- Choose with a simple rubric: move clarity, no template stem, citations stay anchored, and citation shape stays reader-facing (no adjacent cite blocks / dup keys).
+- Do not keep both candidates. Pick one and move on (the goal is convergence, not endless rewriting).
 
 Role split:
 - **Editor**: rewrite sentences for clarity and flow.

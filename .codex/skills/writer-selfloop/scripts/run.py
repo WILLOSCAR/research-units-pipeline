@@ -350,7 +350,7 @@ def main() -> int:
                 "## Summary",
                 "",
                 "- No section-level quality issues detected.",
-                "- Proceed to `section-logic-polisher` -> `transition-weaver` -> `section-merger`.",
+                "- Next: `section-logic-polisher` -> `argument-selfloop` -> `paragraph-curator` -> (style/openers) -> `transition-weaver` -> `section-merger`.",
                 "",
             ]
         )

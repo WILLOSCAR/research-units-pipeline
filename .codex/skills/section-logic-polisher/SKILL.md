@@ -17,6 +17,9 @@ Purpose: close the main “paper feel” gap that remains even when a subsection
 
 This is a **local, per-H3** polish step that happens after drafting and before merging.
 
+Note: if the main problem is redundancy/overgrowth (sections only get longer), use `paragraph-curator` for a select->fuse pass. This skill stays focused on thesis + bridges.
+
+
 ## What this skill blocks on (and what it does not)
 
 Blocking (must fix):

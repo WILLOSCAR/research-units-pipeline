@@ -1,6 +1,6 @@
 ---
 name: arxiv-survey-latex
-version: 3.6
+version: 3.7
 target_artifacts:
   - STATUS.md
   - UNITS.csv
@@ -37,6 +37,7 @@ target_artifacts:
   - citations/verified.jsonl
   - sections/sections_manifest.jsonl
   - sections/h3_bodies.refined.ok
+  - sections/paragraphs_curated.refined.ok
   - sections/style_harmonized.refined.ok
   - sections/opener_varied.refined.ok
   - sections/abstract.md
@@ -52,6 +53,7 @@ target_artifacts:
   - output/ARGUMENT_SELFLOOP_TODO.md
   - output/SECTION_ARGUMENT_SUMMARIES.jsonl
   - output/ARGUMENT_SKELETON.md
+  - output/PARAGRAPH_CURATION_REPORT.md
   - output/FRONT_MATTER_REPORT.md
   - output/CHAPTER_LEADS_REPORT.md
   - output/SECTION_LOGIC_REPORT.md
@@ -210,6 +212,7 @@ required_skills:
 - writer-selfloop
 - section-logic-polisher
 - argument-selfloop
+- paragraph-curator
 - style-harmonizer
 - opener-variator
 - transition-weaver
@@ -256,13 +259,15 @@ Notes:
 - C5 writing system (semantic + minimal artifacts; no extra machinery):
   - **Unit of work**: `sections/*.md` (front matter, H2 leads, H3 bodies). Avoid editing `output/DRAFT.md` directly until after merge.
   - **Single source of truth (口径锁定)**: `output/ARGUMENT_SKELETON.md` → `## Consistency Contract` (terminology, scope boundary, evaluation protocol fields, baseline naming).
-  - **Write → check → fix (three gates)**:
+  - **Write → check → fix (four gates)**:
     1) `writer-selfloop` → `output/WRITER_SELFLOOP_TODO.md`: file existence, depth, citation scope, paper voice.
        - Fix actions: rewrite openers/bridges, add thesis/contrast/eval/limitation, delete narration/pipeline voice; keep citation keys fixed.
     2) `section-logic-polisher` → `output/SECTION_LOGIC_REPORT.md`: paragraph linkage (no jump cuts / “paragraph islands”).
        - Fix actions: add bridge sentences, reorder paragraphs, move connectors into mid-sentence glue (avoid repetitive “Moreover/Overall” openers).
     3) `argument-selfloop` → `output/ARGUMENT_SELFLOOP_TODO.md` + `output/ARGUMENT_SKELETON.md` + `output/SECTION_ARGUMENT_SUMMARIES.jsonl`: section-level closure + premise/definition stability.
        - Fix actions: update the Consistency Contract first, then revise affected `sections/*.md`; ensure each paragraph has a move+output in the ledger.
+    4) `paragraph-curator` → `output/PARAGRAPH_CURATION_REPORT.md`: **select → evaluate → subset → fuse** so sections converge (reduce redundancy, strengthen synthesis) without changing citation keys.
+       - Fix actions: fuse redundant paragraphs, rewrite for clearer argument moves, replace missing “must-have” paragraphs using existing writer packs (no new facts).
   - **Openers-last**: draft the middle (contrasts + protocol anchors + limitations) first; rewrite paragraph 1 last so it reflects real content (front matter + H3).
 - Writing self-loop gate: `subsection-writer` ensures the full `sections/` file set exists (and emits `sections/sections_manifest.jsonl`); `writer-selfloop` blocks until depth/citation-scope/paper-voice checks pass, writing `output/WRITER_SELFLOOP_TODO.md` (PASS/FAIL).
 - Argument self-loop gate: `argument-selfloop` blocks “smooth but hollow” writing by enforcing argument continuity + premise/definition stability via intermediate ledgers (`output/SECTION_ARGUMENT_SUMMARIES.jsonl`, `output/ARGUMENT_SKELETON.md`). These ledgers must never be merged into the paper.

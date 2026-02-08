@@ -131,6 +131,7 @@ Better:
 
 4) Paragraph pass (argument moves > listing)
 - Rewrite paragraph-by-paragraph using the `grad-paragraph` micro-structure:
+- Best-of-2 rewrite (recommended): when a paragraph feels slot-like, draft 2 candidate rewrites and keep the one with clearer argument move + less template cadence (citations unchanged).
   - tension → contrast → evaluation anchor → limitation
 - Ensure you include:
   - >=2 explicit contrasts (not “A then B” summaries)

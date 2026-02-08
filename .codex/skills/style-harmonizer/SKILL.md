@@ -28,7 +28,7 @@ Optional (helps you stay in-scope while rewriting):
 
 ## Output
 
-Note: this is intentionally an *openers-last* pass. Run it only after the section bodies and argument chain are stable (e.g., after `section-logic-polisher` + `argument-selfloop`). If major edits happened since the last `writer-selfloop`, rerun `writer-selfloop` first so `## Style Smells` reflects the current text.
+Note: this is intentionally an *openers-last* pass. Run it only after the section bodies and argument chain are stable (e.g., after `section-logic-polisher` + `argument-selfloop` + `paragraph-curator`). If major edits happened since the last `writer-selfloop`, rerun `writer-selfloop` first so `## Style Smells` reflects the current text.
 
 - Updated `sections/*.md` files (same filenames; still body-only; no headings)
 - Re-running `writer-selfloop` is the audit trail (Style Smells should shrink).
@@ -132,6 +132,7 @@ Mini example (paraphrase only):
 
 2) Rewrite only the flagged files
 - Make small edits: opener/closer stems, sentence shape, connector variety.
+- Best-of-2 rewrite (recommended): for any paragraph you touch, draft 2 alternative phrasings and keep the one that (a) removes the slot stem, and (b) does not introduce a new repeated cadence across H3s.
 - If needed, consult `outline/writer_context_packs.jsonl` for `opener_mode` hints and to stay citation-scope safe while rewriting.
 - Do not touch citation keys.
 

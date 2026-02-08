@@ -53,6 +53,16 @@ Constraints:
 - Preview the lens + contrasts; hint at evaluation constraints (protocol mismatch, budget/tool access).
 - Do not add new claims that are not supported later in the H3s.
 
+## Best-of-2 sampling (recommended)
+
+Chapter leads are short but high impact.
+Draft **2 candidate lead blocks** (or at least 2 candidate first paragraphs) with different emphases (lens-first vs contrast-first), then keep the one that:
+- connects the H3s as one argument (not a ToC narration)
+- previews 2-3 real contrasts (no slash-lists)
+- stays consistent with `outline/chapter_briefs.jsonl` and avoids new claims
+
+Do not keep both variants.
+
 ## Role cards (use explicitly)
 
 ### Lens Setter

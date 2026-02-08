@@ -79,6 +79,7 @@
 - `evaluation-anchor-checker`：数字/评测断言的最小协议上下文检查（task+metric+constraint；缺上下文就降级，不猜）→ 更新 `sections/*.md`（或 post-merge 的 `output/DRAFT.md`）
 - `section-logic-polisher`：写作逻辑自检（thesis + 连接词密度 + paragraph islands），在 merge 前做局部修复 → `output/SECTION_LOGIC_REPORT.md`
 - `argument-selfloop`：论证自循环（逐段论证动作 + 前提/口径一致性 ledger；拦截“流畅但空洞/前提漂移”），产物为中间态（禁止进正文）→ `output/ARGUMENT_SELFLOOP_TODO.md` + `output/SECTION_ARGUMENT_SUMMARIES.jsonl` + `output/ARGUMENT_SKELETON.md`
+- `paragraph-curator`：选段→评价→多候选→择优→融合（减少冗余、让小节“收敛”而不是只变长；不改 citation keys）→ `output/PARAGRAPH_CURATION_REPORT.md` + `sections/paragraphs_curated.refined.ok`
 - `post-merge-voice-gate`：合并后口吻门（把 transitions 视为“注入正文的高频文本源”）：拦截 planner talk / slash-list，并路由回最早责任产物（通常是 `outline/transitions.md`）→ `output/POST_MERGE_VOICE_REPORT.md`
 - `draft-polisher`：对 `output/DRAFT.md` 做去套话 + 连贯性润色（不改变 citation keys 与语义；去 planner talk）
 - `global-reviewer`：全局一致性回看（术语/章节呼应/结论回扣 RQ；generator voice 检测），输出 `output/GLOBAL_REVIEW.md`

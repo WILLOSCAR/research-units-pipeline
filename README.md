@@ -14,33 +14,33 @@
 3. 精简Pipeline中冗余的中间内容，遵循优雅的奥卡姆剃刀原则，如无必要，勿增实体。
 
 
-## 核心思路：把写 Survey 拆成“可恢复的小步”
+## 核心设计：Skills-First + 拆解链路 + 证据先行
 
-传统做 research / 写 survey 的流水线常见两种极端：
-- 只有脚本：能跑，但过程黑盒，失败了不知道改哪里。
-- 只有文档：看起来都对，执行时还是靠人肉判断，容易漂移。
+这类工作最容易陷入两种极端：
+- **只有脚本**：能跑，但失败时很难知道“该改哪里”。
+- **只有文档**：看起来都对，但执行时仍靠经验，容易漂移。
 
-这套 repo 的做法很简单：把整条链路拆成**一串能验收、能恢复的小步**，每一步都落盘中间产物。
+本仓库的做法：把“写一篇 survey”拆成一串**可验收、可恢复**的小步，并把每一步的中间产物写到磁盘上。
 
-1) **Skill = 可执行的说明书（带验收）**
-- 每个 skill 都写清楚：需要什么输入、必须产出哪些文件、什么算完成、哪些行为禁止（例如 C2–C4 禁止写正文）。
-- 你不用记“该做到什么程度”：照着验收标准做，做不到就会被质量门拦住并写报告。
+1) **Skill：带验收的步骤说明书**
+- 每个 skill 都写清楚 `inputs / outputs / acceptance / guardrail`：需要什么、产出什么、做到什么程度、哪些行为禁止（例如 C2–C4 **NO PROSE**）。
 
-2) **Unit = 可恢复的小任务**
-- 一次运行被拆成 C0→C5 六个 checkpoint，每一步是 `UNITS.csv` 里的一行。
-- 失败时不需要全部重跑：修对那一个中间产物，然后从卡住的 unit 继续。
+2) **Unit：一次运行里的一个小任务**
+- `UNITS.csv` 一行一个 unit（依赖 + 输入/输出 + 验收）。
+- 卡住时看报告定位到具体文件；修完从卡住的 unit 继续，不需要全重跑。
 
-3) **先证据、后写作（防空洞/防模板）**
-- C1 找论文 → C2 定结构（outline+每小节论文池）→ C3/C4 把证据整理成“可写材料” → C5 才写正文并出 PDF。
+3) **证据先行：先准备“可写材料”，再写作**
+- C1 找论文 → C2 定结构 → C3/C4 做证据与引用 → C5 写作/合并/审计/出 PDF。
 
-一眼看懂：你遇到的问题 vs 这里怎么解决
+一眼看懂（你想解决什么，就先看哪里）：
 
-| 你遇到的问题 | 这里的机制 | 你会去看/去改哪里 |
+| 你想解决的问题 | 优先看哪里 | 常见修复动作 |
 |---|---|---|
-| 流程黑盒：失败了不知道改哪里 | unit 合同 + 质量门报告（FAIL 指向具体中间产物） | `UNITS.csv` / `output/*REPORT*.md` / `output/*TODO*.md` |
-| 文档松散：执行靠经验 | skill 语义化（inputs/outputs/acceptance/guardrail） | `.codex/skills/*/SKILL.md` |
-| 写作空洞/模板话 | evidence-first（C2–C4）+ 写作自循环（C5） | `outline/*` / `sections/*` / `output/WRITER_SELFLOOP_TODO.md` |
-| 想换交付但不想重写流程 | pipeline 只负责编排，能力沉淀在 skills | `pipelines/*.pipeline.md` |
+| 论文太少 / 覆盖不足 | `queries.md` + `papers/retrieval_report.md` | 扩关键词桶、提高 `max_results`、导入离线集合、做 snowball |
+| 大纲不稳 / 小节没论文可写 | `outline/outline.yml` + `outline/mapping.tsv` | 合并/重排小节、提高 `per_subsection`、重跑 mapping |
+| 证据薄导致写作空洞 | `papers/paper_notes.jsonl` + `outline/evidence_drafts.jsonl` | 补 notes / 补 evidence packs（先补证据，再写作） |
+| 写作出现模板话/口癖/越写越冗余 | `output/WRITER_SELFLOOP_TODO.md` + `output/PARAGRAPH_CURATION_REPORT.md` + `sections/*` | 定点改写（并行候选→择优融合；去旁白/去导航/融合冗余段），再跑自检门 |
+| 引用密度不够（unique 偏低） | `output/CITATION_BUDGET_REPORT.md` + `citations/ref.bib` | 按预算做 in-scope 注入（NO NEW FACTS） |
 
 
 English version: [`README.en.md`](README.en.md).
@@ -66,40 +66,39 @@ shell_snapshot = true
 codex --sandbox workspace-write --ask-for-approval never
 ```
 
-2) 在对话里说一句你要什么（例子）：
+2) 在对话里直接说目标（例子）：
 
-> 给我写一篇关于 LLM agents 的 LaTeX survey
+> 给我写一篇关于 LLM agents 的 LaTeX survey（严格质量门；先停在 C2 让我确认）
 
-它会自动：新建一个 `workspaces/<时间戳>/` → 找论文 → 生成大纲 → **停在 C2（大纲确认）** 等你确认 → 再写草稿并编译 PDF。
+它会自动创建 `workspaces/<时间戳>/`，并按 C0→C5 逐步产出文件。默认会在 **C2（大纲确认）** 停下来；你确认后才会开始写正文并编译 PDF。
 
-可选：你也可以直接指定“用哪条流程”（需要 PDF 就选 LaTeX 版本）：
+可选（用一句话说清即可）：
+- 指定流程文件：`pipelines/arxiv-survey-latex.pipeline.md`（需要 PDF 就选它）
+- 不想停在 C2：加 `C2 自动同意`（熟练后再用）
 
-> 用 `pipelines/arxiv-survey-latex.pipeline.md` 给我写一个 agent 的 survey（启用 strict；先停在 C2 等我确认）
-
-如果你想“不要停在 C2”，可以在开头明确说：`C2 自动同意`（适合你已经很熟悉这条链路的情况）。
-
-术语解释（只保留你会遇到的几个）：
-- workspace：一次运行的输出目录（在 `workspaces/<name>/`）
-- skill：一个步骤的“可执行说明书”（写清输入/输出/验收/禁区）
-- unit：一次运行里的一个小任务（`UNITS.csv` 一行）
-- C2：大纲确认点；**没确认就不会写正文**
-- strict：开启严格质量门；失败会停下来并写报告（在 `output/`）
+术语速查：
+- workspace：一次运行的输出目录（`workspaces/<name>/`）
+- C2：大纲确认点；不确认就不会写正文
+- strict：开启质量门；失败会停并在 `output/` 写报告
 
 ## 你会得到什么（分层产物 + 自循环入口）
 
-一个 workspace 里主要是两类东西：**运行清单** + **分阶段产物**。
+一次完整 run 的输出都在一个 workspace 里（`workspaces/<name>/`）。你主要会用到两类东西：
+- **运行清单**：看进度 / 看卡点 / 从失败点继续跑
+- **分阶段产物**：papers/outline/citations/sections/output/latex
 
-默认配置（A150++，对齐“成熟 survey”交付）：
+默认参数（A150++，对齐 survey 交付）：
+- 检索上限：`max_results=1800`（每个 query bucket）
 - 核心论文：`core_size=300`（对应 `papers/core_set.csv` / `citations/ref.bib`）
-- 每个 H3 的可选论文池：`per_subsection=28`（对应 `outline/mapping.tsv`）
-- 全局 unique citations：硬门槛 `>=150`，推荐目标 `>=165`（由 `draft_profile` + `citation_target` 控制）
+- 每个小节论文池：`per_subsection=28`（对应 `outline/mapping.tsv`）
+- 全局 unique citations：hard `>=150`，recommended `>=165`（默认会补齐到 recommended）
 
-**运行清单（看进度/看卡点）**：
-- `UNITS.csv`：一行一个步骤（依赖/输入/输出/验收），卡住就看当前哪个 unit 是 `BLOCKED`
-- `DECISIONS.md`：需要你确认的点（最重要的是 **C2：确认大纲后才写正文**）
+运行清单（最常看）：
+- `UNITS.csv`：约 43–45 个 unit（不同 pipeline 略有差异；LaTeX/PDF 版会多几个）；卡住就看哪个 unit 是 `BLOCKED`
+- `DECISIONS.md`：人类确认点（最重要的是 **C2：确认大纲后才写正文**）
 - `STATUS.md`：运行日志（当前跑到哪一步）
 
-**分阶段产物（你真正关心的内容）**：
+分阶段产物（你真正关心的内容）：
 ```
 C1（找论文）:
   papers/papers_raw.jsonl → papers/papers_dedup.jsonl → papers/core_set.csv
@@ -124,13 +123,14 @@ C5（写作与输出）:
   (+ latex/main.pdf)  # 只有 LaTeX pipeline 才会有
 ```
 
-**质量门 + 自循环入口（失败先看这里，按报告定点修）**：
+失败怎么定位（按优先级，按报告定点修）：
 - 跑不动/脚本报错：`output/RUN_ERRORS.md`
-- 开了 strict 且被拦住：`output/QUALITY_GATE.md`（最后一条就是当前卡住原因 + 下一步）
-- 写作质量（只修列出的文件）：`output/WRITER_SELFLOOP_TODO.md`
-- 段落“跳步/孤岛”：`output/SECTION_LOGIC_REPORT.md`
+- strict 模式被拦住：`output/QUALITY_GATE.md`（最后一条就是当前原因 + 下一步）
+- 写作门（只修列出的文件）：`output/WRITER_SELFLOOP_TODO.md`
+- 段落跳步/孤岛：`output/SECTION_LOGIC_REPORT.md`
 - 论证链路 + 口径一致性：`output/ARGUMENT_SELFLOOP_TODO.md`（口径单一真源在 `output/ARGUMENT_SKELETON.md# Consistency Contract`）
-- 引用密度不够：`output/CITATION_BUDGET_REPORT.md`
+- 去冗余/融合收敛：`output/PARAGRAPH_CURATION_REPORT.md`（选段→评价→多候选→择优融合）
+- 引用增密：`output/CITATION_BUDGET_REPORT.md`
 - 全局体检：`output/AUDIT_REPORT.md`（最终审计）
 
 ## 简单的对话式执行（从 0 到 PDF）
@@ -138,9 +138,9 @@ C5（写作与输出）:
 ```
 你：写一篇关于 LLM agents 的 LaTeX survey
 
-↓ [C0-C1] 找论文：检索候选（默认最多 1800）→ 去重 → 得到 core set（默认 300 篇：`papers/core_set.csv`）
-↓ [C2] 生成“大纲 + 每小节论文池”（不写正文）：`outline/outline.yml` + `outline/mapping.tsv`（默认每个 H3 映射 28 篇）
-   → 停在 C2 等你确认 （自动触发的行为，也可以在开头说默认跳过）
+↓ [C0-C1] 找论文：检索候选（`max_results=1800`/桶；去重后目标 >=1200）→ core set（默认 300 篇：`papers/core_set.csv`）
+↓ [C2] 生成“大纲 + 每小节论文池”（不写正文）：`outline/outline.yml` + `outline/mapping.tsv`（默认每个小节映射 28 篇）
+   → 默认停在 C2 等你确认（如果你明确说 `C2 自动同意` 才会继续）
 
 你：看过没问题，回复「同意继续」
 
@@ -150,6 +150,7 @@ C5（写作与输出）:
    - `outline/writer_context_packs.jsonl`：每个小节的写作包（允许引用哪些论文 + 该写哪些对比点）
 ↓ [C5] 写作与输出：
    - 先写分小节文件：`sections/*.md`
+   - 再做“自检 + 收敛”：写作门 / 段落逻辑门 / 论证门 / 选段融合（都在 C5 反复迭代）
    - 再合并成草稿：`output/DRAFT.md`
    - LaTeX pipeline 会额外生成：`latex/main.pdf`
    - 目标：全局 unique citations 推荐 `>=165`（不足会触发“引用预算/注入”步骤补齐）
@@ -204,12 +205,11 @@ flowchart LR
   OUT --> TEX["latex/<br/>main.tex → main.pdf"]
 ```
 
-最终交付只看“最新一次跑通”的示例目录（按时间戳命名）。有改进就更新最新目录，历史版本一般保留 2–3 个用于对比回归。
+交付时只关注**最新时间戳**的示例目录（默认保留 2–3 个历史目录用于回归对比）：
 
-你最常打开的三个文件：
-- 草稿（Markdown）：`example/e2e-agent-survey-latex-verify-<最新时间戳>/output/DRAFT.md`
-- PDF：`example/e2e-agent-survey-latex-verify-<最新时间戳>/latex/main.pdf`
-- 体检报告（QA/Audit）：`example/e2e-agent-survey-latex-verify-<最新时间戳>/output/AUDIT_REPORT.md`
+- Markdown 草稿：`example/e2e-agent-survey-latex-verify-<最新时间戳>/output/DRAFT.md`
+- PDF 输出：`example/e2e-agent-survey-latex-verify-<最新时间戳>/latex/main.pdf`
+- QA 审计报告：`example/e2e-agent-survey-latex-verify-<最新时间戳>/output/AUDIT_REPORT.md`
 
 
 ## 欢迎提出各类 issue，一起改进写作流程

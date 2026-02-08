@@ -63,6 +63,16 @@ Front matter is where template voice often originates. To keep it authorial with
 - Rewrite paragraph 1 last so it reflects the file's real claim (avoid "This survey..." / "This section provides an overview..." stems).
 - If later C5 edits change the paper's lens/structure, do one final pass rewriting only the first 1-2 paragraphs of Introduction and Related Work (no new facts/citations).
 
+## Best-of-2 sampling (recommended)
+
+Front matter is high leverage and easy to make templated.
+For the *opener paragraph* of Introduction and Related Work, draft **2 candidates** (different framing modes: tension-first vs protocol-first vs contrast-first), then keep the one that:
+- is content-bearing (not "This survey..." / "This section provides an overview...")
+- commits to a clear scope boundary + lens
+- embeds citations as evidence (no trailing cite-dump line)
+
+Do not keep both variants in the final file.
+
 ## Role cards (use explicitly)
 
 ### Positioner (scope + boundary)
