@@ -89,64 +89,73 @@ The “detailed walkthrough” below explains intermediate artifacts and the wri
 
 ## Detailed walkthrough: 0 to PDF
 
-```
-You:
-  Write a LaTeX survey about LLM agents (strict; show me the outline first)
+In chat, you typically say something like:
 
-[C0-C1] Find papers
-  - Retrieve candidates: `max_results=1800` per bucket; dedup target >=1200
-  - Approach (short): split the topic into multiple query buckets (synonyms/acronyms/subtopics),
-    retrieve them separately, then deduplicate into one pool.
-    If the pool is too small or too noisy, rewrite keywords, add exclusions, and optionally raise `max_results` and rerun.
-  - Output: `papers/core_set.csv` (default 300) + `papers/retrieval_report.md`
+> Write a LaTeX survey about LLM agents (strict; show me the outline first)
 
-[C2] Outline review (no prose; the run pauses here by default)
-  - You mainly review:
-    - `outline/outline.yml`
-    - `outline/mapping.tsv` (default 28 papers per subsection)
-    - (optional) `outline/coverage_report.md` (coverage/reuse warnings)
+Then it advances stage by stage (everything is written into one workspace; it pauses at C2 by default):
 
-You:
-  Looks good. Continue.
-  (If you want a full end-to-end run, say “auto-approve the outline” in the first prompt.)
+### [C0] Initialize one run (no prose)
 
-[C3-C4] Turn papers into write-ready material (no prose)
-  - `papers/paper_notes.jsonl`: what each paper did/found + limitations
-  - `citations/ref.bib`: the reference list (citation keys you can use)
-  - `outline/writer_context_packs.jsonl`: per-section writing packs
-    (what to compare + which citations are in scope)
+- Creates a timestamped folder under `workspaces/` and puts all artifacts there.
+- Writes the basic run contract/config (`UNITS.csv`, `DECISIONS.md`, `queries.md`) so the run is auditable and resumable.
 
-[C5] Write and output (all iterations stay inside C5)
-  1) Draft per-section files: `sections/*.md`
-     (front matter + chapter leads + subsection bodies)
-  2) Iterate with four “check + converge” gates (fix only what fails):
-     - writer gate: `output/WRITER_SELFLOOP_TODO.md`
-       (missing thesis/contrasts/eval anchors/limitations; remove templates)
-     - paragraph logic gate: `output/SECTION_LOGIC_REPORT.md`
-       (bridges + ordering; eliminate “paragraph islands”)
-     - argument/consistency gate: `output/ARGUMENT_SELFLOOP_TODO.md`
-       - single source of truth: `output/ARGUMENT_SKELETON.md`
-     - paragraph curation gate: `output/PARAGRAPH_CURATION_REPORT.md`
-       (best-of-N → select/fuse; avoid “keeps getting longer”)
-  3) De-template pass (after convergence):
-     - `style-harmonizer` + `opener-variator` (best-of-N)
-  4) Merge into the draft and run final checks: `output/DRAFT.md`
-     - If citations are low: `output/CITATION_BUDGET_REPORT.md`
-       → `output/CITATION_INJECTION_REPORT.md`
-     - Final audit: `output/AUDIT_REPORT.md`
-     - LaTeX pipeline also compiles: `latex/main.pdf`
+### [C1] Find papers (build a strong paper pool first)
+
+- Goal: retrieve a large enough candidate pool (`max_results=1800` per query bucket; dedup target `>=1200`), then select a core set (default `300` in `papers/core_set.csv`).
+- Approach (short): split the topic into multiple query buckets (synonyms/acronyms/subtopics), retrieve separately, then merge + deduplicate.
+  - If coverage is low: add buckets (e.g., “tool use / planning / memory / reflection / evaluation”) or raise `max_results`.
+  - If it is noisy: rewrite keywords and add exclusions, then rerun.
+- Outputs: `papers/core_set.csv` + `papers/retrieval_report.md`
+
+### [C2] Outline review (no prose; the run pauses here by default)
+
+- You mainly review:
+  - `outline/outline.yml`
+  - `outline/mapping.tsv` (default `28` papers per subsection)
+  - (optional) `outline/coverage_report.md` (coverage/reuse warnings)
+- If it looks good, reply: `Looks good. Continue.`
+  - If you want a full end-to-end run without pausing at the outline, say “auto-approve the outline” in the first prompt.
+- Two quick checks are usually enough:
+  1) Is the outline “few but thick” (not overly fragmented)?
+  2) Does each subsection have enough mapped papers to write from (mapping determines in-scope citations later)?
+
+### [C3–C4] Turn papers into write-ready material (no prose)
+
+- The goal is simple: convert “reading” into “write-ready evidence”, without writing narrative paragraphs yet.
+- `papers/paper_notes.jsonl`: what each paper did/found + limitations
+- `citations/ref.bib`: the reference list (citation keys you can use)
+- `outline/writer_context_packs.jsonl`: per-section writing packs (what to compare + which citations are in scope)
+- (tables) `outline/tables_index.md` is internal; `outline/tables_appendix.md` is reader-facing (Appendix)
+
+### [C5] Write and output (all iterations stay inside C5)
+
+1) Draft per-section files: `sections/*.md`
+   - Write the body first, rewrite openers later: draft the core subsections first, then come back to rewrite section openings to avoid template-driven prose.
+   - Typically includes: front matter + chapter leads + subsection bodies
+
+2) Iterate with four “check + converge” gates (fix only what fails):
+   - writer gate: `output/WRITER_SELFLOOP_TODO.md` (missing thesis/contrasts/eval anchors/limitations; remove templates)
+   - paragraph logic gate: `output/SECTION_LOGIC_REPORT.md` (bridges + ordering; eliminate “paragraph islands”)
+   - argument/consistency gate: `output/ARGUMENT_SELFLOOP_TODO.md` (single source of truth: `output/ARGUMENT_SKELETON.md`)
+   - paragraph curation gate: `output/PARAGRAPH_CURATION_REPORT.md` (best-of-N → select/fuse; avoid “keeps getting longer”)
+
+3) De-template pass (after convergence): `style-harmonizer` + `opener-variator` (best-of-N)
+
+4) Merge into the draft and run final checks: `output/DRAFT.md`
+   - If citations are low: `output/CITATION_BUDGET_REPORT.md` → `output/CITATION_INJECTION_REPORT.md`
+   - Final audit: `output/AUDIT_REPORT.md`
+   - LaTeX pipeline also compiles: `latex/main.pdf`
 
 Target:
-  - Global unique citations recommended `>=165`
+- Global unique citations recommended `>=165`
 
 If it gets blocked:
-  - strict mode: read `output/QUALITY_GATE.md`
-  - run/script errors: read `output/RUN_ERRORS.md`
+- strict mode: read `output/QUALITY_GATE.md`
+- run/script errors: read `output/RUN_ERRORS.md`
 
-You:
-  Fix the referenced file, say “continue”
-  → resume from the blocked step (no full restart)
-```
+Resume:
+- Fix the referenced file, say “continue” → resume from the blocked step (no full restart)
 
 **Key principle**: C2–C4 enforce NO PROSE—build the evidence base first; C5 writes prose; failures are point-fixable.
 
@@ -173,47 +182,65 @@ Directory quick glance (what each folder is for):
 
 ```text
 example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/
-  STATUS.md            # progress + run log (current checkpoint)
-  UNITS.csv            # execution contract (deps / acceptance / outputs)
-  DECISIONS.md         # human checkpoints (Approve C*)
-  CHECKPOINTS.md       # checkpoint rules
-  PIPELINE.lock.md     # selected pipeline (single source of truth)
-  GOAL.md              # goal/scope seed
-  queries.md           # retrieval + writing profile config
-  papers/              # C1/C3: retrieval outputs + paper notes/evidence base
-  outline/             # C2/C3/C4: outline/mapping + writing cards + evidence packs + tables (index tables stay intermediate; Appendix tables go into the draft)
-  citations/           # C4: BibTeX + verification records
-  sections/            # C5: per-H2/H3 writing units (incl. chapter leads)
-  output/              # C5: merged DRAFT + reports
-  latex/               # C5: LaTeX scaffold + compiled PDF
+  STATUS.md           # progress + run log (current checkpoint)
+  UNITS.csv           # execution contract (deps / acceptance / outputs)
+  DECISIONS.md        # human checkpoints (most importantly: C2 outline approval)
+  CHECKPOINTS.md      # checkpoint rules
+  PIPELINE.lock.md    # selected pipeline (single source of truth)
+  GOAL.md             # goal/scope seed
+  queries.md          # retrieval + writing profile config (e.g., core_size / per_subsection)
+  papers/             # retrieval outputs + the paper/evidence base
+  outline/            # structure + write-ready materials (outline/mapping + briefs + evidence packs + tables)
+  citations/          # BibTeX + verification records
+  sections/           # per-section drafts (easy to point-fix)
+  output/             # merged draft + QA reports (gates / audits / citation budget…)
+  latex/              # LaTeX scaffold + compiled PDF (only in the LaTeX pipeline)
 ```
+
+Note: `outline/tables_index.md` is an internal index table (intermediate artifact); `outline/tables_appendix.md` is a reader-facing Appendix table.
 
 Pipeline view (how folders connect):
 
 ```mermaid
-flowchart TD
-  WS["C0 Workspace init<br/>workspaces/..."] --> P["C1 Find papers<br/>papers/"]
-  P --> O["C2 Outline review (no prose)<br/>outline/"]
-  O --> E["C3-C4 Build write-ready material (no prose)<br/>papers/ + citations/ + outline/"]
-
-  E --> S["C5 Write by section<br/>sections/"]
+flowchart TB
+  subgraph MAIN["Main flow (evidence first, then writing)"]
+    direction TB
+    subgraph M1[""]
+      direction LR
+      WS["C0 Workspace init<br/>workspaces/..."] --> P["C1 Find papers<br/>papers/"] --> O["C2 Outline review<br/>outline/"]
+    end
+    subgraph M2[""]
+      direction LR
+      E["C3-C4 Build write-ready material (no prose)<br/>papers/ + citations/ + outline/"] --> S["C5 Write by section<br/>sections/"]
+    end
+  end
+  O --> E
 
   subgraph LOOP["C5 Check + converge (failures loop back to sections/)"]
-    G1["Writer gate<br/>WRITER_SELFLOOP_TODO.md"]
-    G2["Paragraph logic gate<br/>SECTION_LOGIC_REPORT.md"]
-    G3["Argument/consistency gate<br/>ARGUMENT_SELFLOOP_TODO.md"]
-    G4["Paragraph curation<br/>PARAGRAPH_CURATION_REPORT.md"]
+    direction TB
+    subgraph L1[""]
+      direction LR
+      G1["Writer gate<br/>WRITER_SELFLOOP_TODO.md"] --> G2["Paragraph logic gate<br/>SECTION_LOGIC_REPORT.md"]
+    end
+    subgraph L2[""]
+      direction LR
+      G3["Argument/consistency gate<br/>ARGUMENT_SELFLOOP_TODO.md"] --> G4["Paragraph curation<br/>PARAGRAPH_CURATION_REPORT.md"]
+    end
+    G2 --> G3
   end
 
-  S --> G1 --> G2 --> G3 --> G4 --> D["Merge draft<br/>output/DRAFT.md"]
+  S --> G1
   G1 -.-> S
   G2 -.-> S
   G3 -.-> S
   G4 -.-> S
 
-  D --> A["Final audit<br/>output/AUDIT_REPORT.md"]
+  subgraph OUT["Output (merge / audit / optional PDF)"]
+    direction LR
+    D["Merge draft<br/>output/DRAFT.md"] --> A["Final audit<br/>output/AUDIT_REPORT.md"] --> TEX["LaTeX compile (optional)<br/>latex/main.pdf"]
+  end
+  G4 --> D
   A -.-> S
-  A --> TEX["LaTeX compile (optional)<br/>latex/main.pdf"]
 ```
 
 For delivery, focus on the **latest timestamped** example directory (keep 2–3 older runs for regression):

@@ -87,12 +87,19 @@ codex --sandbox workspace-write --ask-for-approval never
 
 > 写一篇关于 LLM agents 的 LaTeX survey（严格；先给我大纲确认）
 
-然后会按阶段推进（每一步都会把结果写到 workspace 里）：
+然后会按阶段推进（每一步都会把结果写到 workspace 里；默认会在 C2 停下来等你确认）：
 
-### [C0-C1] 找论文
+### [C0] 初始化一次 run（只做“建目录 + 写配置”，不写正文）
+
+- 会在 `workspaces/` 下新建一个时间戳目录，把后续所有产物都放进去。
+- 同时写入基础清单（比如 `UNITS.csv` / `DECISIONS.md` / `queries.md`），让这次 run 可追踪、可恢复。
+
+### [C1] 找论文（先把“论文池子”做扎实）
 
 - 目标：先拿到一个够大的候选池（`max_results=1800`/桶；去重后目标 `>=1200`），再选出 core set（默认 `300` 篇，写入 `papers/core_set.csv`）。
-- 做法（简述）：把主题拆成多条 query bucket（同义词/缩写/子方向）分别检索 → 合并 → 去重。结果太少/太吵就改关键词、加排除词，必要时提高 `max_results` 再跑一次。
+- 做法（简述）：把主题拆成多条 query bucket（同义词/缩写/子方向）分别检索 → 合并 → 去重。
+  - 结果太少：补 bucket（例如“agent / tool use / planning / memory / reflection / evaluation”），或提高 `max_results`。
+  - 结果太吵：改写关键词 + 加排除词（例如排除无关领域），再跑一次。
 - 产物：`papers/core_set.csv` + `papers/retrieval_report.md`
 
 ### [C2] 给你看大纲（不写正文；默认会停在这里等你确认）
@@ -103,29 +110,36 @@ codex --sandbox workspace-write --ask-for-approval never
   - （可选）`outline/coverage_report.md`（覆盖率/重复引用预警）
 - 你确认后回复：`同意继续`
   - 如果你想一次跑完：也可以在第一句话里说“自动同意大纲 / 跳过大纲确认”。
+- 你看大纲时，通常只抓两件事就够了：
+  1) 结构是否“少而厚”（不要为了覆盖而把小节拆得太碎）
+  2) 每个小节是否真的“有论文可写”（mapping 不是摆设：它决定后面写作允许用哪些引用）
 
 ### [C3-C4] 整理成“可写材料”（不写正文）
 
-- `papers/paper_notes.jsonl`：每篇论文的要点/结果/局限
+- 这一段的目标很简单：把“读论文”变成“能直接写进正文的材料”，但仍然 **不写正文段落**。
+- `papers/paper_notes.jsonl`：每篇论文的要点/结果/局限（写作会反复用到）
 - `citations/ref.bib`：参考文献表（正文里能引用的 key）
 - `outline/writer_context_packs.jsonl`：每个小节的写作包（该写哪些对比点 + 能用哪些引用）
+- （表格）`outline/tables_index.md` 是内部索引；`outline/tables_appendix.md` 是面向读者的 Appendix 表格
 
 ### [C5] 写作与输出（都在 C5 内反复迭代）
 
-1) 先写分小节文件：`sections/*.md`（摘要/引言/相关工作 + 章节导语 + 各小节正文）
+1) 先写分小节文件：`sections/*.md`
+   - 先写主体，再写开头：先把各小节内容铺开，最后统一回头重写开头，减少“模板开头牵着全文走”。
+   - 一般包含：摘要/引言/相关工作 + 章节导语 + 各小节正文
 
 2) 再做“自检 + 收敛”（只修失败项，逐步润色）：
-- 写作门：`output/WRITER_SELFLOOP_TODO.md`（补结论句/对比/评测锚点/局限；去模板开头）
-- 段落逻辑门：`output/SECTION_LOGIC_REPORT.md`（补桥接、重排段落，消灭“段落孤岛”）
-- 论证与口径门：`output/ARGUMENT_SELFLOOP_TODO.md`（口径单一真源：`output/ARGUMENT_SKELETON.md`）
-- 选段融合收敛：`output/PARAGRAPH_CURATION_REPORT.md`（多候选→择优/融合，防止“越写越长”）
+   - 写作门：`output/WRITER_SELFLOOP_TODO.md`（补结论句/对比/评测锚点/局限；去模板开头）
+   - 段落逻辑门：`output/SECTION_LOGIC_REPORT.md`（补桥接、重排段落，消灭“段落孤岛”）
+   - 论证与口径门：`output/ARGUMENT_SELFLOOP_TODO.md`（口径单一真源：`output/ARGUMENT_SKELETON.md`）
+   - 选段融合收敛：`output/PARAGRAPH_CURATION_REPORT.md`（多候选→择优/融合，防止“越写越长”）
 
 3) 去口癖/去模板化（收敛后再做）：`style-harmonizer` + `opener-variator`（best-of-N）
 
 4) 合并成草稿并做终稿检查：`output/DRAFT.md`
-- 如果引用不够：`output/CITATION_BUDGET_REPORT.md` → `output/CITATION_INJECTION_REPORT.md`
-- 最终审计：`output/AUDIT_REPORT.md`
-- LaTeX pipeline 还会生成：`latex/main.pdf`
+   - 如果引用不够：`output/CITATION_BUDGET_REPORT.md` → `output/CITATION_INJECTION_REPORT.md`
+   - 最终审计：`output/AUDIT_REPORT.md`
+   - LaTeX pipeline 还会生成：`latex/main.pdf`
 
 目标：
 - 全局 unique citations 推荐 `>=165`（不足会触发“引用预算/注入”补齐）
@@ -161,47 +175,65 @@ codex --sandbox workspace-write --ask-for-approval never
 
 ```text
 example/e2e-agent-survey-latex-verify-<最新时间戳>/
-  STATUS.md            # 进度与执行日志（当前 checkpoint）
-  UNITS.csv            # 执行合约：一行一个 unit（依赖/验收/产物）
-  DECISIONS.md         # 人类检查点（Approve C*）
-  CHECKPOINTS.md       # checkpoint 规则
-  PIPELINE.lock.md     # 选中的 pipeline（单一真相源）
-  GOAL.md              # 目标/范围 seed
-  queries.md            # 检索与写作档位配置（draft_profile/evidence_mode/core_size...）
-  papers/              # C1/C3：检索结果与论文“底座”
-  outline/             # C2/C3/C4：大纲与映射 + 写作卡片 + 证据包 + 表格（索引表不进正文；Appendix 表会进正文附录）
-  citations/           # C4：BibTeX 与 verification 记录
-  sections/            # C5：按 H2/H3 拆分的可 QA 小文件（含 chapter lead）
-  output/              # C5：合并后的 DRAFT + 报告（audit/merge/citation budget...）
-  latex/               # C5：LaTeX scaffold + 编译产物（main.pdf）
+  STATUS.md           # 进度与执行日志（当前 checkpoint）
+  UNITS.csv           # 执行合约（一行一个 unit：依赖/验收/产物）
+  DECISIONS.md        # 人类检查点（最关键：C2 大纲审批）
+  CHECKPOINTS.md      # checkpoint 规则
+  PIPELINE.lock.md    # 选中的 pipeline（单一真相源）
+  GOAL.md             # 目标/范围 seed
+  queries.md          # 检索与写作档位配置（例如 core_size / per_subsection）
+  papers/             # 检索结果 + 论文“底座”（core set / paper notes / evidence bank）
+  outline/            # 结构与写作素材（outline/mapping + briefs + evidence packs + tables）
+  citations/          # BibTeX 与 verification 记录
+  sections/           # 分小节草稿（便于按 unit 定点修）
+  output/             # 合并后的草稿 + QA 报告（质量门/审计/引用预算…）
+  latex/              # LaTeX scaffold + 编译产物（main.pdf；只有 LaTeX pipeline 才有）
 ```
+
+注：`outline/tables_index.md` 是内部索引表（中间产物）；`outline/tables_appendix.md` 是面向读者的 Appendix 表格。
 
 文件夹之间的“流水线关系”：
 
 ```mermaid
-flowchart TD
-  WS["C0 初始化<br/>workspaces/…"] --> P["C1 找论文<br/>papers/"]
-  P --> O["C2 大纲确认（不写正文）<br/>outline/"]
-  O --> E["C3-C4 整理成可写材料（不写正文）<br/>papers/ + citations/ + outline/"]
-
-  E --> S["C5 按小节写作<br/>sections/"]
+flowchart TB
+  subgraph MAIN["主流程（先证据，后写作）"]
+    direction TB
+    subgraph M1[""]
+      direction LR
+      WS["C0 初始化<br/>workspaces/…"] --> P["C1 找论文<br/>papers/"] --> O["C2 大纲确认<br/>outline/"]
+    end
+    subgraph M2[""]
+      direction LR
+      E["C3-C4 可写材料（不写正文）<br/>papers/ + citations/ + outline/"] --> S["C5 分小节写作<br/>sections/"]
+    end
+  end
+  O --> E
 
   subgraph LOOP["C5 自检与收敛（失败就回到 sections/ 再改）"]
-    G1["写作门<br/>WRITER_SELFLOOP_TODO.md"]
-    G2["段落逻辑门<br/>SECTION_LOGIC_REPORT.md"]
-    G3["论证/口径门<br/>ARGUMENT_SELFLOOP_TODO.md"]
-    G4["选段融合收敛<br/>PARAGRAPH_CURATION_REPORT.md"]
+    direction TB
+    subgraph L1[""]
+      direction LR
+      G1["写作门<br/>WRITER_SELFLOOP_TODO.md"] --> G2["段落逻辑门<br/>SECTION_LOGIC_REPORT.md"]
+    end
+    subgraph L2[""]
+      direction LR
+      G3["论证/口径门<br/>ARGUMENT_SELFLOOP_TODO.md"] --> G4["选段融合<br/>PARAGRAPH_CURATION_REPORT.md"]
+    end
+    G2 --> G3
   end
 
-  S --> G1 --> G2 --> G3 --> G4 --> D["合并成稿<br/>output/DRAFT.md"]
+  S --> G1
   G1 -.-> S
   G2 -.-> S
   G3 -.-> S
   G4 -.-> S
 
-  D --> A["总审计<br/>output/AUDIT_REPORT.md"]
+  subgraph OUT["输出（合并/审计/可选 PDF）"]
+    direction LR
+    D["合并成稿<br/>output/DRAFT.md"] --> A["总审计<br/>output/AUDIT_REPORT.md"] --> TEX["LaTeX 编译（可选）<br/>latex/main.pdf"]
+  end
+  G4 --> D
   A -.-> S
-  A --> TEX["LaTeX 编译（可选）<br/>latex/main.pdf"]
 ```
 
 交付时只关注**最新时间戳**的示例目录（默认保留 2–3 个历史目录用于回归对比）：
