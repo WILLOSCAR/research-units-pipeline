@@ -2,12 +2,9 @@
 
 > **一句话**：让 Pipeline 会"带人 / 带模型"做研究——不是给一堆脚本，而是给一套**语义化的 skills**，每个 skill 知道"该做什么、怎么做、做到什么程度、不能做什么"。
 
----
 
 ## WIP
-1. 在 Appendix 增加了表格
-2. 持续打磨写作技巧，提升写作上下限（已经尝试了增加 role playing 的 soft 约束）
-3. 去除模板话描述
+1. best of N 写作
 ## Todo
 1. 加入多 cli 协作，multi-agent design （在合适的环节接入 API，替代或者分担 codex 执行过程中的压力）
 2. 完善剩余的Pipeline，example 新增例子
@@ -148,10 +145,15 @@ C5（写作与输出）:
    - `papers/paper_notes.jsonl`：每篇论文的要点/结果/局限
    - `citations/ref.bib`：参考文献表（可引用的 key 集合）
    - `outline/writer_context_packs.jsonl`：每个小节的写作包（允许引用哪些论文 + 该写哪些对比点）
-↓ [C5] 写作与输出：
-   - 先写分小节文件：`sections/*.md`
-   - 再做“自检 + 收敛”：写作门 / 段落逻辑门 / 论证门 / 选段融合（都在 C5 反复迭代）
-   - 再合并成草稿：`output/DRAFT.md`
+↓ [C5] 写作与输出（都在 C5 内反复迭代，不新增阶段）：
+   - 先写分小节文件：front matter + chapter lead + H3 → `sections/*.md`
+   - 再做“自检 + 收敛”（只修失败项，逐步润色）：
+       - 写作门：`output/WRITER_SELFLOOP_TODO.md`（补 thesis/对比/评测锚点/局限；去旁白/去模板）
+       - 段落逻辑门：`output/SECTION_LOGIC_REPORT.md`（补桥接、重排段落，消灭“段落孤岛”）
+       - 论证与口径门：`output/ARGUMENT_SELFLOOP_TODO.md`（口径单一真源：`output/ARGUMENT_SKELETON.md`）
+       - 选段融合收敛：`output/PARAGRAPH_CURATION_REPORT.md`（多候选→择优/融合，防止“越写越长”）
+   - 去口癖/去模板化（收敛后再做）：`style-harmonizer` + `opener-variator`（best-of-N）
+   - 再合并成草稿并做终稿自检：`output/DRAFT.md`（合并后口吻检查→必要时引用预算/注入→去套话/规范引用形态→总审计）
    - LaTeX pipeline 会额外生成：`latex/main.pdf`
    - 目标：全局 unique citations 推荐 `>=165`（不足会触发“引用预算/注入”步骤补齐）
 

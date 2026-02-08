@@ -146,10 +146,15 @@ You: Looks good. Continue.
    - `papers/paper_notes.jsonl` (what each paper did / found / limitations)
    - `citations/ref.bib` (the reference list you can cite)
    - `outline/writer_context_packs.jsonl` (per-section writing packs: what to compare + which papers are in scope)
-↓ [C5] Write and output:
-   - write per-section files: `sections/*.md`
-   - iterate inside C5: writing/logic/argument + paragraph curation (all still C5)
-   - merge into the draft: `output/DRAFT.md`
+↓ [C5] Write and output (all iterations stay inside C5; no extra stage):
+   - write per-section files: front matter + chapter leads + H3 bodies → `sections/*.md`
+   - iterate with four “check + converge” gates (fix only what fails):
+       - writer gate: `output/WRITER_SELFLOOP_TODO.md` (missing thesis/contrasts/eval anchors/limitations; remove narration/templates)
+       - paragraph logic gate: `output/SECTION_LOGIC_REPORT.md` (bridges + ordering; eliminate “paragraph islands”)
+       - argument/consistency gate: `output/ARGUMENT_SELFLOOP_TODO.md` (single source of truth: `output/ARGUMENT_SKELETON.md`)
+       - paragraph curation gate: `output/PARAGRAPH_CURATION_REPORT.md` (best-of-N → select/fuse; avoid “keeps getting longer”)
+   - de-template + de-tic pass (after convergence): `style-harmonizer` + `opener-variator` (best-of-N)
+   - merge into the draft and run final checks: `output/DRAFT.md` (post-merge voice check → citation budget/injection if needed → de-template + citation-shape normalization → final audit)
    - LaTeX pipeline also compiles: `latex/main.pdf`
    - target: global unique citations recommended `>=165` (the workflow includes a “citation budget/injection” step if needed)
 
