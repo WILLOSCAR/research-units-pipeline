@@ -2,12 +2,9 @@
 
 > **一句话**：让 Pipeline 会"带人 / 带模型"做研究——不是给一堆脚本，而是给一套**语义化的 skills**，每个 skill 知道"该做什么、怎么做、做到什么程度、不能做什么"。
 
-## WIP
-1. best of N 写作
-## Todo
-1. 加入多 cli 协作，multi-agent design （在合适的环节接入 API，替代或者分担 codex 执行过程中的压力）
-2. 完善剩余的Pipeline，example 新增例子
-3. 精简Pipeline中冗余的中间内容，遵循优雅的奥卡姆剃刀原则，如无必要，勿增实体。
+English version: [`README.en.md`](README.en.md).  
+Skills index: [`SKILL_INDEX.md`](SKILL_INDEX.md).  
+Skill/Pipeline standard: [`SKILLS_STANDARD.md`](SKILLS_STANDARD.md).
 
 
 ## 核心设计：Skills-First + 拆解链路 + 证据先行
@@ -38,10 +35,6 @@
 | 写作出现模板话/口癖/越写越冗余 | `output/WRITER_SELFLOOP_TODO.md` + `output/PARAGRAPH_CURATION_REPORT.md` + `sections/*` | 定点改写（并行候选→择优融合；去旁白/去导航/融合冗余段），再跑自检门 |
 | 引用密度不够（unique 偏低） | `output/CITATION_BUDGET_REPORT.md` + `citations/ref.bib` | 按预算做 in-scope 注入（NO NEW FACTS） |
 
-
-English version: [`README.en.md`](README.en.md).
-skills index []
-
 ## codex 参考配置
 配置可能会根据 codex 的更新有变化
 ```toml
@@ -64,7 +57,9 @@ codex --sandbox workspace-write --ask-for-approval never
 
 2) 在对话里说一句话（例子）：
 
-> 帮我写一篇关于 LLM agents 的 LaTeX survey
+```
+帮我写一篇关于 LLM agents 的 LaTeX survey
+```
 
 3) 接下来会发生什么：
 - 它会在 `workspaces/` 下新建一个带时间戳的文件夹，把所有结果都放进去。
@@ -88,73 +83,79 @@ codex --sandbox workspace-write --ask-for-approval never
 
 ## 详细版：对话式执行（从 0 到 PDF）
 
-```
-你：
-  写一篇关于 LLM agents 的 LaTeX survey（严格；先给我大纲确认）
+你在对话里通常会这样说（例子）：
 
-[C0-C1] 找论文
-  - 检索候选：`max_results=1800`/桶；去重后目标 >=1200
-  - 做法（简述）：通常会把主题拆成几条检索式（同义词/缩写/子方向）分别抓取，再统一去重。
-    如果结果太少/噪声太大，就改写关键词、加排除词，必要时提高 `max_results` 再跑一次。
-  - 产物：`papers/core_set.csv`（默认 300 篇）+ `papers/retrieval_report.md`
+> 写一篇关于 LLM agents 的 LaTeX survey（严格；先给我大纲确认）
 
-[C2] 给你看大纲（不写正文；默认会停在这里等你确认）
-  - 你主要看：
-    - `outline/outline.yml`
-    - `outline/mapping.tsv`（每个小节默认映射 28 篇）
-    - （可选）`outline/coverage_report.md`（覆盖率/重复引用预警）
+然后会按阶段推进（每一步都会把结果写到 workspace 里）：
 
-你：
-  同意继续
-  （如果你想一次跑完：也可以在第一句话里说“自动同意大纲/跳过大纲确认”）
+### [C0-C1] 找论文
 
-[C3-C4] 把论文整理成“可写材料”（不写正文）
-  - `papers/paper_notes.jsonl`：每篇论文的要点/结果/局限
-  - `citations/ref.bib`：参考文献表（正文里能引用的 key）
-  - `outline/writer_context_packs.jsonl`：每个小节的写作包
-    （该写哪些对比点 + 能用哪些引用）
+- 目标：先拿到一个够大的候选池（`max_results=1800`/桶；去重后目标 `>=1200`），再选出 core set（默认 `300` 篇，写入 `papers/core_set.csv`）。
+- 做法（简述）：把主题拆成多条 query bucket（同义词/缩写/子方向）分别检索 → 合并 → 去重。结果太少/太吵就改关键词、加排除词，必要时提高 `max_results` 再跑一次。
+- 产物：`papers/core_set.csv` + `papers/retrieval_report.md`
 
-[C5] 写作与输出（都在 C5 内反复迭代）
-  1) 先写分小节文件：`sections/*.md`
-     （摘要/引言/相关工作 + 章节导语 + 各小节正文）
-  2) 再做“自检 + 收敛”（只修失败项，逐步润色）：
-     - 写作门：`output/WRITER_SELFLOOP_TODO.md`
-       （补结论句/对比/评测锚点/局限；去模板开头）
-     - 段落逻辑门：`output/SECTION_LOGIC_REPORT.md`
-       （补桥接、重排段落，消灭“段落孤岛”）
-     - 论证与口径门：`output/ARGUMENT_SELFLOOP_TODO.md`
-       - 口径单一真源：`output/ARGUMENT_SKELETON.md`
-     - 选段融合收敛：`output/PARAGRAPH_CURATION_REPORT.md`
-       （多候选→择优/融合，防止“越写越长”）
-  3) 去口癖/去模板化（收敛后再做）：
-     - `style-harmonizer` + `opener-variator`（best-of-N）
-  4) 合并成草稿并做终稿检查：`output/DRAFT.md`
-     - 如果引用不够：`output/CITATION_BUDGET_REPORT.md`
-       → `output/CITATION_INJECTION_REPORT.md`
-     - 最终审计：`output/AUDIT_REPORT.md`
-     - LaTeX pipeline 还会生成：`latex/main.pdf`
+### [C2] 给你看大纲（不写正文；默认会停在这里等你确认）
+
+- 你主要看：
+  - `outline/outline.yml`
+  - `outline/mapping.tsv`（每个小节默认映射 `28` 篇）
+  - （可选）`outline/coverage_report.md`（覆盖率/重复引用预警）
+- 你确认后回复：`同意继续`
+  - 如果你想一次跑完：也可以在第一句话里说“自动同意大纲 / 跳过大纲确认”。
+
+### [C3-C4] 整理成“可写材料”（不写正文）
+
+- `papers/paper_notes.jsonl`：每篇论文的要点/结果/局限
+- `citations/ref.bib`：参考文献表（正文里能引用的 key）
+- `outline/writer_context_packs.jsonl`：每个小节的写作包（该写哪些对比点 + 能用哪些引用）
+
+### [C5] 写作与输出（都在 C5 内反复迭代）
+
+1) 先写分小节文件：`sections/*.md`（摘要/引言/相关工作 + 章节导语 + 各小节正文）
+
+2) 再做“自检 + 收敛”（只修失败项，逐步润色）：
+- 写作门：`output/WRITER_SELFLOOP_TODO.md`（补结论句/对比/评测锚点/局限；去模板开头）
+- 段落逻辑门：`output/SECTION_LOGIC_REPORT.md`（补桥接、重排段落，消灭“段落孤岛”）
+- 论证与口径门：`output/ARGUMENT_SELFLOOP_TODO.md`（口径单一真源：`output/ARGUMENT_SKELETON.md`）
+- 选段融合收敛：`output/PARAGRAPH_CURATION_REPORT.md`（多候选→择优/融合，防止“越写越长”）
+
+3) 去口癖/去模板化（收敛后再做）：`style-harmonizer` + `opener-variator`（best-of-N）
+
+4) 合并成草稿并做终稿检查：`output/DRAFT.md`
+- 如果引用不够：`output/CITATION_BUDGET_REPORT.md` → `output/CITATION_INJECTION_REPORT.md`
+- 最终审计：`output/AUDIT_REPORT.md`
+- LaTeX pipeline 还会生成：`latex/main.pdf`
 
 目标：
-  - 全局 unique citations 推荐 `>=165`（不足会触发“引用预算/注入”补齐）
+- 全局 unique citations 推荐 `>=165`（不足会触发“引用预算/注入”补齐）
 
 如果卡住了：
-  - strict 拦住：看 `output/QUALITY_GATE.md`（最后一条就是原因 + 下一步）
-  - 运行问题：看 `output/RUN_ERRORS.md`
+- strict 拦住：看 `output/QUALITY_GATE.md`（最后一条就是原因 + 下一步）
+- 运行问题：看 `output/RUN_ERRORS.md`
 
-你：
-  按报告修复对应文件后说「继续」
-  → 从卡住的那一步继续跑，不需要全部重跑
-```
+恢复执行：
+- 按报告修复对应文件后说「继续」→ 从卡住的那一步继续跑，不需要全部重跑
 
 **关键原则**：C2-C4 强制 NO PROSE，先建证据底座；C5 才写作，失败时可定点修复中间产物。
 
-## 示例产物（v0.1，包含完整中间产物）
-这是一个“完整跑通”的示例 workspace：从找论文 → 出大纲 → 整理证据 → 写草稿 → 编译 PDF，所有中间产物都在里面，方便你对照理解整条链路。
+## 示例产物（v0.1：一整条链路的对照样例）
+这是一个“完整跑通”的示例目录：从找论文 → 出大纲 → 整理证据与引用 → 分小节写作 → 合并成稿 → 编译 PDF。  
+你可以把它当成“对照答案”：当你自己的 run 卡住时，直接去对照同名文件（或同一个文件夹）通常最快。
 
 - 示例路径：`example/e2e-agent-survey-latex-verify-<时间戳>/`（对应流程：`pipelines/arxiv-survey-latex.pipeline.md`）
 - 过程中会在 **C2（大纲）** 停下来等你确认；确认后才会写正文
 - 默认配置（A150++）：核心论文 300 篇、每个小节映射 28 篇、证据模式用 abstract（摘要级）；目标是全局引用足够密（全局 unique citations 默认收敛到推荐值）
 - 一般建议：`draft_profile: survey`（默认交付）；想更严格再用 `draft_profile: deep`
+
+建议从这里开始看示例（按顺序打开）：
+- `example/e2e-agent-survey-latex-verify-<最新时间戳>/output/AUDIT_REPORT.md`：是否 PASS + 关键指标（引用数、模板话、缺小节等）
+- `example/e2e-agent-survey-latex-verify-<最新时间戳>/latex/main.pdf`：最终 PDF 效果（如果你用的是 LaTeX pipeline）
+- `example/e2e-agent-survey-latex-verify-<最新时间戳>/output/DRAFT.md`：合并后的正文（和 PDF 内容对应）
+
+如果你想看“写作是怎么逐步变好”的：
+- 正文原始素材在 `sections/`（按小节拆分，便于逐个修）
+- 每轮自检/收敛的报告在 `output/`（例如 `WRITER_SELFLOOP_TODO.md` / `SECTION_LOGIC_REPORT.md` / `ARGUMENT_SELFLOOP_TODO.md` / `PARAGRAPH_CURATION_REPORT.md`）
 
 目录速览（每个文件夹干嘛用）：
 
@@ -168,7 +169,7 @@ example/e2e-agent-survey-latex-verify-<最新时间戳>/
   GOAL.md              # 目标/范围 seed
   queries.md            # 检索与写作档位配置（draft_profile/evidence_mode/core_size...）
   papers/              # C1/C3：检索结果与论文“底座”
-  outline/             # C2/C3/C4：taxonomy/outline/mapping + briefs + evidence packs + tables/figures 规格
+  outline/             # C2/C3/C4：大纲与映射 + 写作卡片 + 证据包 + 表格（索引表不进正文；Appendix 表会进正文附录）
   citations/           # C4：BibTeX 与 verification 记录
   sections/            # C5：按 H2/H3 拆分的可 QA 小文件（含 chapter lead）
   output/              # C5：合并后的 DRAFT + 报告（audit/merge/citation budget...）
@@ -178,14 +179,29 @@ example/e2e-agent-survey-latex-verify-<最新时间戳>/
 文件夹之间的“流水线关系”：
 
 ```mermaid
-flowchart LR
-  C0["C0 Workspace<br/>STATUS/UNITS/DECISIONS/queries"] --> C1["C1 papers/<br/>papers_raw → papers_dedup → core_set<br/>(+ retrieval_report)"]
-  C1 --> C2["C2 outline/ (NO PROSE)<br/>taxonomy → outline → mapping<br/>(+ coverage_report)"]
-  C2 --> C3["C3 evidence substrate (NO PROSE)<br/>paper_notes + evidence_bank<br/>subsection_briefs / chapter_briefs"]
-  C3 --> C4["C4 evidence packs + citations (NO PROSE)<br/>ref.bib + verified<br/>evidence_bindings / evidence_drafts<br/>anchor_sheet / writer_context_packs"]
-  C4 --> C5["C5 sections/<br/>front matter + per-H3 writing units<br/>(+ transitions)"]
-  C5 --> OUT["output/<br/>DRAFT + QA reports"]
-  OUT --> TEX["latex/<br/>main.tex → main.pdf"]
+flowchart TD
+  WS["C0 初始化<br/>workspaces/…"] --> P["C1 找论文<br/>papers/"]
+  P --> O["C2 大纲确认（不写正文）<br/>outline/"]
+  O --> E["C3-C4 整理成可写材料（不写正文）<br/>papers/ + citations/ + outline/"]
+
+  E --> S["C5 按小节写作<br/>sections/"]
+
+  subgraph LOOP["C5 自检与收敛（失败就回到 sections/ 再改）"]
+    G1["写作门<br/>WRITER_SELFLOOP_TODO.md"]
+    G2["段落逻辑门<br/>SECTION_LOGIC_REPORT.md"]
+    G3["论证/口径门<br/>ARGUMENT_SELFLOOP_TODO.md"]
+    G4["选段融合收敛<br/>PARAGRAPH_CURATION_REPORT.md"]
+  end
+
+  S --> G1 --> G2 --> G3 --> G4 --> D["合并成稿<br/>output/DRAFT.md"]
+  G1 -.-> S
+  G2 -.-> S
+  G3 -.-> S
+  G4 -.-> S
+
+  D --> A["总审计<br/>output/AUDIT_REPORT.md"]
+  A -.-> S
+  A --> TEX["LaTeX 编译（可选）<br/>latex/main.pdf"]
 ```
 
 交付时只关注**最新时间戳**的示例目录（默认保留 2–3 个历史目录用于回归对比）：
@@ -196,6 +212,13 @@ flowchart LR
 
 
 ## 欢迎提出各类 issue，一起改进写作流程
+
+### WIP
+1. best of N 写作
+### Todo
+1. 加入多 cli 协作，multi-agent design （在合适的环节接入 API，替代或者分担 codex 执行过程中的压力）
+2. 完善剩余的Pipeline，example 新增例子
+3. 精简Pipeline中冗余的中间内容，遵循优雅的奥卡姆剃刀原则，如无必要，勿增实体。
 
 ## Star History
 

@@ -38,7 +38,9 @@ At a glance (what to look at first):
 | reduce templated voice / redundancy | `output/WRITER_SELFLOOP_TODO.md` + `output/PARAGRAPH_CURATION_REPORT.md` + `sections/*` | targeted rewrites + best-of-N candidates + paragraph fusion, then rerun gates |
 | boost global unique citations | `output/CITATION_BUDGET_REPORT.md` + `citations/ref.bib` | in-scope injection (NO NEW FACTS) |
 
-Chinese version: [`README.md`](README.md).
+Chinese version: [`README.md`](README.md).  
+Skills index: [`SKILL_INDEX.md`](SKILL_INDEX.md).  
+Skill/Pipeline standard: [`SKILLS_STANDARD.md`](SKILLS_STANDARD.md).
 
 ## Codex Reference Config
 
@@ -148,14 +150,24 @@ You:
 
 **Key principle**: C2–C4 enforce NO PROSE—build the evidence base first; C5 writes prose; failures are point-fixable.
 
-## Example Artifacts (v0.1, full intermediate outputs)
+## Example Artifacts (v0.1: a full end-to-end reference run)
 
-This is a fully-run example workspace: find papers → draft outline → build evidence → write → compile PDF. It includes all intermediate artifacts so you can learn the workflow by inspection.
+This is a fully-run example directory: find papers → outline → evidence + references → write by section → merge → compile PDF.  
+Treat it as a “reference answer”: when your own run gets stuck, comparing the same file/folder is usually the fastest way to debug.
 
 - Example path: `example/e2e-agent-survey-latex-verify-<TIMESTAMP>/` (pipeline: `pipelines/arxiv-survey-latex.pipeline.md`)
 - It pauses at **C2 (outline review)** before writing any prose
 - Default posture (A150++): 300 core papers, 28 mapped papers per subsection, abstract-level evidence by default; the goal is to keep citation coverage high across the full draft
 - Recommended: `draft_profile: survey` (default deliverable) or `draft_profile: deep` (stricter)
+
+Suggested entry points (open in this order):
+- `example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/output/AUDIT_REPORT.md`: PASS/FAIL + key metrics (citations, template voice, missing sections)
+- `example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/latex/main.pdf`: the final PDF (LaTeX pipeline)
+- `example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/output/DRAFT.md`: the merged draft (matches the PDF content)
+
+If you want to see how writing converges:
+- Raw per-section prose lives in `sections/` (easy to fix one unit at a time)
+- Iteration reports live in `output/` (e.g., `WRITER_SELFLOOP_TODO.md`, `SECTION_LOGIC_REPORT.md`, `ARGUMENT_SELFLOOP_TODO.md`, `PARAGRAPH_CURATION_REPORT.md`)
 
 Directory quick glance (what each folder is for):
 
@@ -169,7 +181,7 @@ example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/
   GOAL.md              # goal/scope seed
   queries.md           # retrieval + writing profile config
   papers/              # C1/C3: retrieval outputs + paper notes/evidence base
-  outline/             # C2/C3/C4: outline/mapping + briefs + evidence packs
+  outline/             # C2/C3/C4: outline/mapping + writing cards + evidence packs + tables (index tables stay intermediate; Appendix tables go into the draft)
   citations/           # C4: BibTeX + verification records
   sections/            # C5: per-H2/H3 writing units (incl. chapter leads)
   output/              # C5: merged DRAFT + reports
@@ -179,14 +191,29 @@ example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/
 Pipeline view (how folders connect):
 
 ```mermaid
-flowchart LR
-  C0["C0 Workspace<br/>STATUS/UNITS/DECISIONS/queries"] --> C1["C1 papers/<br/>papers_raw → papers_dedup → core_set<br/>(+ retrieval_report)"]
-  C1 --> C2["C2 outline/ (NO PROSE)<br/>outline + mapping<br/>(+ coverage_report)"]
-  C2 --> C3["C3 evidence base (NO PROSE)<br/>paper_notes + evidence_bank<br/>subsection_briefs / chapter_briefs"]
-  C3 --> C4["C4 evidence packs + citations (NO PROSE)<br/>ref.bib + verified<br/>evidence_bindings / evidence_drafts<br/>anchor_sheet / writer_context_packs"]
-  C4 --> C5["C5 sections/<br/>front matter + per-H3 writing units<br/>(+ transitions)"]
-  C5 --> OUT["output/<br/>DRAFT + QA reports"]
-  OUT --> TEX["latex/<br/>main.tex → main.pdf"]
+flowchart TD
+  WS["C0 Workspace init<br/>workspaces/..."] --> P["C1 Find papers<br/>papers/"]
+  P --> O["C2 Outline review (no prose)<br/>outline/"]
+  O --> E["C3-C4 Build write-ready material (no prose)<br/>papers/ + citations/ + outline/"]
+
+  E --> S["C5 Write by section<br/>sections/"]
+
+  subgraph LOOP["C5 Check + converge (failures loop back to sections/)"]
+    G1["Writer gate<br/>WRITER_SELFLOOP_TODO.md"]
+    G2["Paragraph logic gate<br/>SECTION_LOGIC_REPORT.md"]
+    G3["Argument/consistency gate<br/>ARGUMENT_SELFLOOP_TODO.md"]
+    G4["Paragraph curation<br/>PARAGRAPH_CURATION_REPORT.md"]
+  end
+
+  S --> G1 --> G2 --> G3 --> G4 --> D["Merge draft<br/>output/DRAFT.md"]
+  G1 -.-> S
+  G2 -.-> S
+  G3 -.-> S
+  G4 -.-> S
+
+  D --> A["Final audit<br/>output/AUDIT_REPORT.md"]
+  A -.-> S
+  A --> TEX["LaTeX compile (optional)<br/>latex/main.pdf"]
 ```
 
 For delivery, focus on the **latest timestamped** example directory (keep 2–3 older runs for regression):
