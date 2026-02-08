@@ -203,25 +203,15 @@ Pipeline view (how folders connect):
 
 ```mermaid
 flowchart TB
-  subgraph MAIN1["Main flow (setup)"]
+  subgraph TOP["Main flow"]
     direction LR
-    WS["C0 Workspace init<br/>workspaces/..."] --> P["C1 Find papers<br/>papers/"] --> O["C2 Outline review<br/>outline/"]
+    WS["C0 init"] --> P["C1 papers"] --> O["C2 outline (NO PROSE)"] --> E["C3-4 evidence (NO PROSE)"] --> S["C5 sections"]
   end
 
-  subgraph MAIN2["Main flow (build write-ready material)"]
+  subgraph BOT["C5 loop + output"]
     direction LR
-    E["C3-C4 Build write-ready material (no prose)<br/>papers/ + citations/ + outline/"] --> S["C5 Write by section<br/>sections/"]
-  end
-
-  O --> E
-
-  subgraph LOOP["C5 Check + converge (failures loop back to sections/)"]
-    direction LR
-    G1["Writer gate<br/>WRITER_SELFLOOP_TODO.md"]
-    G2["Paragraph logic gate<br/>SECTION_LOGIC_REPORT.md"]
-    G3["Argument/consistency gate<br/>ARGUMENT_SELFLOOP_TODO.md"]
-    G4["Paragraph curation<br/>PARAGRAPH_CURATION_REPORT.md"]
-    G1 --> G2 --> G3 --> G4
+    G1["writer gate"] --> G2["logic gate"] --> G3["argument gate"] --> G4["curation gate"]
+    G4 --> D["merge → DRAFT.md"] --> A["audit"] --> TEX["PDF"]
   end
 
   S --> G1
@@ -229,12 +219,6 @@ flowchart TB
   G2 -.-> S
   G3 -.-> S
   G4 -.-> S
-
-  subgraph OUT["Output (merge / audit / optional PDF)"]
-    direction LR
-    D["Merge draft<br/>output/DRAFT.md"] --> A["Final audit<br/>output/AUDIT_REPORT.md"] --> TEX["LaTeX compile (optional)<br/>latex/main.pdf"]
-  end
-  G4 --> D
   A -.-> S
 ```
 

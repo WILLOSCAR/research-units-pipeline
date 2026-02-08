@@ -196,25 +196,15 @@ example/e2e-agent-survey-latex-verify-<最新时间戳>/
 
 ```mermaid
 flowchart TB
-  subgraph MAIN1["主流程（准备）"]
+  subgraph TOP["主流程"]
     direction LR
-    WS["C0 初始化<br/>workspaces/…"] --> P["C1 找论文<br/>papers/"] --> O["C2 大纲确认<br/>outline/"]
+    WS["C0 初始化"] --> P["C1 找论文"] --> O["C2 大纲（NO PROSE）"] --> E["C3-4 证据材料（NO PROSE）"] --> S["C5 分小节写作"]
   end
 
-  subgraph MAIN2["主流程（把材料整理到可写）"]
+  subgraph BOT["C5：自检+输出"]
     direction LR
-    E["C3-C4 可写材料（不写正文）<br/>papers/ + citations/ + outline/"] --> S["C5 分小节写作<br/>sections/"]
-  end
-
-  O --> E
-
-  subgraph LOOP["C5 自检与收敛（失败回到 sections/ 再改）"]
-    direction LR
-    G1["写作门<br/>WRITER_SELFLOOP_TODO.md"]
-    G2["段落逻辑门<br/>SECTION_LOGIC_REPORT.md"]
-    G3["论证/口径门<br/>ARGUMENT_SELFLOOP_TODO.md"]
-    G4["选段融合<br/>PARAGRAPH_CURATION_REPORT.md"]
-    G1 --> G2 --> G3 --> G4
+    G1["写作门"] --> G2["逻辑门"] --> G3["论证/口径门"] --> G4["选段融合"]
+    G4 --> D["合并 → DRAFT.md"] --> A["总审计"] --> TEX["PDF"]
   end
 
   S --> G1
@@ -222,12 +212,6 @@ flowchart TB
   G2 -.-> S
   G3 -.-> S
   G4 -.-> S
-
-  subgraph OUT["输出（合并/审计/可选 PDF）"]
-    direction LR
-    D["合并成稿<br/>output/DRAFT.md"] --> A["总审计<br/>output/AUDIT_REPORT.md"] --> TEX["LaTeX 编译（可选）<br/>latex/main.pdf"]
-  end
-  G4 --> D
   A -.-> S
 ```
 
