@@ -68,7 +68,7 @@ codex --sandbox workspace-write --ask-for-approval never
 
 2) 在对话里直接说目标（例子）：
 
-> 给我写一篇关于 LLM agents 的 LaTeX survey（严格质量门；先停在 C2 让我确认）
+> 给我写一篇关于 LLM agents 的 LaTeX survey
 
 它会自动创建 `workspaces/<时间戳>/`，并按 C0→C5 逐步产出文件。默认会在 **C2（大纲确认）** 停下来；你确认后才会开始写正文并编译 PDF。
 
