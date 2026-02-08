@@ -2,7 +2,6 @@
 
 > **一句话**：让 Pipeline 会"带人 / 带模型"做研究——不是给一堆脚本，而是给一套**语义化的 skills**，每个 skill 知道"该做什么、怎么做、做到什么程度、不能做什么"。
 
-
 ## WIP
 1. best of N 写作
 ## Todo
@@ -41,7 +40,7 @@
 
 
 English version: [`README.en.md`](README.en.md).
-
+skills index []
 
 ## codex 参考配置
 配置可能会根据 codex 的更新有变化
@@ -55,7 +54,7 @@ shell_snapshot = true
 ```
 
 
-## 一句话启用（推荐：对话式跑一篇 survey）
+## 30 秒上手（从 0 到 PDF）
 
 1) 在本仓库目录启动 Codex：
 
@@ -63,106 +62,88 @@ shell_snapshot = true
 codex --sandbox workspace-write --ask-for-approval never
 ```
 
-2) 在对话里直接说目标（例子）：
+2) 在对话里说一句话（例子）：
 
-> 给我写一篇关于 LLM agents 的 LaTeX survey
+> 帮我写一篇关于 LLM agents 的 LaTeX survey
 
-它会自动创建 `workspaces/<时间戳>/`，并按 C0→C5 逐步产出文件。默认会在 **C2（大纲确认）** 停下来；你确认后才会开始写正文并编译 PDF。
+3) 接下来会发生什么：
+- 它会在 `workspaces/` 下新建一个带时间戳的文件夹，把所有结果都放进去。
+- 它会先给你一份“大纲 + 每个小节要参考哪些论文”，然后停下来等你确认。
+- 你回复“同意继续”，它才会开始写正文，并在最后生成 PDF。
 
-可选（用一句话说清即可）：
-- 指定流程文件：`pipelines/arxiv-survey-latex.pipeline.md`（需要 PDF 就选它）
-- 不想停在 C2：加 `C2 自动同意`（熟练后再用）
+4) 跑完后你最常看的 3 个文件：
+- 草稿（Markdown）：`workspaces/<…>/output/DRAFT.md`
+- PDF：`workspaces/<…>/latex/main.pdf`
+- 质量报告：`workspaces/<…>/output/AUDIT_REPORT.md`
 
-术语速查：
-- workspace：一次运行的输出目录（`workspaces/<name>/`）
-- C2：大纲确认点；不确认就不会写正文
-- strict：开启质量门；失败会停并在 `output/` 写报告
+5) 如果卡住了，先看这两个文件：
+- `workspaces/<…>/output/QUALITY_GATE.md`（为什么停、下一步该改什么）
+- `workspaces/<…>/output/RUN_ERRORS.md`（脚本/缺文件等运行问题）
 
-## 你会得到什么（分层产物 + 自循环入口）
+备注（可选，但更稳）：
+- 你可以显式指定跑哪条流程：`pipelines/arxiv-survey-latex.pipeline.md`（需要 PDF 就用它）
+- 想一次跑完（不在大纲处停）：请在那句话里补一句类似“跳过大纲确认 / 自动同意大纲 / 无需停在 outline 处确认，直接继续执行到成稿”的指令。
 
-一次完整 run 的输出都在一个 workspace 里（`workspaces/<name>/`）。你主要会用到两类东西：
-- **运行清单**：看进度 / 看卡点 / 从失败点继续跑
-- **分阶段产物**：papers/outline/citations/sections/output/latex
+下面的“详细版”会解释每一步会产出哪些中间文件，以及写作阶段如何逐步润色与收敛。
 
-默认参数（A150++，对齐 survey 交付）：
-- 检索上限：`max_results=1800`（每个 query bucket）
-- 核心论文：`core_size=300`（对应 `papers/core_set.csv` / `citations/ref.bib`）
-- 每个小节论文池：`per_subsection=28`（对应 `outline/mapping.tsv`）
-- 全局 unique citations：hard `>=150`，recommended `>=165`（默认会补齐到 recommended）
-
-运行清单（最常看）：
-- `UNITS.csv`：约 43–45 个 unit（不同 pipeline 略有差异；LaTeX/PDF 版会多几个）；卡住就看哪个 unit 是 `BLOCKED`
-- `DECISIONS.md`：人类确认点（最重要的是 **C2：确认大纲后才写正文**）
-- `STATUS.md`：运行日志（当前跑到哪一步）
-
-分阶段产物（你真正关心的内容）：
-```
-C1（找论文）:
-  papers/papers_raw.jsonl → papers/papers_dedup.jsonl → papers/core_set.csv
-  + papers/retrieval_report.md   # 这次检索/筛选的说明
-
-C2（搭骨架；不写正文）:
-  outline/outline.yml + outline/mapping.tsv
-  (+ outline/taxonomy.yml / outline/coverage_report.md)  # 可选：更结构化/更可审计
-
-C3（做“可写”的证据底座；不写正文）:
-  papers/paper_notes.jsonl + papers/evidence_bank.jsonl → outline/subsection_briefs.jsonl
-  + papers/fulltext_index.jsonl  # 永远存在；abstract 模式只记录 skip，fulltext 模式才会下载/抽取
-
-C4（把每小节写作包准备好；不写正文）:
-  citations/ref.bib + citations/verified.jsonl
-  + outline/evidence_bindings.jsonl / outline/evidence_drafts.jsonl / outline/anchor_sheet.jsonl
-  → outline/writer_context_packs.jsonl
-  + outline/tables_appendix.md  # 面向读者的 Appendix 表格（索引表只作为中间产物保留）
-
-C5（写作与输出）:
-  sections/*.md → output/DRAFT.md
-  (+ latex/main.pdf)  # 只有 LaTeX pipeline 才会有
-```
-
-失败怎么定位（按优先级，按报告定点修）：
-- 跑不动/脚本报错：`output/RUN_ERRORS.md`
-- strict 模式被拦住：`output/QUALITY_GATE.md`（最后一条就是当前原因 + 下一步）
-- 写作门（只修列出的文件）：`output/WRITER_SELFLOOP_TODO.md`
-- 段落跳步/孤岛：`output/SECTION_LOGIC_REPORT.md`
-- 论证链路 + 口径一致性：`output/ARGUMENT_SELFLOOP_TODO.md`（口径单一真源在 `output/ARGUMENT_SKELETON.md# Consistency Contract`）
-- 去冗余/融合收敛：`output/PARAGRAPH_CURATION_REPORT.md`（选段→评价→多候选→择优融合）
-- 引用增密：`output/CITATION_BUDGET_REPORT.md`
-- 全局体检：`output/AUDIT_REPORT.md`（最终审计）
-
-## 简单的对话式执行（从 0 到 PDF）
+## 详细版：对话式执行（从 0 到 PDF）
 
 ```
-你：写一篇关于 LLM agents 的 LaTeX survey
+你：
+  写一篇关于 LLM agents 的 LaTeX survey（严格；先给我大纲确认）
 
-↓ [C0-C1] 找论文：检索候选（`max_results=1800`/桶；去重后目标 >=1200）→ core set（默认 300 篇：`papers/core_set.csv`）
-↓ [C2] 生成“大纲 + 每小节论文池”（不写正文）：`outline/outline.yml` + `outline/mapping.tsv`（默认每个小节映射 28 篇）
-   → 默认停在 C2 等你确认（如果你明确说 `C2 自动同意` 才会继续）
+[C0-C1] 找论文
+  - 检索候选：`max_results=1800`/桶；去重后目标 >=1200
+  - 做法（简述）：通常会把主题拆成几条检索式（同义词/缩写/子方向）分别抓取，再统一去重。
+    如果结果太少/噪声太大，就改写关键词、加排除词，必要时提高 `max_results` 再跑一次。
+  - 产物：`papers/core_set.csv`（默认 300 篇）+ `papers/retrieval_report.md`
 
-你：看过没问题，回复「同意继续」
+[C2] 给你看大纲（不写正文；默认会停在这里等你确认）
+  - 你主要看：
+    - `outline/outline.yml`
+    - `outline/mapping.tsv`（每个小节默认映射 28 篇）
+    - （可选）`outline/coverage_report.md`（覆盖率/重复引用预警）
 
-↓ [C3-C4] 把论文整理成“可写材料”（不写正文）：
-   - `papers/paper_notes.jsonl`：每篇论文的要点/结果/局限
-   - `citations/ref.bib`：参考文献表（可引用的 key 集合）
-   - `outline/writer_context_packs.jsonl`：每个小节的写作包（允许引用哪些论文 + 该写哪些对比点）
-↓ [C5] 写作与输出（都在 C5 内反复迭代，不新增阶段）：
-   - 先写分小节文件：front matter + chapter lead + H3 → `sections/*.md`
-   - 再做“自检 + 收敛”（只修失败项，逐步润色）：
-       - 写作门：`output/WRITER_SELFLOOP_TODO.md`（补 thesis/对比/评测锚点/局限；去旁白/去模板）
-       - 段落逻辑门：`output/SECTION_LOGIC_REPORT.md`（补桥接、重排段落，消灭“段落孤岛”）
-       - 论证与口径门：`output/ARGUMENT_SELFLOOP_TODO.md`（口径单一真源：`output/ARGUMENT_SKELETON.md`）
-       - 选段融合收敛：`output/PARAGRAPH_CURATION_REPORT.md`（多候选→择优/融合，防止“越写越长”）
-   - 去口癖/去模板化（收敛后再做）：`style-harmonizer` + `opener-variator`（best-of-N）
-   - 再合并成草稿并做终稿自检：`output/DRAFT.md`（合并后口吻检查→必要时引用预算/注入→去套话/规范引用形态→总审计）
-   - LaTeX pipeline 会额外生成：`latex/main.pdf`
-   - 目标：全局 unique citations 推荐 `>=165`（不足会触发“引用预算/注入”步骤补齐）
+你：
+  同意继续
+  （如果你想一次跑完：也可以在第一句话里说“自动同意大纲/跳过大纲确认”）
 
-【如果卡住】按报告定点修：
-- 开了 strict：看 `output/QUALITY_GATE.md`（最后一条就是当前原因 + 下一步）
-- 最终总审计：看 `output/AUDIT_REPORT.md`
+[C3-C4] 把论文整理成“可写材料”（不写正文）
+  - `papers/paper_notes.jsonl`：每篇论文的要点/结果/局限
+  - `citations/ref.bib`：参考文献表（正文里能引用的 key）
+  - `outline/writer_context_packs.jsonl`：每个小节的写作包
+    （该写哪些对比点 + 能用哪些引用）
 
-你：按报告修复对应文件后说「继续」
-→ 从卡住的那一步继续跑，不需要全部重跑
+[C5] 写作与输出（都在 C5 内反复迭代）
+  1) 先写分小节文件：`sections/*.md`
+     （摘要/引言/相关工作 + 章节导语 + 各小节正文）
+  2) 再做“自检 + 收敛”（只修失败项，逐步润色）：
+     - 写作门：`output/WRITER_SELFLOOP_TODO.md`
+       （补结论句/对比/评测锚点/局限；去模板开头）
+     - 段落逻辑门：`output/SECTION_LOGIC_REPORT.md`
+       （补桥接、重排段落，消灭“段落孤岛”）
+     - 论证与口径门：`output/ARGUMENT_SELFLOOP_TODO.md`
+       - 口径单一真源：`output/ARGUMENT_SKELETON.md`
+     - 选段融合收敛：`output/PARAGRAPH_CURATION_REPORT.md`
+       （多候选→择优/融合，防止“越写越长”）
+  3) 去口癖/去模板化（收敛后再做）：
+     - `style-harmonizer` + `opener-variator`（best-of-N）
+  4) 合并成草稿并做终稿检查：`output/DRAFT.md`
+     - 如果引用不够：`output/CITATION_BUDGET_REPORT.md`
+       → `output/CITATION_INJECTION_REPORT.md`
+     - 最终审计：`output/AUDIT_REPORT.md`
+     - LaTeX pipeline 还会生成：`latex/main.pdf`
+
+目标：
+  - 全局 unique citations 推荐 `>=165`（不足会触发“引用预算/注入”补齐）
+
+如果卡住了：
+  - strict 拦住：看 `output/QUALITY_GATE.md`（最后一条就是原因 + 下一步）
+  - 运行问题：看 `output/RUN_ERRORS.md`
+
+你：
+  按报告修复对应文件后说「继续」
+  → 从卡住的那一步继续跑，不需要全部重跑
 ```
 
 **关键原则**：C2-C4 强制 NO PROSE，先建证据底座；C5 才写作，失败时可定点修复中间产物。

@@ -53,7 +53,7 @@ shell_snapshot = true
 steer = true
 ```
 
-## One-line Activation (recommended: run it in chat)
+## 30-second quickstart (0 to PDF)
 
 1) Start Codex in this repo directory:
 
@@ -61,109 +61,89 @@ steer = true
 codex --sandbox workspace-write --ask-for-approval never
 ```
 
-2) Tell it what you want (example):
+2) Say one sentence in chat (example):
 
-> Write a LaTeX survey about LLM agents (pause at the outline for my review)
+> Write a survey about LLM agents and output a PDF (show me the outline first)
 
-It will: create `workspaces/<timestamp>/` → retrieve and curate papers → draft an outline → **pause at C2 (outline review)** → then write the draft and compile the PDF.
+3) What happens next (plain English):
+- It creates a new timestamped folder under `workspaces/` and puts everything there.
+- It first prepares an outline and a per-section reading list, then pauses for your OK.
+- Reply “Looks good. Continue.” to start writing and generate the PDF.
 
-Optional: specify which pipeline to use (choose the LaTeX one if you want a PDF):
+4) Three files you will open most:
+- Draft (Markdown): `workspaces/<...>/output/DRAFT.md`
+- PDF: `workspaces/<...>/latex/main.pdf`
+- QA report: `workspaces/<...>/output/AUDIT_REPORT.md`
 
-> Use `pipelines/arxiv-survey-latex.pipeline.md` to write a survey on LLM agents (strict; pause at C2 for my review)
+5) If it stops unexpectedly, check:
+- `workspaces/<...>/output/QUALITY_GATE.md` (why it stopped and what to fix next)
+- `workspaces/<...>/output/RUN_ERRORS.md` (run/script errors)
 
-If you do *not* want to pause at C2, say it explicitly up front (recommended only once you trust the workflow), e.g. “auto‑approve C2”.
+Optional (more control):
+- Pin the pipeline explicitly: `pipelines/arxiv-survey-latex.pipeline.md` (use this if you want a PDF)
+- If you want a full end-to-end run without pausing at the outline, say it in your prompt (“auto-approve the outline”).
 
-Glossary (only what you need here):
-- workspace: one run’s output folder under `workspaces/<name>/`
-- pipeline: the stage plan (retrieval → structure → evidence → writing → outputs), in `pipelines/*.pipeline.md`
-- skill: a step playbook in `.codex/skills/*/SKILL.md`
-- unit: one step (one row in `UNITS.csv`)
-- checkpoint / C2: a pause-for-human-review point; C2 = approve the outline before any prose
-- strict: enables quality gates; failures stop and write reports under `output/`
+The “detailed walkthrough” below explains intermediate artifacts and the writing iteration loop.
 
-## What You Get (Layered Artifacts + Self-Healing Entry Points)
-
-In a workspace, there are two things you will use most: a run checklist, and stage artifacts.
-
-Default posture (A150++, aligned with a “real survey” deliverable):
-- retrieval cap: `max_results=1800` (per query bucket)
-- core set: `core_size=300` (→ `papers/core_set.csv` / `citations/ref.bib`)
-- per‑H3 paper pool: `per_subsection=28` (→ `outline/mapping.tsv`)
-- global unique citations: hard floor `>=150`, recommended target `>=165` (by default the workflow tries to close the recommended gap)
-
-**Run checklist (progress + where it got stuck)**:
-- `UNITS.csv`: ~43–45 units depending on pipeline (LaTeX/PDF pipelines have a few extra); look for units marked `BLOCKED`
-- `DECISIONS.md`: human review points (most importantly **C2: outline approval before prose**)
-- `STATUS.md`: the run log (what ran, and when)
-
-**Stage artifacts (the actual content)**:
-```
-C1 (find papers):
-  papers/papers_raw.jsonl → papers/papers_dedup.jsonl → papers/core_set.csv
-  + papers/retrieval_report.md
-
-C2 (outline, no prose):
-  outline/outline.yml + outline/mapping.tsv
-  (+ outline/taxonomy.yml / outline/coverage_report.md)
-
-C3 (build a write-ready evidence base, no prose):
-  papers/paper_notes.jsonl + papers/evidence_bank.jsonl → outline/subsection_briefs.jsonl
-  + papers/fulltext_index.jsonl  # always present; in abstract mode it records “skip”, fulltext mode downloads/extracts
-
-C4 (prepare per-section writing packs, no prose):
-  citations/ref.bib + citations/verified.jsonl
-  + outline/evidence_bindings.jsonl / outline/evidence_drafts.jsonl / outline/anchor_sheet.jsonl
-  → outline/writer_context_packs.jsonl
-  + outline/tables_appendix.md  # reader-facing Appendix tables (index tables stay intermediate)
-
-C5 (writing and outputs):
-  sections/*.md → output/DRAFT.md
-  (+ latex/main.pdf)  # LaTeX pipeline only
-```
-
-**Quality gates / where to start when something fails**:
-- script/run errors: `output/RUN_ERRORS.md`
-- strict mode blocks: `output/QUALITY_GATE.md` (the last entry is the current reason + next step)
-- writing quality (fix only listed files): `output/WRITER_SELFLOOP_TODO.md`
-- paragraph “jump cuts”: `output/SECTION_LOGIC_REPORT.md`
-- argument continuity + consistency: `output/ARGUMENT_SELFLOOP_TODO.md` (the single source of truth lives in `output/ARGUMENT_SKELETON.md# Consistency Contract`)
-- redundancy/convergence (select -> best-of-N -> fuse): `output/PARAGRAPH_CURATION_REPORT.md`
-- low citation coverage: `output/CITATION_BUDGET_REPORT.md`
-- final audit: `output/AUDIT_REPORT.md`
-
-## Conversational Execution (0 to PDF)
+## Detailed walkthrough: 0 to PDF
 
 ```
-You: Write a LaTeX survey about LLM agents (pause at the outline for my review)
+You:
+  Write a LaTeX survey about LLM agents (strict; show me the outline first)
 
-↓ [C0-C1] Find papers: retrieve candidates (`max_results=1800` per bucket; dedup target >=1200) → select a core set (default 300 in `papers/core_set.csv`)
-↓ [C2] Produce an outline + per‑H3 paper pools (no prose): `outline/outline.yml` + `outline/mapping.tsv` (default 28 papers per H3)
-   → pause at C2 for your approval
+[C0-C1] Find papers
+  - Retrieve candidates: `max_results=1800` per bucket; dedup target >=1200
+  - Approach (short): split the topic into multiple query buckets (synonyms/acronyms/subtopics),
+    retrieve them separately, then deduplicate into one pool.
+    If the pool is too small or too noisy, rewrite keywords, add exclusions, and optionally raise `max_results` and rerun.
+  - Output: `papers/core_set.csv` (default 300) + `papers/retrieval_report.md`
 
-You: Looks good. Continue.
+[C2] Outline review (no prose; the run pauses here by default)
+  - You mainly review:
+    - `outline/outline.yml`
+    - `outline/mapping.tsv` (default 28 papers per subsection)
+    - (optional) `outline/coverage_report.md` (coverage/reuse warnings)
 
-↓ [C3-C4] Turn papers into write-ready material (no prose):
-   - `papers/paper_notes.jsonl` (what each paper did / found / limitations)
-   - `citations/ref.bib` (the reference list you can cite)
-   - `outline/writer_context_packs.jsonl` (per-section writing packs: what to compare + which papers are in scope)
-↓ [C5] Write and output (all iterations stay inside C5; no extra stage):
-   - write per-section files: front matter + chapter leads + H3 bodies → `sections/*.md`
-   - iterate with four “check + converge” gates (fix only what fails):
-       - writer gate: `output/WRITER_SELFLOOP_TODO.md` (missing thesis/contrasts/eval anchors/limitations; remove narration/templates)
-       - paragraph logic gate: `output/SECTION_LOGIC_REPORT.md` (bridges + ordering; eliminate “paragraph islands”)
-       - argument/consistency gate: `output/ARGUMENT_SELFLOOP_TODO.md` (single source of truth: `output/ARGUMENT_SKELETON.md`)
-       - paragraph curation gate: `output/PARAGRAPH_CURATION_REPORT.md` (best-of-N → select/fuse; avoid “keeps getting longer”)
-   - de-template + de-tic pass (after convergence): `style-harmonizer` + `opener-variator` (best-of-N)
-   - merge into the draft and run final checks: `output/DRAFT.md` (post-merge voice check → citation budget/injection if needed → de-template + citation-shape normalization → final audit)
-   - LaTeX pipeline also compiles: `latex/main.pdf`
-   - target: global unique citations recommended `>=165` (the workflow includes a “citation budget/injection” step if needed)
+You:
+  Looks good. Continue.
+  (If you want a full end-to-end run, say “auto-approve the outline” in the first prompt.)
+
+[C3-C4] Turn papers into write-ready material (no prose)
+  - `papers/paper_notes.jsonl`: what each paper did/found + limitations
+  - `citations/ref.bib`: the reference list (citation keys you can use)
+  - `outline/writer_context_packs.jsonl`: per-section writing packs
+    (what to compare + which citations are in scope)
+
+[C5] Write and output (all iterations stay inside C5)
+  1) Draft per-section files: `sections/*.md`
+     (front matter + chapter leads + subsection bodies)
+  2) Iterate with four “check + converge” gates (fix only what fails):
+     - writer gate: `output/WRITER_SELFLOOP_TODO.md`
+       (missing thesis/contrasts/eval anchors/limitations; remove templates)
+     - paragraph logic gate: `output/SECTION_LOGIC_REPORT.md`
+       (bridges + ordering; eliminate “paragraph islands”)
+     - argument/consistency gate: `output/ARGUMENT_SELFLOOP_TODO.md`
+       - single source of truth: `output/ARGUMENT_SKELETON.md`
+     - paragraph curation gate: `output/PARAGRAPH_CURATION_REPORT.md`
+       (best-of-N → select/fuse; avoid “keeps getting longer”)
+  3) De-template pass (after convergence):
+     - `style-harmonizer` + `opener-variator` (best-of-N)
+  4) Merge into the draft and run final checks: `output/DRAFT.md`
+     - If citations are low: `output/CITATION_BUDGET_REPORT.md`
+       → `output/CITATION_INJECTION_REPORT.md`
+     - Final audit: `output/AUDIT_REPORT.md`
+     - LaTeX pipeline also compiles: `latex/main.pdf`
+
+Target:
+  - Global unique citations recommended `>=165`
 
 If it gets blocked:
-- strict mode: read `output/QUALITY_GATE.md`
-- final audit: read `output/AUDIT_REPORT.md`
+  - strict mode: read `output/QUALITY_GATE.md`
+  - run/script errors: read `output/RUN_ERRORS.md`
 
-You: fix the referenced file, say “continue”
-→ resume from the blocked step (no full restart)
+You:
+  Fix the referenced file, say “continue”
+  → resume from the blocked step (no full restart)
 ```
 
 **Key principle**: C2–C4 enforce NO PROSE—build the evidence base first; C5 writes prose; failures are point-fixable.
