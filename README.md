@@ -90,7 +90,7 @@ codex --sandbox workspace-write --ask-for-approval never
 
 你在对话里通常会这样说（例子）：
 
-> 写一篇关于 LLM agents 的 LaTeX survey（严格；先给我大纲确认）
+> 帮我写一篇关于 LLM agents 的 LaTeX survey
 
 然后会按阶段推进（每一步都会把结果写到 workspace 里；默认会在 C2 停下来等你确认）：
 
@@ -200,22 +200,22 @@ example/e2e-agent-survey-latex-verify-<最新时间戳>/
 文件夹之间的“流水线关系”：
 
 ```mermaid
-flowchart TB
-  subgraph R1["第一行：C0-C4（不写正文：先把材料准备好）"]
-    direction LR
-    WS["workspaces/{run}/"] --> CORE["papers/core_set.csv"]
-    CORE --> O["outline/outline.yml + mapping.tsv"]
-    O -->|Approve C2| PACKS["outline/writer_context_packs.jsonl + citations/ref.bib"]
-  end
+flowchart LR
+  WS["workspaces/{run}/"]
+  WS --> RAW["papers/papers_raw.jsonl"]
+  RAW --> DEDUP["papers/papers_dedup.jsonl"]
+  DEDUP --> CORE["papers/core_set.csv"]
+  CORE --> STRUCT["outline/outline.yml + outline/mapping.tsv"]
+  STRUCT -->|Approve C2| EVID["C3-C4：paper_notes + evidence packs"]
+  EVID --> PACKS["C4：writer_context_packs.jsonl + citations/ref.bib"]
+  PACKS --> SECS["sections/（分小节草稿）"]
+  SECS --> G["C5 自检门（writer/logic/argument/style）"]
+  G --> DRAFT["output/DRAFT.md"]
+  DRAFT --> AUDIT["output/AUDIT_REPORT.md"]
+  AUDIT --> PDF["latex/main.pdf（可选）"]
 
-  subgraph R2["第二行：C5（写作 + 反复润色：不达标就回去改）→ 输出"]
-    direction RL
-    S["sections/*.md"] --> G["C5 自检门（self-loop）"] --> D["output/DRAFT.md"] --> A["output/AUDIT_REPORT.md"] --> PDF["latex/main.pdf（可选）"]
-  end
-
-  PACKS --> S
-  G -.->|"没通过：按报告改 sections/"| S
-  A -.->|"没通过：回到 sections/"| S
+  G -.->|"没通过 → 回到 sections/"| SECS
+  AUDIT -.->|"没通过 → 回到 sections/"| SECS
 ```
 
 交付时只关注**最新时间戳**的示例目录（默认保留 2–3 个历史目录用于回归对比）：

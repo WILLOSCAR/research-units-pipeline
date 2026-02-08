@@ -199,22 +199,22 @@ Note: `outline/tables_index.md` is an internal index table (intermediate artifac
 Pipeline view (how folders connect):
 
 ```mermaid
-flowchart TB
-  subgraph R1["Line 1: C0-C4 (no prose: prepare evidence + citations)"]
-    direction LR
-    WS["workspaces/{run}/"] --> CORE["papers/core_set.csv"]
-    CORE --> O["outline/outline.yml + mapping.tsv"]
-    O -->|Approve C2| PACKS["outline/writer_context_packs.jsonl + citations/ref.bib"]
-  end
+flowchart LR
+  WS["workspaces/{run}/"]
+  WS --> RAW["papers/papers_raw.jsonl"]
+  RAW --> DEDUP["papers/papers_dedup.jsonl"]
+  DEDUP --> CORE["papers/core_set.csv"]
+  CORE --> STRUCT["outline/outline.yml + outline/mapping.tsv"]
+  STRUCT -->|Approve C2| EVID["C3-C4: paper_notes + evidence packs"]
+  EVID --> PACKS["C4: writer_context_packs.jsonl + citations/ref.bib"]
+  PACKS --> SECS["sections/ (per-section drafts)"]
+  SECS --> G["C5 gates (writer/logic/argument/style)"]
+  G --> DRAFT["output/DRAFT.md"]
+  DRAFT --> AUDIT["output/AUDIT_REPORT.md"]
+  AUDIT --> PDF["latex/main.pdf (optional)"]
 
-  subgraph R2["Line 2: C5 (write + refine: fix on fail) → output"]
-    direction RL
-    S["sections/*.md"] --> G["C5 gates (self-loop)"] --> D["output/DRAFT.md"] --> A["output/AUDIT_REPORT.md"] --> PDF["latex/main.pdf (optional)"]
-  end
-
-  PACKS --> S
-  G -.->|"FAIL: revise sections/"| S
-  A -.->|"FAIL: back to sections/"| S
+  G -.->|"FAIL → back to sections/"| SECS
+  AUDIT -.->|"FAIL → back to sections/"| SECS
 ```
 
 For delivery, focus on the **latest timestamped** example directory (keep 2–3 older runs for regression):
