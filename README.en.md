@@ -203,30 +203,25 @@ Pipeline view (how folders connect):
 
 ```mermaid
 flowchart TB
-  subgraph MAIN["Main flow (evidence first, then writing)"]
-    direction TB
-    subgraph M1[""]
-      direction LR
-      WS["C0 Workspace init<br/>workspaces/..."] --> P["C1 Find papers<br/>papers/"] --> O["C2 Outline review<br/>outline/"]
-    end
-    subgraph M2[""]
-      direction LR
-      E["C3-C4 Build write-ready material (no prose)<br/>papers/ + citations/ + outline/"] --> S["C5 Write by section<br/>sections/"]
-    end
+  subgraph MAIN1["Main flow (setup)"]
+    direction LR
+    WS["C0 Workspace init<br/>workspaces/..."] --> P["C1 Find papers<br/>papers/"] --> O["C2 Outline review<br/>outline/"]
   end
+
+  subgraph MAIN2["Main flow (build write-ready material)"]
+    direction LR
+    E["C3-C4 Build write-ready material (no prose)<br/>papers/ + citations/ + outline/"] --> S["C5 Write by section<br/>sections/"]
+  end
+
   O --> E
 
   subgraph LOOP["C5 Check + converge (failures loop back to sections/)"]
-    direction TB
-    subgraph L1[""]
-      direction LR
-      G1["Writer gate<br/>WRITER_SELFLOOP_TODO.md"] --> G2["Paragraph logic gate<br/>SECTION_LOGIC_REPORT.md"]
-    end
-    subgraph L2[""]
-      direction LR
-      G3["Argument/consistency gate<br/>ARGUMENT_SELFLOOP_TODO.md"] --> G4["Paragraph curation<br/>PARAGRAPH_CURATION_REPORT.md"]
-    end
-    G2 --> G3
+    direction LR
+    G1["Writer gate<br/>WRITER_SELFLOOP_TODO.md"]
+    G2["Paragraph logic gate<br/>SECTION_LOGIC_REPORT.md"]
+    G3["Argument/consistency gate<br/>ARGUMENT_SELFLOOP_TODO.md"]
+    G4["Paragraph curation<br/>PARAGRAPH_CURATION_REPORT.md"]
+    G1 --> G2 --> G3 --> G4
   end
 
   S --> G1

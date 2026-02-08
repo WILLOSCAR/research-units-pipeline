@@ -196,30 +196,25 @@ example/e2e-agent-survey-latex-verify-<最新时间戳>/
 
 ```mermaid
 flowchart TB
-  subgraph MAIN["主流程（先证据，后写作）"]
-    direction TB
-    subgraph M1[""]
-      direction LR
-      WS["C0 初始化<br/>workspaces/…"] --> P["C1 找论文<br/>papers/"] --> O["C2 大纲确认<br/>outline/"]
-    end
-    subgraph M2[""]
-      direction LR
-      E["C3-C4 可写材料（不写正文）<br/>papers/ + citations/ + outline/"] --> S["C5 分小节写作<br/>sections/"]
-    end
+  subgraph MAIN1["主流程（准备）"]
+    direction LR
+    WS["C0 初始化<br/>workspaces/…"] --> P["C1 找论文<br/>papers/"] --> O["C2 大纲确认<br/>outline/"]
   end
+
+  subgraph MAIN2["主流程（把材料整理到可写）"]
+    direction LR
+    E["C3-C4 可写材料（不写正文）<br/>papers/ + citations/ + outline/"] --> S["C5 分小节写作<br/>sections/"]
+  end
+
   O --> E
 
-  subgraph LOOP["C5 自检与收敛（失败就回到 sections/ 再改）"]
-    direction TB
-    subgraph L1[""]
-      direction LR
-      G1["写作门<br/>WRITER_SELFLOOP_TODO.md"] --> G2["段落逻辑门<br/>SECTION_LOGIC_REPORT.md"]
-    end
-    subgraph L2[""]
-      direction LR
-      G3["论证/口径门<br/>ARGUMENT_SELFLOOP_TODO.md"] --> G4["选段融合<br/>PARAGRAPH_CURATION_REPORT.md"]
-    end
-    G2 --> G3
+  subgraph LOOP["C5 自检与收敛（失败回到 sections/ 再改）"]
+    direction LR
+    G1["写作门<br/>WRITER_SELFLOOP_TODO.md"]
+    G2["段落逻辑门<br/>SECTION_LOGIC_REPORT.md"]
+    G3["论证/口径门<br/>ARGUMENT_SELFLOOP_TODO.md"]
+    G4["选段融合<br/>PARAGRAPH_CURATION_REPORT.md"]
+    G1 --> G2 --> G3 --> G4
   end
 
   S --> G1
