@@ -79,6 +79,11 @@ codex --sandbox workspace-write --ask-for-approval never
 - 你可以显式指定跑哪条流程：`pipelines/arxiv-survey-latex.pipeline.md`（需要 PDF 就用它）
 - 想一次跑完（不在大纲处停）：请在那句话里补一句类似“跳过大纲确认 / 自动同意大纲 / 无需停在 outline 处确认，直接继续执行到成稿”的指令。
 
+术语速查（只看这 3 个就够）：
+- workspace：一次运行的输出目录（`workspaces/<name>/`）
+- C2：大纲确认点；不确认就不会写正文
+- strict：开启质量门；不达标会停下来，并在 `output/QUALITY_GATE.md` 写明原因与下一步
+
 下面的“详细版”会解释每一步会产出哪些中间文件，以及写作阶段如何逐步润色与收敛。
 
 ## 详细版：对话式执行（从 0 到 PDF）
@@ -196,23 +201,21 @@ example/e2e-agent-survey-latex-verify-<最新时间戳>/
 
 ```mermaid
 flowchart TB
-  subgraph TOP["主流程"]
+  subgraph R1["第一行：C0-C4（不写正文：先把材料准备好）"]
     direction LR
-    WS["C0 初始化"] --> P["C1 找论文"] --> O["C2 大纲（NO PROSE）"] --> E["C3-4 证据材料（NO PROSE）"] --> S["C5 分小节写作"]
+    WS["workspaces/{run}/"] --> CORE["papers/core_set.csv"]
+    CORE --> O["outline/outline.yml + mapping.tsv"]
+    O -->|Approve C2| PACKS["outline/writer_context_packs.jsonl + citations/ref.bib"]
   end
 
-  subgraph BOT["C5：自检+输出"]
-    direction LR
-    G1["写作门"] --> G2["逻辑门"] --> G3["论证/口径门"] --> G4["选段融合"]
-    G4 --> D["合并 → DRAFT.md"] --> A["总审计"] --> TEX["PDF"]
+  subgraph R2["第二行：C5（写作 + 反复润色：不达标就回去改）→ 输出"]
+    direction RL
+    S["sections/*.md"] --> G["C5 自检门（self-loop）"] --> D["output/DRAFT.md"] --> A["output/AUDIT_REPORT.md"] --> PDF["latex/main.pdf（可选）"]
   end
 
-  S --> G1
-  G1 -.-> S
-  G2 -.-> S
-  G3 -.-> S
-  G4 -.-> S
-  A -.-> S
+  PACKS --> S
+  G -.->|"没通过：按报告改 sections/"| S
+  A -.->|"没通过：回到 sections/"| S
 ```
 
 交付时只关注**最新时间戳**的示例目录（默认保留 2–3 个历史目录用于回归对比）：

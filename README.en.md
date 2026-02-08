@@ -2,13 +2,9 @@
 
 > **In one sentence**: Make pipelines that can "guide humans / guide models" through research—not a bunch of scripts, but a set of **semantic skills**, where each skill knows "what to do, how to do it, when it's done, and what NOT to do."
 
----
-
-## Todo
-1. Add multi-CLI collaboration and multi-agent design (plug APIs into the right stages to replace or share the load of Codex execution).
-2. Keep polishing writing skills to raise both the floor and ceiling of writing quality.
-3. Complete the remaining pipelines; add more examples under `example/`.
-4. Remove redundant intermediate content in pipelines, following Occam's razor: do not add entities unless necessary.
+Chinese version: [`README.md`](README.md).  
+Skills index: [`SKILL_INDEX.md`](SKILL_INDEX.md).  
+Skill/Pipeline standard: [`SKILLS_STANDARD.md`](SKILLS_STANDARD.md).
 
 ## Core Design: Skills-First + Resumable Units + Evidence First
 
@@ -37,10 +33,6 @@ At a glance (what to look at first):
 | fix “evidence-thin” writing | `papers/paper_notes.jsonl` + `outline/evidence_drafts.jsonl` | improve notes/packs first, then write |
 | reduce templated voice / redundancy | `output/WRITER_SELFLOOP_TODO.md` + `output/PARAGRAPH_CURATION_REPORT.md` + `sections/*` | targeted rewrites + best-of-N candidates + paragraph fusion, then rerun gates |
 | boost global unique citations | `output/CITATION_BUDGET_REPORT.md` + `citations/ref.bib` | in-scope injection (NO NEW FACTS) |
-
-Chinese version: [`README.md`](README.md).  
-Skills index: [`SKILL_INDEX.md`](SKILL_INDEX.md).  
-Skill/Pipeline standard: [`SKILLS_STANDARD.md`](SKILLS_STANDARD.md).
 
 ## Codex Reference Config
 
@@ -84,6 +76,11 @@ codex --sandbox workspace-write --ask-for-approval never
 Optional (more control):
 - Pin the pipeline explicitly: `pipelines/arxiv-survey-latex.pipeline.md` (use this if you want a PDF)
 - If you want a full end-to-end run without pausing at the outline, say it in your prompt (“auto-approve the outline”).
+
+Quick glossary (you only need these 3):
+- workspace: one run’s output folder (`workspaces/<name>/`)
+- C2: the outline approval gate; without approval it will not write prose
+- strict: turns on quality gates; failures stop with a report in `output/QUALITY_GATE.md`
 
 The “detailed walkthrough” below explains intermediate artifacts and the writing iteration loop.
 
@@ -203,23 +200,21 @@ Pipeline view (how folders connect):
 
 ```mermaid
 flowchart TB
-  subgraph TOP["Main flow"]
+  subgraph R1["Line 1: C0-C4 (no prose: prepare evidence + citations)"]
     direction LR
-    WS["C0 init"] --> P["C1 papers"] --> O["C2 outline (NO PROSE)"] --> E["C3-4 evidence (NO PROSE)"] --> S["C5 sections"]
+    WS["workspaces/{run}/"] --> CORE["papers/core_set.csv"]
+    CORE --> O["outline/outline.yml + mapping.tsv"]
+    O -->|Approve C2| PACKS["outline/writer_context_packs.jsonl + citations/ref.bib"]
   end
 
-  subgraph BOT["C5 loop + output"]
-    direction LR
-    G1["writer gate"] --> G2["logic gate"] --> G3["argument gate"] --> G4["curation gate"]
-    G4 --> D["merge → DRAFT.md"] --> A["audit"] --> TEX["PDF"]
+  subgraph R2["Line 2: C5 (write + refine: fix on fail) → output"]
+    direction RL
+    S["sections/*.md"] --> G["C5 gates (self-loop)"] --> D["output/DRAFT.md"] --> A["output/AUDIT_REPORT.md"] --> PDF["latex/main.pdf (optional)"]
   end
 
-  S --> G1
-  G1 -.-> S
-  G2 -.-> S
-  G3 -.-> S
-  G4 -.-> S
-  A -.-> S
+  PACKS --> S
+  G -.->|"FAIL: revise sections/"| S
+  A -.->|"FAIL: back to sections/"| S
 ```
 
 For delivery, focus on the **latest timestamped** example directory (keep 2–3 older runs for regression):
@@ -229,6 +224,12 @@ For delivery, focus on the **latest timestamped** example directory (keep 2–3 
 - QA / audit report: `example/e2e-agent-survey-latex-verify-<LATEST_TIMESTAMP>/output/AUDIT_REPORT.md`
 
 ## Feel Free to Open Issues (Help Improve the Writing Workflow)
+
+## Roadmap (WIP)
+1. Add multi-CLI collaboration and multi-agent design (plug APIs into the right stages to replace or share the load of Codex execution).
+2. Keep polishing writing skills to raise both the floor and ceiling of writing quality.
+3. Complete the remaining pipelines; add more examples under `example/`.
+4. Remove redundant intermediate content in pipelines, following Occam's razor: do not add entities unless necessary.
 
 ## Star History
 
