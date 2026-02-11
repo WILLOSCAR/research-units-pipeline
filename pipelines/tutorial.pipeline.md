@@ -1,6 +1,6 @@
 ---
 name: tutorial
-version: 2.2
+version: 2.3
 target_artifacts:
   - STATUS.md
   - UNITS.csv
@@ -12,6 +12,7 @@ target_artifacts:
   - outline/concept_graph.yml
   - outline/module_plan.yml
   - output/TUTORIAL.md
+  - output/DELIVERABLE_SELFLOOP_TODO.md
   - output/QUALITY_GATE.md
   - output/RUN_ERRORS.md
   - output/CONTRACT_REPORT.md
@@ -33,6 +34,7 @@ produces:
 - CHECKPOINTS.md
 - DECISIONS.md
 - GOAL.md
+- queries.md
 
 ## Stage 1 - Spec (C1)
 required_skills:
@@ -61,9 +63,11 @@ Notes:
 ## Stage 3 - Writing (C3) [PROSE ALLOWED]
 required_skills:
 - tutorial-module-writer
+- deliverable-selfloop
 - artifact-contract-auditor
 produces:
 - output/TUTORIAL.md
+- output/DELIVERABLE_SELFLOOP_TODO.md
 - output/CONTRACT_REPORT.md
 
 Notes:

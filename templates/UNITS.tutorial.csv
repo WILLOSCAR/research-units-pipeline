@@ -5,6 +5,7 @@ U010,Define tutorial audience and learning objectives,STRUCTURE,tutorial-spec,ST
 U020,Build concept graph and module breakdown,STRUCTURE,concept-graph,output/TUTORIAL_SPEC.md,outline/concept_graph.yml,至少10个概念节点且标注依赖关系,C2,TODO,U010,CODEX
 U030,Plan modules from concept graph,STRUCTURE,module-planner,outline/concept_graph.yml,outline/module_plan.yml,每模块有 objectives + outputs，并标注 running example 步骤（如适用）,C2,TODO,U020,CODEX
 U035,Add verifiable exercises to each module,STRUCTURE,exercise-builder,outline/module_plan.yml,outline/module_plan.yml,每模块≥1个练习：prompt/expected output/verification checklist,C2,TODO,U030,CODEX
-U040,Human approve running example and scope,META,pipeline-router,outline/module_plan.yml,DECISIONS.md,勾选 DECISIONS.md 的 Approve C2（并记录 running example）,C2,TODO,U035,HUMAN
+U040,Human approve running example and scope,META,human-checkpoint,outline/module_plan.yml,DECISIONS.md,勾选 DECISIONS.md 的 Approve C2（并记录 running example）,C2,TODO,U035,HUMAN
 U050,Write tutorial modules (PROSE allowed after approval),WRITE,tutorial-module-writer,outline/module_plan.yml,output/TUTORIAL.md,仅写被批准模块；每模块含练习与答案要点,C3,TODO,U040,CODEX
-U060,Contract audit (artifact contract + target_artifacts),QA,artifact-contract-auditor,UNITS.csv;PIPELINE.lock.md,output/CONTRACT_REPORT.md,CONTRACT_REPORT.md 状态为 PASS（且无 DONE 输出缺失；target_artifacts 缺失=0）,C3,TODO,U050,CODEX
+U055,Self-loop tutorial to PASS (fix-on-fail),QA,deliverable-selfloop,output/TUTORIAL.md;outline/module_plan.yml;DECISIONS.md,output/TUTORIAL.md;output/DELIVERABLE_SELFLOOP_TODO.md,DELIVERABLE_SELFLOOP_TODO.md 为 PASS；每模块练习可验证且 running example 不漂移,C3,TODO,U050,CODEX
+U060,Contract audit (artifact contract + target_artifacts),QA,artifact-contract-auditor,UNITS.csv;PIPELINE.lock.md,output/CONTRACT_REPORT.md,CONTRACT_REPORT.md 状态为 PASS（且无 DONE 输出缺失；target_artifacts 缺失=0）,C3,TODO,U055,CODEX

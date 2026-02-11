@@ -36,6 +36,7 @@ Columns (minimum viable):
 - `url`
 - `decision` (`include|exclude`)
 - `reason` (short, protocol-grounded)
+- `reason_codes` (protocol clause IDs, e.g., `E3` or `I2+I4`)
 - `reviewer` (`HUMAN|CODEX`)
 - `decided_at` (ISO date/time)
 - `notes` (optional)
@@ -58,7 +59,8 @@ Columns (minimum viable):
 
 4. Write `papers/screening_log.csv`
    - One row per candidate.
-   - Reasons must map to protocol clauses (avoid generic “not relevant”).
+   - Reasons must cite protocol clause IDs from `output/PROTOCOL.md` (e.g., `reason_codes=E3`).
+   - Avoid generic reasons like “not relevant”; state the missing requirement explicitly.
 
 5. Quick QA
    - Check every row has `decision` + `reason`.

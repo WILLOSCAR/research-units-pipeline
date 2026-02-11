@@ -1,6 +1,6 @@
 ---
 name: peer-review
-version: 2.2
+version: 2.3
 target_artifacts:
   - STATUS.md
   - UNITS.csv
@@ -8,10 +8,12 @@ target_artifacts:
   - DECISIONS.md
   - GOAL.md
   - queries.md
+  - output/PAPER.md
   - output/CLAIMS.md
   - output/MISSING_EVIDENCE.md
   - output/NOVELTY_MATRIX.md
   - output/REVIEW.md
+  - output/DELIVERABLE_SELFLOOP_TODO.md
   - output/QUALITY_GATE.md
   - output/RUN_ERRORS.md
   - output/CONTRACT_REPORT.md
@@ -36,8 +38,10 @@ produces:
 
 ## Stage 1 - Claims (C1)
 required_skills:
+- manuscript-ingest
 - claims-extractor
 produces:
+- output/PAPER.md
 - output/CLAIMS.md
 
 Notes:
@@ -59,9 +63,11 @@ Notes:
 ## Stage 3 - Rubric write-up (C3)
 required_skills:
 - rubric-writer
+- deliverable-selfloop
 - artifact-contract-auditor
 produces:
 - output/REVIEW.md
+- output/DELIVERABLE_SELFLOOP_TODO.md
 - output/CONTRACT_REPORT.md
 
 Notes:
