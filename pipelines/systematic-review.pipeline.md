@@ -1,6 +1,6 @@
 ---
 name: systematic-review
-version: 2.2
+version: 2.3
 target_artifacts:
   - STATUS.md
   - UNITS.csv
@@ -16,6 +16,7 @@ target_artifacts:
   - papers/screening_log.csv
   - papers/extraction_table.csv
   - output/SYNTHESIS.md
+  - output/DELIVERABLE_SELFLOOP_TODO.md
   - output/QUALITY_GATE.md
   - output/RUN_ERRORS.md
   - output/CONTRACT_REPORT.md
@@ -71,6 +72,7 @@ produces:
 
 Notes:
 - Use `papers/papers_dedup.jsonl` (or `papers/core_set.csv`) as the candidate list; `papers/screening_log.csv` must include protocol-grounded reasons for every decision.
+- Practical auditability: number protocol clauses (`I1..` / `E1..`) and require screening rows to cite them (e.g., `reason_codes=E3`).
 
 ## Stage 4 - Extraction (C4)
 required_skills:
@@ -85,7 +87,9 @@ Notes:
 ## Stage 5 - Synthesis (C5) [PROSE ALLOWED]
 required_skills:
 - synthesis-writer
+- deliverable-selfloop
 - artifact-contract-auditor
 produces:
 - output/SYNTHESIS.md
+- output/DELIVERABLE_SELFLOOP_TODO.md
 - output/CONTRACT_REPORT.md

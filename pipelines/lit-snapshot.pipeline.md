@@ -1,6 +1,6 @@
 ---
 name: lit-snapshot
-version: 2.2
+version: 2.3
 target_artifacts:
   - STATUS.md
   - UNITS.csv
@@ -14,6 +14,7 @@ target_artifacts:
   - outline/taxonomy.yml
   - outline/outline.yml
   - output/SNAPSHOT.md
+  - output/DELIVERABLE_SELFLOOP_TODO.md
   - output/QUALITY_GATE.md
   - output/RUN_ERRORS.md
   - output/CONTRACT_REPORT.md
@@ -50,6 +51,9 @@ produces:
 
 Notes:
 - Snapshot default: aim for a smaller but diverse set (e.g., core_set ~20-40) rather than a survey-scale pool.
+- Practical retrieval loop (multi-query, then refine):
+  - Start broad with multiple query buckets (synonyms/acronyms/subtopics) and merge the results.
+  - If too few: add buckets + widen time window; if too noisy: rewrite keywords + add exclusions; rerun C1.
 - If the snapshot feels generic, the fix is almost always upstream: broaden `queries.md` (more synonyms, fewer excludes, wider time window) and rerun C1.
 
 ## Stage 2 - Structure (C2) [NO PROSE]
@@ -72,11 +76,13 @@ Notes:
 ## Stage 3 - Snapshot (C3) [SHORT PROSE OK]
 required_skills:
 - snapshot-writer
+- deliverable-selfloop
 - artifact-contract-auditor
 optional_skills:
 - prose-writer
 produces:
 - output/SNAPSHOT.md
+- output/DELIVERABLE_SELFLOOP_TODO.md
 - output/CONTRACT_REPORT.md
 
 Notes:

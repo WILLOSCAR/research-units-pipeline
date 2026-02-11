@@ -218,6 +218,7 @@ Guardrail:
 
 - Checkpoints are enforced via `DECISIONS.md` approvals (`- [ ] Approve C*`).
 - Units with `owner=HUMAN` block until the corresponding checkbox is ticked.
+- Convention: use `human-checkpoint` as the `skill` for `owner=HUMAN` units (keeps semantics explicit; no scripts required).
 - Prose writing is only allowed after the required approval (survey default: `C2`).
 
 ### Checkpoint approval workflow
@@ -271,6 +272,7 @@ For deterministic units (retrieval/dedupe/compile/format checks):
   - `evidence-selfloop` → `output/EVIDENCE_SELFLOOP_TODO.md`
   - `writer-selfloop` → `output/WRITER_SELFLOOP_TODO.md`
   - `argument-selfloop` → `output/ARGUMENT_SELFLOOP_TODO.md` (and its intermediate ledgers: `output/SECTION_ARGUMENT_SUMMARIES.jsonl`, `output/ARGUMENT_SKELETON.md`)
+  - `deliverable-selfloop` → `output/DELIVERABLE_SELFLOOP_TODO.md` (for non-survey deliverables: snapshot/tutorial/synthesis/review)
   In all of them, `- Status: PASS` is the only unblock signal.
 - Standard report structure:
   ```markdown

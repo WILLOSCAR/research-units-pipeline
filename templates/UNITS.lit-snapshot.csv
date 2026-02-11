@@ -6,6 +6,7 @@ U020,Dedupe+rank and produce core set,CURATE,dedupe-rank,papers/papers_raw.jsonl
 U030,Build taxonomy (2-level minimum),STRUCTURE,taxonomy-builder,papers/core_set.csv,outline/taxonomy.yml,taxonomy至少2层且节点带解释,C2,TODO,U020,CODEX
 U040,Build outline bullets (NO PROSE),STRUCTURE,outline-builder,outline/taxonomy.yml,outline/outline.yml,每小节≥3个bullet，且无长 prose,C2,TODO,U030,CODEX
 U042,Draft C2 review summary (scope+outline),META,pipeline-router,outline/taxonomy.yml;outline/outline.yml,DECISIONS.md,DECISIONS含C2 review摘要,C2,TODO,U040,CODEX
-U045,HUMAN approve C2 (scope+outline),META,pipeline-router,DECISIONS.md,DECISIONS.md,勾选 DECISIONS.md 的 Approve C2,C2,TODO,U042,HUMAN
+U045,HUMAN approve C2 (scope+outline),META,human-checkpoint,DECISIONS.md,DECISIONS.md,勾选 DECISIONS.md 的 Approve C2,C2,TODO,U042,HUMAN
 U050,Write 1-page snapshot (bullet-first),WRITE,snapshot-writer,outline/outline.yml;papers/core_set.csv;DECISIONS.md,output/SNAPSHOT.md,1页以内；bullets-first；每个非平凡观点附 1-2 个 paper pointers；避免模板旁白句式,C3,TODO,U045,CODEX
-U060,Contract audit (artifact contract + target_artifacts),QA,artifact-contract-auditor,UNITS.csv;PIPELINE.lock.md,output/CONTRACT_REPORT.md,CONTRACT_REPORT.md 状态为 PASS（且无 DONE 输出缺失；target_artifacts 缺失=0）,C3,TODO,U050,CODEX
+U055,Self-loop snapshot to PASS (fix-on-fail),QA,deliverable-selfloop,output/SNAPSHOT.md;outline/outline.yml;papers/core_set.csv,output/SNAPSHOT.md;output/DELIVERABLE_SELFLOOP_TODO.md,DELIVERABLE_SELFLOOP_TODO.md 为 PASS；snapshot 无模板旁白且指针密度足够,C3,TODO,U050,CODEX
+U060,Contract audit (artifact contract + target_artifacts),QA,artifact-contract-auditor,UNITS.csv;PIPELINE.lock.md,output/CONTRACT_REPORT.md,CONTRACT_REPORT.md 状态为 PASS（且无 DONE 输出缺失；target_artifacts 缺失=0）,C3,TODO,U055,CODEX

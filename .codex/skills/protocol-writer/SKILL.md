@@ -88,12 +88,16 @@ Optional:
 4. Inclusion / exclusion criteria (operational, not vague)
    - Write MUST-HAVE criteria (study type, domain, outcomes).
    - Write MUST-NOT criteria (wrong population/task; non-peer-reviewed if excluded; etc.).
+   - Assign stable IDs so screening can reference them:
+     - Inclusion: `I1`, `I2`, ...
+     - Exclusion: `E1`, `E2`, ...
    - Define how you handle duplicates and near-duplicates.
 
 5. Screening plan
    - Define the screening stages (title/abstract → full text if applicable).
    - Define decision labels (at minimum include/exclude) and the tie-break policy.
    - Specify what gets recorded into `papers/screening_log.csv`.
+   - Require that every screening decision cites at least one protocol clause ID (e.g., `reason_codes=E3`).
 
 6. Extraction schema (downstream contract)
    - Define the columns that will appear in `papers/extraction_table.csv`.
