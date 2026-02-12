@@ -229,6 +229,7 @@ flowchart LR
 
 ### WIP
 1. best of N 写作
+2. 一边交互一边找 idea
 ### Todo
 1. 加入多 cli 协作，multi-agent design （在合适的环节接入 API，替代或者分担 codex 执行过程中的压力）
 2. 完善剩余的Pipeline，example 新增例子
