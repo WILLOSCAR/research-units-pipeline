@@ -297,6 +297,16 @@ def _slugify(text: str) -> str:
 
 def _auto_pick_pipeline(topic: str) -> str:
     t = topic.lower()
+    if (
+        "idea" in t
+        or "ideation" in t
+        or "brainstorm" in t
+        or ("点子" in topic)
+        or ("选题" in topic)
+        or ("找方向" in topic)
+        or ("找 idea" in t)
+    ):
+        return "idea-finder"
     if "systematic" in t or "prisma" in t or "系统综述" in topic:
         return "systematic-review"
     if "tutorial" in t or "教程" in topic:

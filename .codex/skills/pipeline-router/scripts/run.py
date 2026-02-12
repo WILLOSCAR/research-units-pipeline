@@ -34,7 +34,7 @@ def main() -> int:
         return 0
 
     if checkpoint == "C2":
-        block = _c2_review_block(workspace)
+        block = _c2_review_block(workspace, pipeline=pipeline)
         upsert_checkpoint_block(decisions_path, "C2", block)
         return 0
 
@@ -89,17 +89,17 @@ def _kickoff(decisions_path: Path, *, goal: str, pipeline: str, workspace: Path)
             f"- Workspace name: `{workspace.name}`",
             "",
             "Optional: confirm constraints (or reply \"你自己决定\" and we will proceed with best-effort defaults):",
-            "- Deliverable: language (中文/英文), target length, venue/audience, format (Markdown/LaTeX/PDF).",
+            "- Deliverable: language (中文/英文), target length, audience, format (Markdown/LaTeX/PDF).",
             "- Evidence mode: `abstract` (no PDF download) vs `fulltext` (download+extract snippets).",
             "- Scope:",
-            "  - In-scope (e.g., tool-use agents, multi-agent, planning/reasoning, memory, reflection, code agents).",
-            "  - Out-of-scope (e.g., embodied agents/robotics, pure RL, agent-based modeling).",
+            "  - In-scope.",
+            "  - Out-of-scope.",
             "- Time window: from/to year (or no limit).",
             "- Search constraints: must-include systems/papers/keywords; hard excludes.",
-            "- Human sign-off: who will approve C2 (scope+outline) in this file.",
+            "- Human sign-off: who will approve required checkpoints in this file.",
             "",
             "Note:",
-            "- The pipeline will pause once at C2 (scope+outline) for a single approval, then continue end-to-end.",
+            "- The pipeline will pause at HUMAN checkpoints (see the Approvals checklist) and resume after approval.",
             "",
         ]
     )
@@ -114,7 +114,11 @@ def _workspace_hint(workspace: Path) -> str:
         return str(workspace)
 
 
-def _c2_review_block(workspace: Path) -> str:
+def _c2_review_block(workspace: Path, *, pipeline: str) -> str:
+    # If this is ideation, C2 is "focus selection" (taxonomy-as-map), not survey outline approval.
+    if "idea-finder" in (pipeline or ""):
+        return _c2_idea_focus_block(workspace)
+
     taxonomy_path = workspace / "outline" / "taxonomy.yml"
     outline_path = workspace / "outline" / "outline.yml"
     mapping_path = workspace / "outline" / "mapping.tsv"
@@ -138,6 +142,34 @@ def _c2_review_block(workspace: Path) -> str:
     )
 
 
+def _c2_idea_focus_block(workspace: Path) -> str:
+    taxonomy_path = workspace / "outline" / "taxonomy.yml"
+    brief_path = workspace / "output" / "IDEA_BRIEF.md"
+
+    taxonomy_summary = _summarize_taxonomy(taxonomy_path)
+    cluster_list = _list_taxonomy_clusters(taxonomy_path)
+
+    brief_hint = "- Brief: (missing) `output/IDEA_BRIEF.md`" if not brief_path.exists() else "- Brief: `output/IDEA_BRIEF.md` (update focus + excludes if needed)"
+
+    return "\n".join(
+        [
+            "## C2 focus — pick idea map clusters (NO PROSE)",
+            "",
+            taxonomy_summary,
+            brief_hint,
+            "",
+            "### Candidate clusters (top-level)",
+            cluster_list,
+            "",
+            "Decision:",
+            "- Choose 1-2 focus clusters (by name) and 2-5 hard excludes.",
+            "- Optionally update `output/IDEA_BRIEF.md` to reflect the chosen focus.",
+            "- Tick `Approve C2` above to proceed (notes → idea pool → shortlist).",
+            "",
+        ]
+    )
+
+
 def _summarize_taxonomy(path: Path) -> str:
     if not path.exists():
         return "- taxonomy: (missing) `outline/taxonomy.yml`"
@@ -156,6 +188,32 @@ def _summarize_taxonomy(path: Path) -> str:
             if isinstance(children, list):
                 leaves += len(children)
     return f"- taxonomy: top-level={top}, leaf-nodes={leaves}"
+
+
+def _list_taxonomy_clusters(path: Path) -> str:
+    if not path.exists():
+        return "- (missing taxonomy)"
+    try:
+        import yaml
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or []
+    except Exception as exc:
+        return f"- (unreadable taxonomy) {exc}"
+
+    if not isinstance(data, list) or not data:
+        return "- (empty taxonomy)"
+
+    lines: list[str] = []
+    for node in data[:12]:
+        if not isinstance(node, dict):
+            continue
+        name = str(node.get("name") or "").strip() or "(unnamed)"
+        children = node.get("children") if isinstance(node.get("children"), list) else []
+        n_children = len(children) if isinstance(children, list) else 0
+        lines.append(f"- {name} (children={n_children})")
+    if not lines:
+        return "- (no readable clusters)"
+    return "\n".join(lines)
 
 
 def _summarize_outline(path: Path) -> str:

@@ -3,7 +3,7 @@ name: pipeline-router
 description: |
   Select the most appropriate pipeline for a user goal, lock it in `PIPELINE.lock.md`, and route checkpoint questions into `DECISIONS.md`.
   **Trigger**: pipeline router, choose pipeline, workflow selection, PIPELINE.lock.md, 选择流程.
-  **Use when**: 用户目标/交付物不清晰，需要在 snapshot/survey/tutorial/systematic-review/peer-review 中选一个并设置最小 HITL 问题集。
+  **Use when**: 用户目标/交付物不清晰，需要在 snapshot/survey/tutorial/systematic-review/peer-review/idea-finder 中选一个并设置最小 HITL 问题集。
   **Skip if**: pipeline 已锁定（`PIPELINE.lock.md` 存在）且所需问题已回答/签字完成。
   **Network**: none.
   **Guardrail**: 尽量一次性提问；信息不足就写 `DECISIONS.md` 并停下等待。
@@ -44,6 +44,7 @@ User goal → choose:
 - “tutorial / 教程” → `pipelines/tutorial.pipeline.md`
 - “systematic review / PRISMA / 系统综述” → `pipelines/systematic-review.pipeline.md`
 - “peer review / 审稿” → `pipelines/peer-review.pipeline.md`
+- “idea / ideation / brainstorm / 找 idea / 选题 / 点子” → `pipelines/idea-finder.pipeline.md`
 - “snapshot / 速览” → `pipelines/lit-snapshot.pipeline.md`
 
 ## Workflow

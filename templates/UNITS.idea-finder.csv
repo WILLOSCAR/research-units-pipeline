@@ -1,0 +1,21 @@
+unit_id,title,type,skill,inputs,outputs,acceptance,checkpoint,status,depends_on,owner
+U001,Initialize workspace and copy templates,META,workspace-init,,STATUS.md;CHECKPOINTS.md;UNITS.csv;DECISIONS.md;GOAL.md;output/QUALITY_GATE.md;output/RUN_ERRORS.md,workspace模板文件齐全（含 error sinks: QUALITY_GATE/RUN_ERRORS）,C0,TODO,,CODEX
+U002,Draft kickoff questions + seed queries (ideation),META,pipeline-router,GOAL.md,DECISIONS.md;queries.md,DECISIONS含C0问题块；queries.md 含非空关键词（可被后续 idea-brief 重写为多桶检索计划）,C0,TODO,U001,CODEX
+U003,Idea brief: lock scope/constraints/rubric + multi-query buckets,META,idea-brief,GOAL.md;DECISIONS.md;queries.md,output/IDEA_BRIEF.md;queries.md;DECISIONS.md,IDEA_BRIEF.md 含 scope/constraints/exclusions/rubric/stop rules/query buckets；queries.md 设定 `draft_profile: idea_finder` 且包含 3-6 个 query buckets + exclusions（可审计、可复跑）,C0,TODO,U002,CODEX
+U005,HUMAN approve C0 (idea brief),META,human-checkpoint,DECISIONS.md,DECISIONS.md,勾选 DECISIONS.md 的 Approve C0（确认 ideation brief 后才进入检索）,C0,TODO,U003,HUMAN
+
+U010,Collect candidate papers (multi-route) and normalize metadata,RETRIEVE,literature-engineer,queries.md,papers/papers_raw.jsonl;papers/retrieval_report.md,papers_raw.jsonl 有足够覆盖（ideation Lite+：建议 >=800；不足则在 retrieval_report.md 说明并回到 queries.md 调整多桶检索）；每条含 title/year/url + 稳定标识（arxiv_id/doi）+ provenance；retrieval_report.md 记录 buckets/exclusions/缺失字段统计,C1,TODO,U005,CODEX
+U020,Dedupe+rank and produce core set,CURATE,dedupe-rank,papers/papers_raw.jsonl,papers/papers_dedup.jsonl;papers/core_set.csv,dedup 后池子足够大（建议 >=400）；core_set=100（默认；以 queries.md 的 core_size 为准）；paper_id 唯一且 title 非空,C1,TODO,U010,CODEX
+
+U030,Build idea map (taxonomy; 2-level minimum) [NO PROSE],STRUCTURE,taxonomy-builder,papers/core_set.csv,outline/taxonomy.yml,taxonomy 至少 2 层且节点有解释；用于 ideation map（而非论文大纲）,C2,TODO,U020,CODEX
+U042,Draft C2 focus questions (choose 1-2 clusters),META,pipeline-router,outline/taxonomy.yml;output/IDEA_BRIEF.md,DECISIONS.md,DECISIONS 含 C2 focus 选择提示（基于 taxonomy 列出候选簇；要求写明选择与排除项）,C2,TODO,U030,CODEX
+U045,HUMAN approve C2 (focus clusters + exclusions),META,human-checkpoint,DECISIONS.md,DECISIONS.md,勾选 DECISIONS.md 的 Approve C2（确认 focus 后才进入 ideation）,C2,TODO,U042,HUMAN
+
+U060,Write paper notes for core set (evidence substrate) [NO PROSE],EVIDENCE,paper-notes,papers/core_set.csv,papers/paper_notes.jsonl;papers/evidence_bank.jsonl,core_set 覆盖率 100%；每篇至少 1 条 limitation/failure-mode（避免只产出“更强”点子）；无 TODO/省略号泄漏到 notes,C3,TODO,U045,CODEX
+
+U070,Expand Idea Pool (operators + best-of-N),IDEA,idea-pool-expander,output/IDEA_BRIEF.md;outline/taxonomy.yml;papers/paper_notes.jsonl;papers/core_set.csv,output/IDEA_SHORTLIST.md,IDEA_SHORTLIST.md 含 Idea Pool：60-90 条；至少覆盖 6/8 个 operator family；每条含 tier+assumption+falsification；Tier-1/2 含 paper pointers（paper_id）,C4,TODO,U060,CODEX
+U075,Curate shortlist (select→evaluate→subset→fuse),IDEA,idea-shortlist-curator,output/IDEA_BRIEF.md;output/IDEA_SHORTLIST.md;outline/taxonomy.yml;papers/paper_notes.jsonl;papers/core_set.csv,output/IDEA_SHORTLIST.md,Final shortlist=7（默认；或按 brief 配置）；每条含 closest-3 + delta/non-delta + 1-week validation plan + failure criteria + >=2 risks + >=3 evidence pointers；组合覆盖 >=2-3 簇且 >=2 idea 类型,C4,TODO,U070,CODEX
+
+U080,Self-loop idea shortlist to PASS (fix-on-fail),QA,deliverable-selfloop,output/IDEA_SHORTLIST.md;output/IDEA_BRIEF.md;outline/taxonomy.yml;papers/core_set.csv,output/IDEA_SHORTLIST.md;output/DELIVERABLE_SELFLOOP_TODO.md,DELIVERABLE_SELFLOOP_TODO.md 为 PASS；shortlist 可执行且证据指针可追溯；Pool 多样性达标,C5,TODO,U075,CODEX
+U090,Contract audit (artifact contract + target_artifacts),QA,artifact-contract-auditor,UNITS.csv;PIPELINE.lock.md,output/CONTRACT_REPORT.md,CONTRACT_REPORT.md 状态为 PASS（且无 DONE 输出缺失；target_artifacts 缺失=0）,C5,TODO,U080,CODEX
+

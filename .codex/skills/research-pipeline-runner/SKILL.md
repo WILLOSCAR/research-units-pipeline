@@ -43,6 +43,7 @@ This skill is **coordination**:
 User goal → choose:
 - Survey/综述/调研 + Markdown draft → `pipelines/arxiv-survey.pipeline.md`
 - Survey/综述/调研 + PDF output → `pipelines/arxiv-survey-latex.pipeline.md`
+- Idea finding / 选题 / 点子 / 找方向 → `pipelines/idea-finder.pipeline.md`
 - Snapshot/速览 → `pipelines/lit-snapshot.pipeline.md`
 - Tutorial/教程 → `pipelines/tutorial.pipeline.md`
 - Systematic review/系统综述 → `pipelines/systematic-review.pipeline.md`

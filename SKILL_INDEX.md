@@ -22,6 +22,7 @@
 
 - `workspace-init`：初始化 workspace 模板（`STATUS.md/UNITS.csv/CHECKPOINTS.md/DECISIONS.md` + 目录骨架）
 - `pipeline-router`：当需求不清晰时选择 pipeline、写入 `PIPELINE.lock.md`、生成/整理 HITL 问题
+- `idea-brief`：找 research idea / 选题：锁定 ideation brief（scope/constraints/rubric/query buckets）→ `output/IDEA_BRIEF.md` + `queries.md`
 - `human-checkpoint`：人类签字/审批 skill（勾选 `DECISIONS.md` 的 `Approve C*`，用于解锁后续 stages）
 - `unit-planner`：从 pipeline/模板生成或更新 workspace 的 `UNITS.csv`
 - `unit-executor`：严格“一次只跑一个 unit”（按 `UNITS.csv` 与依赖执行）
@@ -87,6 +88,8 @@
 - `global-reviewer`：全局一致性回看（术语/章节呼应/结论回扣 RQ；generator voice 检测），输出 `output/GLOBAL_REVIEW.md`
 - `pipeline-auditor`：回归审计（PASS/FAIL）：ellipsis/模板句/引用健康/证据绑定/pipeline voice → `output/AUDIT_REPORT.md`
 - `deliverable-selfloop`：交付物自循环门（snapshot/tutorial/systematic/peer-review）：诊断→修复→复检，直到 PASS → `output/DELIVERABLE_SELFLOOP_TODO.md`
+- `idea-pool-expander`：找 research idea：发散 Idea Pool（operator 驱动 + best-of-N；60-90 条）→ `output/IDEA_SHORTLIST.md`
+- `idea-shortlist-curator`：找 research idea：选段→评价→选集→融合，收敛成 5-7 条可做 shortlist → `output/IDEA_SHORTLIST.md`
 
 **Core Writing Skills**:
 - `grad-paragraph`：研究生段落 micro-skill（张力→对比→评测锚点→限制），用于写出"像综述"的正文段落（通常嵌入 `sections/S*.md` 的写作流程）

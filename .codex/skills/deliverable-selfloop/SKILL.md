@@ -26,12 +26,14 @@ One of the following deliverables:
 - `output/TUTORIAL.md`
 - `output/SYNTHESIS.md`
 - `output/REVIEW.md`
+- `output/IDEA_SHORTLIST.md`
 
 Supporting contracts (depends on deliverable type):
 - Snapshot: `outline/outline.yml`, `papers/core_set.csv`
 - Tutorial: `outline/module_plan.yml`, `DECISIONS.md`
 - Systematic synthesis: `papers/extraction_table.csv`, `output/PROTOCOL.md`
 - Peer review: `output/CLAIMS.md`, `output/MISSING_EVIDENCE.md`, `output/NOVELTY_MATRIX.md`
+- Idea shortlist: `output/IDEA_BRIEF.md`, `outline/taxonomy.yml`, `papers/core_set.csv`
 
 ## Outputs
 
@@ -102,6 +104,40 @@ Hard rules:
 PASS signal:
 - The report reads like a real referee report: specific, traceable, and actionable.
 
+### E) Idea shortlist (`output/IDEA_SHORTLIST.md`)
+
+Hard rules:
+- Must respect the locked brief in `output/IDEA_BRIEF.md` (no silent scope drift).
+- Must contain two layers:
+  - **Idea Pool (Brainstorm)**: large expansion pool
+  - **Final Shortlist**: small, research-grade, executable set
+
+Pool PASS requirements:
+- Size: 60-90 ideas (hard min 60).
+- Diversity: covers >=6/8 operator families (counterfactual, failure-mode-first, eval swap, component swap, explicit-combination, cross-domain analogy, negative-result, system constraints).
+- Each pool idea is a short card and includes:
+  - tier label + operator tag
+  - key assumption
+  - 1-sentence falsification path
+  - Tier-1/2 includes at least one `paper_id` pointer from `papers/core_set.csv`.
+
+Shortlist PASS requirements:
+- Size: 5-7 (default 7).
+- Each shortlisted idea includes:
+  - closest-3 prior work pointers (from `papers/core_set.csv`)
+  - delta + non-delta
+  - 1-week minimal validation plan (task/metric/baseline/resources/expected signal)
+  - failure criteria
+  - risks/failure modes (>=2)
+  - evidence anchors (>=3 pointers)
+- Portfolio constraints:
+  - covers >=2-3 clusters from `outline/taxonomy.yml`
+  - covers >=2 idea types
+  - at most 1 item may be labeled "needs verification".
+
+PASS signal:
+- The shortlist reads like a "research plan shortlist" (doable + falsifiable + anchored), not inspirational slogans.
+
 ## Report format (must follow)
 
 Write `output/DELIVERABLE_SELFLOOP_TODO.md` with:
@@ -132,5 +168,5 @@ Fix:
 ### The deliverable drifts beyond the approved scope
 
 Fix:
-- Re-align to the contract artifact (`outline/outline.yml` or `outline/module_plan.yml` or `output/PROTOCOL.md`).
+- Re-align to the contract artifact (`outline/outline.yml` or `outline/module_plan.yml` or `output/PROTOCOL.md` or `output/IDEA_BRIEF.md`).
 - Delete scope-creep paragraphs instead of trying to justify them.
